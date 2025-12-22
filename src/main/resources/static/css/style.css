@@ -1,0 +1,19 @@
+/* css/style.css */
+
+/* Petit effet au survol des cartes */
+.card {
+    transition: transform 0.2s;
+}
+.card:hover {
+    transform: translateY(-2px);
+}
+
+/* Curseur sur les labels */
+.badge {
+    font-size: 0.9em;
+}
+
+/* Ajustement hauteur graphique si besoin */
+canvas {
+    max-height: 400px;
+}

@@ -1,0 +1,17 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: loto-db-container
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: loto
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: lotodb
+    volumes:
+      - loto-data:/var/lib/postgresql/data  # <--- Ceci sauvegarde vos données sur votre disque dur
+
+volumes:
+  loto-data:
