@@ -1,7 +1,6 @@
 package com.analyseloto.loto.service;
 
-import com.analyseloto.loto.dto.StatsReponse;
-import com.analyseloto.loto.dto.TirageManuelDto;
+import com.analyseloto.loto.dto.*;
 import com.analyseloto.loto.entity.Tirage;
 import com.analyseloto.loto.repository.TirageRepository;
 import com.opencsv.CSVParser;
@@ -20,6 +19,7 @@ import java.io.Reader;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.time.format.TextStyle;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -36,6 +36,110 @@ public class LotoService {
         private int frequence;
         private int ecart; // Jours
         private boolean isChance;
+    }
+
+    public List<PronosticResultDto> genererMultiplesPronostics(LocalDate dateCible, int nombreGrilles) {
+        List<PronosticResultDto> resultats = new ArrayList<>();
+        int n = Math.min(Math.max(1, nombreGrilles), 10);
+
+        // --- C'EST ICI QUE LA MAGIE OPÈRE ---
+        // On initialise le hasard avec la date convertie en nombre (Epoch Day).
+        // Pour une même date, "rng" générera TOUJOURS la même séquence de nombres.
+        long graine = dateCible.toEpochDay();
+        Random rng = new Random(graine);
+
+        for (int i = 0; i < n; i++) {
+            // On passe le 'rng' à nos méthodes de sélection
+            List<Integer> boules = selectionnerParPonderation(repository.findAll(), 49, 5, dateCible.getDayOfWeek(), false, rng);
+            List<Integer> chance = selectionnerParPonderation(repository.findAll(), 10, 1, dateCible.getDayOfWeek(), true, rng);
+
+            // Le reste ne change pas (Analyse des performances)
+            SimulationResultDto simu = simulerGrilleDetaillee(boules, dateCible);
+
+            double maxDuo = simu.getPairs().stream().mapToDouble(MatchGroup::getRatio).max().orElse(0.0);
+            double maxTrio = simu.getTrios().stream().mapToDouble(MatchGroup::getRatio).max().orElse(0.0);
+            boolean fullMatch = !simu.getQuintuplets().isEmpty();
+            double avgDuo = simu.getPairs().stream().mapToDouble(MatchGroup::getRatio).average().orElse(0.0);
+
+            resultats.add(new PronosticResultDto(
+                    boules.stream().sorted().collect(Collectors.toList()),
+                    chance.get(0),
+                    Math.round(avgDuo * 100.0) / 100.0,
+                    maxDuo,
+                    maxTrio,
+                    fullMatch
+            ));
+        }
+
+        // Le tri reste le même
+        resultats.sort((a, b) -> Double.compare(b.getScoreGlobal(), a.getScoreGlobal()));
+
+        return resultats;
+    }
+
+    // Notez l'ajout du paramètre 'Random rng' à la fin
+    private List<Integer> selectionnerParPonderation(List<Tirage> history, int maxNum, int qteAFournir, DayOfWeek jourCible, boolean isChance, Random rng) {
+        Map<Integer, Double> scores = new HashMap<>();
+        long totalTirages = history.size();
+
+        // 1. CALCUL DES SCORES (DÉTERMINISTE)
+        // Cette partie ne change pas, car elle est basée sur les maths pures
+        for (int i = 1; i <= maxNum; i++) {
+            final int num = i;
+            double score = 1.0; // Score de base pour éviter le 0
+
+            // A. Poids du Jour
+            long freqJour = history.stream()
+                    .filter(t -> t.getDateTirage().getDayOfWeek() == jourCible)
+                    .filter(t -> isChance ? t.getNumeroChance() == num : t.getBoules().contains(num))
+                    .count();
+            score += (freqJour * 2.0);
+
+            // B. Poids du Retard
+            Optional<Tirage> lastSortie = history.stream()
+                    .sorted((t1, t2) -> t2.getDateTirage().compareTo(t1.getDateTirage()))
+                    .filter(t -> isChance ? t.getNumeroChance() == num : t.getBoules().contains(num))
+                    .findFirst();
+
+            long ecart;
+            if (lastSortie.isPresent()) {
+                long jours = java.time.temporal.ChronoUnit.DAYS.between(lastSortie.get().getDateTirage(), LocalDate.now());
+                ecart = jours;
+            } else {
+                ecart = totalTirages * 3; // Bonus énorme si jamais sorti
+            }
+            score += (ecart * 0.5);
+
+            scores.put(num, score);
+        }
+
+        // 2. SÉLECTION PONDÉRÉE (DÉTERMINISTE GRÂCE À RNG)
+        List<Integer> elus = new ArrayList<>();
+
+        // Pour s'assurer qu'on ne boucle pas indéfiniment
+        int safetyCounter = 0;
+
+        while (elus.size() < qteAFournir && safetyCounter < 1000) {
+            double totalWeight = scores.values().stream().mapToDouble(Double::doubleValue).sum();
+
+            // ICI : On utilise rng.nextDouble() au lieu de Math.random()
+            // Comme rng a été initialisé avec la date, il sortira toujours la même suite de décimales.
+            double randomValue = rng.nextDouble() * totalWeight;
+
+            double currentWeight = 0;
+            for (Map.Entry<Integer, Double> entry : scores.entrySet()) {
+                currentWeight += entry.getValue();
+                if (randomValue <= currentWeight) {
+                    if (!elus.contains(entry.getKey())) {
+                        elus.add(entry.getKey());
+                        scores.remove(entry.getKey()); // On l'enlève pour ne pas le repiocher
+                    }
+                    break;
+                }
+            }
+            safetyCounter++;
+        }
+        return elus;
     }
 
     public void importCsv(MultipartFile file) throws IOException, CsvException {
@@ -94,6 +198,103 @@ public class LotoService {
         t.setNumeroChance(dto.getNumeroChance());
 
         repository.save(t);
+    }
+
+    public SimulationResultDto simulerGrilleDetaillee(List<Integer> boulesJouees, LocalDate dateSimul) {
+        List<Tirage> historique = repository.findAll();
+
+        SimulationResultDto result = new SimulationResultDto();
+        result.setDateSimulee(dateSimul.format(DateTimeFormatter.ofPattern("dd/MM/yyyy")));
+        result.setJourSimule(dateSimul.getDayOfWeek().getDisplayName(TextStyle.FULL, Locale.FRANCE).toUpperCase());
+
+        // Initialisation des listes
+        result.setQuintuplets(new ArrayList<>());
+        result.setQuartets(new ArrayList<>());
+        result.setTrios(new ArrayList<>());
+        result.setPairs(new ArrayList<>());
+
+        // Pour chaque tirage de l'histoire
+        for (Tirage t : historique) {
+            // Calcul de l'intersection (Numéros communs)
+            List<Integer> commun = new ArrayList<>(t.getBoules());
+            commun.retainAll(boulesJouees); // Garde uniquement les numéros qui sont dans les deux listes
+
+            int taille = commun.size();
+
+            if (taille >= 2) {
+                // On prépare l'objet résultat
+                String dateHist = t.getDateTirage().format(DateTimeFormatter.ofPattern("dd/MM/yyyy"));
+                boolean memeJour = t.getDateTirage().getDayOfWeek() == dateSimul.getDayOfWeek();
+
+                // On ajoute l'info dans la bonne catégorie
+                addToResult(result, taille, commun, dateHist, memeJour, historique.size());
+            }
+        }
+
+        return result;
+    }
+
+    private void addToResult(SimulationResultDto res, int taille, List<Integer> nums, String date, boolean memeJour, int totalTirages) {
+        // On cherche si ce groupe de numéros existe déjà dans la liste pour ne pas faire de doublons, mais ajouter la date
+        List<MatchGroup> targetList = switch (taille) {
+            case 5 -> res.getQuintuplets();
+            case 4 -> res.getQuartets();
+            case 3 -> res.getTrios();
+            case 2 -> res.getPairs();
+            default -> null;
+        };
+
+        if (targetList != null) {
+            // On trie les numéros pour que [7, 21] soit pareil que [21, 7]
+            Collections.sort(nums);
+
+            // Recherche existant
+            Optional<MatchGroup> existing = targetList.stream()
+                    .filter(m -> m.getNumeros().equals(nums))
+                    .findFirst();
+
+            if (existing.isPresent()) {
+                MatchGroup group = existing.get();
+                group.getDates().add(date + (memeJour ? " (Même jour !)" : ""));
+                if(memeJour) group.setSameDayOfWeek(true);
+
+                // RECALCUL DU RATIO
+                updateRatio(group, totalTirages, taille);
+
+            } else {
+                List<String> dates = new ArrayList<>();
+                dates.add(date + (memeJour ? " (Même jour !)" : ""));
+
+                MatchGroup newGroup = new MatchGroup(nums, dates, memeJour, 0.0);
+                updateRatio(newGroup, totalTirages, taille); // Calcul initial
+                targetList.add(newGroup);
+            }
+        }
+    }
+
+    private void updateRatio(MatchGroup group, int totalTirages, int taille) {
+        double probaTheo = getProbabiliteTheorique(taille);
+        double nbreAttendu = totalTirages * probaTheo;
+        int nbreReel = group.getDates().size();
+
+        // Si on attendait 10 sorties et qu'on en a eu 15, ratio = 1.5 (150%)
+        double ratio = (nbreAttendu > 0) ? (nbreReel / nbreAttendu) : 0.0;
+
+        // On arrondit à 2 décimales
+        group.setRatio(Math.round(ratio * 100.0) / 100.0);
+    }
+
+    // Ajoutez cette méthode utilitaire pour les probabilités théoriques
+    private double getProbabiliteTheorique(int tailleGroupe) {
+        // Calculs basés sur C(49,5) = 1,906,884 combinaisons
+        return switch (tailleGroupe) {
+            case 1 -> 0.10204;       // ~10.2%
+            case 2 -> 0.00850;       // ~0.85% (1 chance sur 117)
+            case 3 -> 0.00041;       // ~0.04% (1 chance sur 2413)
+            case 4 -> 0.0000096;     // ~0.0009%
+            case 5 -> 0.00000052;    // Jackpot
+            default -> 0.0;
+        };
     }
 
     public StatsReponse getStats(String jourFiltre) {

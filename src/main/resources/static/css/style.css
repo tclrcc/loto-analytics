@@ -17,3 +17,25 @@
 canvas {
     max-height: 400px;
 }
+
+input:disabled {
+    background-color: #f8f9fa !important;
+    opacity: 0.5;
+    cursor: not-allowed;
+    border-color: #dee2e6 !important;
+}
+
+/* Animation de la flèche de l'accordéon */
+.accordion-button::after {
+    transition: transform 0.3s ease;
+}
+.accordion-button:not(.collapsed)::after {
+    transform: rotate(-180deg);
+}
+/* Style personnalisé pour notre simulateur repliable */
+.toggle-icon {
+    transition: transform 0.3s ease;
+}
+.collapsed .toggle-icon {
+    transform: rotate(-90deg);
+}

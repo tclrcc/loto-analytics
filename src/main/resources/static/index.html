@@ -6,6 +6,14 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link href="css/style.css" rel="stylesheet">
+    <style>
+        .card-header-tabs { margin-bottom: -1rem; border-bottom: 0; }
+        .nav-link { color: #6c757d; font-weight: 500; cursor: pointer; }
+        .nav-link.active { color: #0d6efd; font-weight: bold; border-color: #dee2e6 #dee2e6 #fff; }
+        .nav-link.active.text-danger { color: #dc3545 !important; }
+        /* Transition douce pour l'apparition des champs */
+        .search-container { transition: opacity 0.3s ease-in-out; }
+    </style>
 </head>
 <body class="bg-light">
 
@@ -22,28 +30,21 @@
             <div id="collapseImport" class="accordion-collapse collapse" data-bs-parent="#gestionAccordion">
                 <div class="accordion-body">
                     <div class="row g-3">
-
                         <div class="col-md-6 border-end">
-                            <h6 class="fw-bold text-primary">Importer l'historique CSV</h6>
-                            <p class="small text-muted mb-2">Fichier officiel FDJ (.csv)</p>
+                            <h6 class="fw-bold text-primary">Importer CSV</h6>
                             <div class="input-group">
                                 <input type="file" class="form-control" id="csvFile">
                                 <button class="btn btn-primary" id="btnImport">Importer</button>
                             </div>
                         </div>
-
                         <div class="col-md-6">
-                            <h6 class="fw-bold text-success">Ajout Manuel Rapide</h6>
+                            <h6 class="fw-bold text-success">Ajout Manuel</h6>
                             <button class="btn btn-outline-success w-100 mb-2" type="button" data-bs-toggle="collapse" data-bs-target="#formManuelCollapse">
-                                ✍️ Saisir un nouveau tirage
+                                ✍️ Saisir un tirage
                             </button>
-
                             <div class="collapse" id="formManuelCollapse">
                                 <form id="formManuel" class="card card-body bg-light border-0">
-                                    <label class="form-label small">Date</label>
                                     <input type="date" class="form-control mb-2" id="mDate" required>
-
-                                    <label class="form-label small">Les 5 Boules</label>
                                     <div class="input-group mb-2">
                                         <input type="number" class="form-control text-center" id="mB1" placeholder="1" min="1" max="49">
                                         <input type="number" class="form-control text-center" id="mB2" placeholder="2" min="1" max="49">
@@ -51,11 +52,8 @@
                                         <input type="number" class="form-control text-center" id="mB4" placeholder="4" min="1" max="49">
                                         <input type="number" class="form-control text-center" id="mB5" placeholder="5" min="1" max="49">
                                     </div>
-
-                                    <label class="form-label small text-danger">Numéro Chance</label>
                                     <input type="number" class="form-control border-danger text-danger fw-bold mb-3" id="mChance" placeholder="Chance (1-10)" min="1" max="10">
-
-                                    <button type="submit" class="btn btn-success w-100 btn-sm">Valider le tirage</button>
+                                    <button type="submit" class="btn btn-success w-100 btn-sm">Valider</button>
                                 </form>
                             </div>
                         </div>
@@ -69,63 +67,130 @@
         <span>📅 Analyse de <strong id="nbTirages">0</strong> tirages du <span class="badge bg-primary" id="dateMin">-</span> au <span class="badge bg-primary" id="dateMax">-</span></span>
     </div>
 
-    <div class="card shadow-sm mb-4">
-        <div class="card-header bg-white py-3">
-            <div class="row g-3 align-items-center">
-                <div class="col-md-3">
-                    <div class="btn-group w-100" role="group">
-                        <button type="button" class="btn btn-outline-primary btn-filter active" data-jour="">Tous</button>
-                        <button type="button" class="btn btn-outline-primary btn-filter" data-jour="MONDAY">Lun</button>
-                        <button type="button" class="btn btn-outline-primary btn-filter" data-jour="WEDNESDAY">Mer</button>
-                        <button type="button" class="btn btn-outline-primary btn-filter" data-jour="SATURDAY">Sam</button>
+    <div class="card shadow-sm mb-4 border-primary">
+        <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center cursor-pointer"
+             data-bs-toggle="collapse"
+             data-bs-target="#collapseSimu"
+             aria-expanded="true"
+             style="cursor: pointer;">
+            <h5 class="mb-0">🎰 Simulateur de Grille</h5>
+            <span class="toggle-icon">▼</span>
+        </div>
+
+        <div id="collapseSimu" class="collapse show">
+            <div class="card-body">
+                <form id="formSimulateur">
+                    <div class="row g-2 align-items-end">
+                        <div class="col-md-3">
+                            <label class="small text-muted">Date visée</label>
+                            <input type="date" class="form-control" id="simDate" required>
+                        </div>
+
+                        <div class="col"><input type="number" class="form-control text-center fw-bold sim-input" placeholder="N1" min="1" max="49"></div>
+                        <div class="col"><input type="number" class="form-control text-center fw-bold sim-input" placeholder="N2" min="1" max="49"></div>
+                        <div class="col"><input type="number" class="form-control text-center fw-bold sim-input" placeholder="N3" min="1" max="49"></div>
+                        <div class="col"><input type="number" class="form-control text-center fw-bold sim-input" placeholder="N4" min="1" max="49"></div>
+                        <div class="col"><input type="number" class="form-control text-center fw-bold sim-input" placeholder="N5" min="1" max="49"></div>
+
+                        <div class="col-md-5">
+                            <div class="input-group">
+                                <span class="input-group-text bg-warning text-dark border-warning fw-bold">Qté</span>
+                                <select class="form-select border-warning" id="pronoCount" style="max-width: 70px;">
+                                    <option value="1">1</option>
+                                    <option value="2">2</option>
+                                    <option value="3">3</option>
+                                    <option value="5" selected>5</option>
+                                    <option value="10">10</option>
+                                </select>
+                                <button type="button" id="btnMagic" class="btn btn-warning fw-bold text-dark flex-grow-1">
+                                    ✨ Générer Pronostics
+                                </button>
+                            </div>
+                            <button type="submit" class="btn btn-dark w-100 mt-1 btn-sm">
+                                🧪 Analyser la saisie manuelle
+                            </button>
+                        </div>
+                    </div>
+                    <div class="form-text small text-muted mt-1">
+                        * Renseignez au moins 2 numéros pour lancer l'analyse.
+                    </div>
+                </form>
+
+                <div id="pronoResult" class="mt-4 d-none">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h6 class="text-primary fw-bold mb-0">🔮 Pronostics IA pour <span id="pronoDate"></span></h6>
+                        <button class="btn btn-sm btn-outline-secondary" onclick="document.getElementById('pronoResult').classList.add('d-none')">Fermer</button>
+                    </div>
+
+                    <div id="pronoList" class="row g-3">
                     </div>
                 </div>
 
-                <div class="col-md-5">
-                    <div class="input-group">
-                        <span class="input-group-text bg-primary text-white">🔵</span>
-                        <input type="text" class="form-control" id="searchNum" placeholder="N° (ex: 7, 21)">
-                        <span class="input-group-text bg-danger text-white border-start-0">🔴</span>
-                        <input type="text" class="form-control" id="searchChance" placeholder="Chance">
-                        <button class="btn btn-outline-secondary" id="btnResetSearch">✖</button>
-                    </div>
-                </div>
-
-                <div class="col-md-4 text-end">
-                    <div class="d-inline-flex gap-3 align-items-center bg-light px-3 py-1 rounded border">
-                        <div class="form-check form-switch pt-1">
-                            <input class="form-check-input" type="checkbox" id="cbShowMain" checked>
-                            <label class="form-check-label fw-bold text-primary small" for="cbShowMain">Boules</label>
-                        </div>
-                        <div class="vr"></div>
-                        <div class="form-check form-switch pt-1">
-                            <input class="form-check-input" type="checkbox" id="cbShowChance" checked>
-                            <label class="form-check-label fw-bold text-danger small" for="cbShowChance">Chance</label>
-                        </div>
-                    </div>
+                <div id="simResult" class="mt-4 d-none">
                 </div>
             </div>
         </div>
+    </div>
+
+    <div class="card shadow-sm mb-4">
+        <div class="card-header bg-white pt-3 pb-0">
+            <div class="row mb-3">
+                <div class="col-md-12 text-center">
+                    <div class="btn-group" role="group">
+                        <button type="button" class="btn btn-outline-primary btn-filter active" data-jour="">Tous</button>
+                        <button type="button" class="btn btn-outline-primary btn-filter" data-jour="MONDAY">Lundi</button>
+                        <button type="button" class="btn btn-outline-primary btn-filter" data-jour="WEDNESDAY">Mercredi</button>
+                        <button type="button" class="btn btn-outline-primary btn-filter" data-jour="SATURDAY">Samedi</button>
+                    </div>
+                </div>
+            </div>
+
+            <ul class="nav nav-tabs card-header-tabs justify-content-center" id="graphTabs" role="tablist">
+                <li class="nav-item">
+                    <button class="nav-link active" id="tab-main" data-bs-toggle="tab" data-target="main" type="button">🔵 Boules (1-49)</button>
+                </li>
+                <li class="nav-item">
+                    <button class="nav-link text-danger" id="tab-chance" data-bs-toggle="tab" data-target="chance" type="button">🔴 Chance (1-10)</button>
+                </li>
+            </ul>
+        </div>
 
         <div class="card-body">
+
+            <div id="searchContainerMain" class="mb-3 search-container">
+                <div class="input-group">
+                    <span class="input-group-text bg-primary text-white">🔍</span>
+                    <input type="text" class="form-control" id="searchNum" placeholder="Rechercher des boules (ex: 7, 21)...">
+                    <button class="btn btn-outline-secondary btn-reset" type="button">✖</button>
+                </div>
+            </div>
+
+            <div id="searchContainerChance" class="mb-3 search-container d-none">
+                <div class="input-group">
+                    <span class="input-group-text bg-danger text-white">🔍</span>
+                    <input type="text" class="form-control" id="searchChance" placeholder="Rechercher un numéro chance (ex: 2)...">
+                    <button class="btn btn-outline-secondary btn-reset" type="button">✖</button>
+                </div>
+            </div>
+
             <canvas id="scatterChart" height="100"></canvas>
         </div>
     </div>
 
-    <h5 class="text-primary border-bottom pb-2 mb-3 mt-5">🔵 Statistiques Boules (1-49)</h5>
+    <h5 class="text-primary border-bottom pb-2 mb-3 mt-5">🔵 Statistiques Boules</h5>
     <div class="row mb-4" id="statsPanelMain">
-        <div class="col-md-3"><div class="card border-success h-100"><div class="card-header bg-success text-white py-1">🔥 Top Fréquence</div><ul class="list-group list-group-flush small-list" id="mainTopFreq"></ul></div></div>
-        <div class="col-md-3"><div class="card border-secondary h-100"><div class="card-header bg-secondary text-white py-1">🧊 Flop Fréquence</div><ul class="list-group list-group-flush small-list" id="mainLowFreq"></ul></div></div>
-        <div class="col-md-3"><div class="card border-danger h-100"><div class="card-header bg-danger text-white py-1">⏳ Top Retard</div><ul class="list-group list-group-flush small-list" id="mainTopGap"></ul></div></div>
-        <div class="col-md-3"><div class="card border-info h-100"><div class="card-header bg-info text-dark py-1">⚡ Sortis Récemment</div><ul class="list-group list-group-flush small-list" id="mainLowGap"></ul></div></div>
+        <div class="col-md-3"><ul class="list-group small-list" id="mainTopFreq"></ul></div>
+        <div class="col-md-3"><ul class="list-group small-list" id="mainLowFreq"></ul></div>
+        <div class="col-md-3"><ul class="list-group small-list" id="mainTopGap"></ul></div>
+        <div class="col-md-3"><ul class="list-group small-list" id="mainLowGap"></ul></div>
     </div>
 
-    <h5 class="text-danger border-bottom pb-2 mb-3">🔴 Statistiques Chance (1-10)</h5>
+    <h5 class="text-danger border-bottom pb-2 mb-3">🔴 Statistiques Chance</h5>
     <div class="row" id="statsPanelChance">
-        <div class="col-md-3"><div class="card border-success h-100"><div class="card-header bg-success text-white py-1">🔥 Top Fréquence</div><ul class="list-group list-group-flush small-list" id="chanceTopFreq"></ul></div></div>
-        <div class="col-md-3"><div class="card border-secondary h-100"><div class="card-header bg-secondary text-white py-1">🧊 Flop Fréquence</div><ul class="list-group list-group-flush small-list" id="chanceLowFreq"></ul></div></div>
-        <div class="col-md-3"><div class="card border-danger h-100"><div class="card-header bg-danger text-white py-1">⏳ Top Retard</div><ul class="list-group list-group-flush small-list" id="chanceTopGap"></ul></div></div>
-        <div class="col-md-3"><div class="card border-info h-100"><div class="card-header bg-info text-dark py-1">⚡ Sortis Récemment</div><ul class="list-group list-group-flush small-list" id="chanceLowGap"></ul></div></div>
+        <div class="col-md-3"><ul class="list-group small-list" id="chanceTopFreq"></ul></div>
+        <div class="col-md-3"><ul class="list-group small-list" id="chanceLowFreq"></ul></div>
+        <div class="col-md-3"><ul class="list-group small-list" id="chanceTopGap"></ul></div>
+        <div class="col-md-3"><ul class="list-group small-list" id="chanceLowGap"></ul></div>
     </div>
 </div>
 
