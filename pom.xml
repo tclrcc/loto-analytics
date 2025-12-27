@@ -27,8 +27,22 @@
 		<url/>
 	</scm>
 	<properties>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
 		<java.version>17</java.version>
 	</properties>
+    <profiles>
+        <profile>
+            <id>production</id>
+            <build>
+                <resources>
+                    <resource>
+                        <directory>src/main/resources</directory>
+                        <filtering>false</filtering> </resource>
+                </resources>
+            </build>
+        </profile>
+    </profiles>
 	<dependencies>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
