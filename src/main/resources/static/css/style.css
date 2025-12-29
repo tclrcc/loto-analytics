@@ -39,3 +39,21 @@ input:disabled {
 .collapsed .toggle-icon {
     transform: rotate(-90deg);
 }
+
+/* Style pour les listes de stats */
+.small-list .list-group-item {
+    font-size: 0.9rem;
+    padding: 0.5rem 1rem;
+    border-bottom: 1px solid rgba(0,0,0,0.05);
+    background-color: #fff;
+    transition: background-color 0.2s;
+}
+.small-list .list-group-item:hover {
+    background-color: #f8f9fa;
+}
+.small-list .list-group-item:last-child {
+    border-bottom: none;
+}
+.card-header small {
+    letter-spacing: 0.5px;
+}

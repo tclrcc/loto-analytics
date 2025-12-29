@@ -1,9 +1,11 @@
 package com.analyseloto.loto.controller;
 
 import com.analyseloto.loto.dto.*;
+import com.analyseloto.loto.service.AstroService;
 import com.analyseloto.loto.service.LotoService;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -17,6 +19,7 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class LotoController {
     private final LotoService service;
+    private final AstroService astroService;
 
     @PostMapping("/import")
     public ResponseEntity<String> uploadFile(@RequestParam("file") MultipartFile file) {
@@ -26,6 +29,21 @@ public class LotoController {
         } catch (Exception e) {
             return ResponseEntity.status(500).body("Erreur: " + e.getMessage());
         }
+    }
+
+    @PostMapping("/astro")
+    public ResponseEntity<AstroService.AstroResultDto> getAstro(@RequestBody AstroService.AstroProfileDto dto) {
+        return ResponseEntity.ok(astroService.analyserProfil(dto));
+    }
+
+    @PostMapping("/generate-hybrid")
+    public ResponseEntity<List<PronosticResultDto>> generateHybrid(
+            @RequestParam("date") String dateStr,
+            @RequestParam(value = "count", defaultValue = "5") int count,
+            @RequestBody AstroService.AstroProfileDto profil
+    ) {
+        LocalDate date = LocalDate.parse(dateStr);
+        return ResponseEntity.ok(service.genererPronosticsHybrides(date, count, profil));
     }
 
     @GetMapping("/stats")
