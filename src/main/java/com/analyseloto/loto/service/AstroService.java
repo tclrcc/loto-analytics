@@ -1,41 +1,21 @@
 package com.analyseloto.loto.service;
 
-import lombok.Data;
+import com.analyseloto.loto.dto.AstroProfileDto;
+import com.analyseloto.loto.dto.AstroResultDto;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
-import java.util.stream.Collectors;
 
 import static java.util.Map.entry;
 
 @Service
 public class AstroService {
 
-    @Data
-    public static class AstroProfileDto {
-        private String dateNaissance; // YYYY-MM-DD
-        private String timeNaissance; // HH:mm
-        private String ville;
-        private String signe; // "BELIER", "TAUREAU"...
-    }
-
-    @Data
-    public static class AstroResultDto {
-        private String signeSolaire;
-        private int cheminDeVie;
-        private String element; // Feu, Terre, Air, Eau
-        private String phraseHoroscope;
-        private List<Integer> luckyNumbers; // 5 numéros
-        private int luckyChance; // 1 numéro
-    }
-
     /**
-     * Renvoie les numéros chanceux selon le profil astral
-     * @param profil
-     * @return
+     * Renvoie uniquement les numéros chanceux (Utilisé par LotoService / Job)
      */
     public List<Integer> getLuckyNumbersOnly(AstroProfileDto profil) {
         LocalDate birthDate = LocalDate.parse(profil.getDateNaissance());
@@ -53,6 +33,9 @@ public class AstroService {
         return new ArrayList<>(lucky);
     }
 
+    /**
+     * Analyse complète pour l'affichage Frontend
+     */
     public AstroResultDto analyserProfil(AstroProfileDto profil) {
         Map<String, String> ELEMENTS = Map.ofEntries(
                 entry("BELIER", "FEU"),
@@ -69,37 +52,31 @@ public class AstroService {
                 entry("POISSONS", "EAU")
         );
 
-        LocalDate birthDate = LocalDate.parse(profil.dateNaissance);
-        LocalTime birthTime = LocalTime.parse(profil.timeNaissance);
+        LocalDate birthDate = LocalDate.parse(profil.getDateNaissance());
+        LocalTime birthTime = LocalTime.parse(profil.getTimeNaissance());
         LocalDate today = LocalDate.now();
 
-        // 1. Calcul du Chemin de Vie (Numérologie)
+        // 1. Calcul du Chemin de Vie
         int cheminDeVie = calculerCheminDeVie(birthDate);
 
-        // 2. Génération Déterministe (Basée sur la personne + la date du jour)
-        // La "graine" combine la date du jour, la date de naissance, l'heure et la ville.
-        // Cela garantit que pour une journée donnée, le conseil reste le même (pas de random qui change à chaque clic).
-        long seed = today.toEpochDay() + birthDate.toEpochDay() + birthTime.toSecondOfDay() + profil.ville.toLowerCase().hashCode();
+        // 2. Génération Déterministe
+        long seed = today.toEpochDay() + birthDate.toEpochDay() + birthTime.toSecondOfDay() + profil.getVille().toLowerCase().hashCode();
         Random rng = new Random(seed);
 
         // 3. Sélection des Numéros
         List<Integer> luckyNumbers = new ArrayList<>();
 
-        // A. Le numéro du chemin de vie est souvent un porte-bonheur (s'il est < 49)
         if (cheminDeVie <= 49) luckyNumbers.add(cheminDeVie);
 
-        // B. Numéros basés sur le signe (Préférences fixes)
         List<Integer> baseSigne = getBaseNumbersForSign(profil.getSigne());
         luckyNumbers.add(baseSigne.get(rng.nextInt(baseSigne.size())));
 
-        // C. Compléter avec des numéros "astraux" générés par la graine
         while (luckyNumbers.size() < 5) {
             int n = 1 + rng.nextInt(49);
             if (!luckyNumbers.contains(n)) luckyNumbers.add(n);
         }
         Collections.sort(luckyNumbers);
 
-        // D. Numéro Chance (1-10)
         int luckyChance = 1 + rng.nextInt(10);
 
         // 4. Construction de la réponse
@@ -114,19 +91,14 @@ public class AstroService {
         return result;
     }
 
-    /**
-     * Calcul le numéro de chemin de vie de la personne
-     * @param date
-     * @return
-     */
+    // --- Helpers Privés ---
+
     private int calculerCheminDeVie(LocalDate date) {
-        // Somme de tous les chiffres : 1990-12-05 -> 1+9+9+0+1+2+0+5 = 27 -> 2+7 = 9
         String s = date.format(DateTimeFormatter.ofPattern("yyyyMMdd"));
         int sum = 0;
         for (char c : s.toCharArray()) sum += Character.getNumericValue(c);
 
-        // Réduction tant que > 9 (sauf 11, 22, 33 maîtres nombres)
-        while (sum > 9) {
+        while (sum > 9 && sum != 11 && sum != 22 && sum != 33) { // Petit fix pour conserver les maîtres nombres
             int temp = 0;
             String s2 = String.valueOf(sum);
             for (char c : s2.toCharArray()) temp += Character.getNumericValue(c);
@@ -136,7 +108,6 @@ public class AstroService {
     }
 
     private List<Integer> getBaseNumbersForSign(String signe) {
-        // Numéros traditionnellement associés aux signes
         return switch (signe.toUpperCase()) {
             case "BELIER" -> List.of(9, 18, 27, 36, 45, 1, 10);
             case "TAUREAU" -> List.of(6, 15, 24, 33, 42, 2, 11);

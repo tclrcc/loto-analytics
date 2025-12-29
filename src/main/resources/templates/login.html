@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Connexion - Loto Master</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light d-flex align-items-center justify-content-center" style="height: 100vh;">
+<div class="card shadow p-4" style="width: 400px;">
+    <h3 class="text-center text-primary mb-4">🔐 Connexion</h3>
+
+    <div th:if="${param.logout}" class="alert alert-info">Vous avez été déconnecté.</div>
+    <div th:if="${param.success}" class="alert alert-success">Compte créé ! Connectez-vous.</div>
+
+    <div th:if="${param.mailSent}" class="alert alert-info">
+        📩 Un email de confirmation a été envoyé.<br>Veuillez cliquer sur le lien pour activer votre compte.
+    </div>
+
+    <div th:if="${param.verified}" class="alert alert-success">
+        ✅ Compte activé avec succès ! Vous pouvez vous connecter.
+    </div>
+
+    <div th:if="${param.expired}" class="alert alert-warning">
+        ⚠️ Ce lien a expiré. Veuillez vous réinscrire.
+    </div>
+
+    <div th:if="${param.tokenError}" class="alert alert-danger">
+        ❌ Lien de confirmation invalide.
+    </div>
+
+    <div th:if="${param.alreadyConfirmed}" class="alert alert-info">
+        ℹ️ Ce compte est déjà activé. Connectez-vous.
+    </div>
+
+    <div th:if="${param.error}" class="alert alert-danger">
+        Email ou mot de passe incorrect (ou compte non activé).
+    </div>
+
+    <form action="/login" method="post">
+        <div class="mb-3">
+            <label>Email</label>
+            <input type="email" name="username" class="form-control" required>
+        </div>
+        <div class="mb-3">
+            <label>Mot de passe</label>
+            <input type="password" name="password" class="form-control" required>
+        </div>
+        <button type="submit" class="btn btn-primary w-100">Se connecter</button>
+    </form>
+    <div class="text-center mt-3">
+        <a href="/register">Pas encore de compte ? S'inscrire</a>
+    </div>
+</div>
+</body>
+</html>

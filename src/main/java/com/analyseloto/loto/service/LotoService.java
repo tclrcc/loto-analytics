@@ -67,7 +67,7 @@ public class LotoService {
      * @param profil : profil astral
      * @return
      */
-    public List<PronosticResultDto> genererPronosticsHybrides(LocalDate dateCible, int nombreGrilles, AstroService.AstroProfileDto profil) {
+    public List<PronosticResultDto> genererPronosticsHybrides(LocalDate dateCible, int nombreGrilles, AstroProfileDto profil) {
         return genererPronosticInterne(dateCible, nombreGrilles, profil);
     }
 
@@ -78,7 +78,7 @@ public class LotoService {
      * @param profilAstro : profil astral
      * @return
      */
-    private List<PronosticResultDto> genererPronosticInterne(LocalDate dateCible, int nombreGrilles, AstroService.AstroProfileDto profilAstro) {
+    private List<PronosticResultDto> genererPronosticInterne(LocalDate dateCible, int nombreGrilles, AstroProfileDto profilAstro) {
         List<PronosticResultDto> resultats = new ArrayList<>();
         int n = Math.min(Math.max(1, nombreGrilles), 10);
 

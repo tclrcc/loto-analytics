@@ -28,4 +28,22 @@ public class EmailService {
             throw new RuntimeException("Erreur envoi mail");
         }
     }
+
+    /**
+     * Envoi email confirmation après inscription utilisateur
+     * @param to
+     * @param name
+     * @param link
+     */
+    public void sendConfirmationEmail(String to, String name, String link) {
+        String subject = "Validez votre compte Loto Master AI";
+        String htmlBody = "<html><body>"
+                + "<h3>Bonjour " + name + ",</h3>"
+                + "<p>Merci de vous être inscrit. Veuillez cliquer sur le lien ci-dessous pour activer votre compte :</p>"
+                + "<p><a href=\"" + link + "\">ACTIVER MON COMPTE</a></p>"
+                + "<p>Ce lien expirera dans 24 heures.</p>"
+                + "</body></html>";
+
+        sendHtmlEmail(to, subject, htmlBody);
+    }
 }

@@ -1,49 +1,188 @@
-/* css/style.css */
+/* =========================================
+   1. VARIABLES & BASE
+   ========================================= */
+:root {
+    --primary-color: #0d6efd;
+    --secondary-bg: #f8f9fa;
+}
 
-/* Petit effet au survol des cartes */
+body {
+    font-family: 'Poppins', sans-serif;
+    background-color: #f0f2f5;
+    color: #333;
+}
+
+/* =========================================
+   2. NAVBAR PREMIUM
+   ========================================= */
+.navbar-custom {
+    /* Dégradé profond et élégant (Bleu Nuit vers Indigo) */
+    background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 50%, #312e81 100%);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+    padding-top: 0.8rem;
+    padding-bottom: 0.8rem;
+}
+
+.navbar-brand {
+    font-weight: 800;
+    font-size: 1.3rem;
+    letter-spacing: -0.5px;
+    color: #fff !important;
+    text-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
+.nav-link {
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.8) !important;
+    transition: all 0.3s ease;
+    position: relative;
+    padding: 0.5rem 1rem !important;
+}
+
+/* Petit point lumineux au survol */
+.nav-link:hover {
+    color: #fff !important;
+    transform: translateY(-1px);
+}
+
+.nav-link::after {
+    content: '';
+    position: absolute;
+    width: 0;
+    height: 2px;
+    bottom: 5px;
+    left: 50%;
+    background-color: #ffd700; /* Or */
+    transition: all 0.3s ease;
+    transform: translateX(-50%);
+}
+
+.nav-link:hover::after {
+    width: 20px;
+}
+
+/* Avatar Utilisateur */
+.user-avatar {
+    width: 38px;
+    height: 38px;
+    background: rgba(255,255,255,0.15);
+    backdrop-filter: blur(4px);
+    border: 1px solid rgba(255,255,255,0.2);
+    color: white;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    font-size: 1.1rem;
+    transition: all 0.3s ease;
+}
+
+.user-dropdown-toggle:hover .user-avatar {
+    background: #ffd700;
+    color: #333;
+    transform: rotate(10deg);
+}
+
+/* Menu Déroulant */
+.dropdown-menu-custom {
+    border: none;
+    border-radius: 12px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+    overflow: hidden;
+    margin-top: 10px;
+    animation: slideDown 0.2s ease forwards;
+}
+
+.dropdown-item {
+    padding: 0.7rem 1.2rem;
+    font-size: 0.95rem;
+    transition: background 0.2s;
+}
+
+.dropdown-item:hover {
+    background-color: #f0f2f5;
+    color: var(--primary-color);
+}
+
+.dropdown-item.text-danger:hover {
+    background-color: #fee2e2;
+    color: #dc2626;
+}
+
+@keyframes slideDown {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* =========================================
+   3. CARTES & CONTENEURS
+   ========================================= */
 .card {
-    transition: transform 0.2s;
+    border: none;
+    border-radius: 1rem;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
+
 .card:hover {
-    transform: translateY(-2px);
+    transform: translateY(-2px); /* L'effet "levé" du fichier original */
+    box-shadow: 0 6px 15px rgba(0,0,0,0.08);
 }
 
-/* Curseur sur les labels */
-.badge {
-    font-size: 0.9em;
+.card-header small {
+    letter-spacing: 0.5px;
 }
 
-/* Ajustement hauteur graphique si besoin */
-canvas {
-    max-height: 400px;
+/* =========================================
+   4. ÉLÉMENTS DE NAVIGATION (Onglets)
+   ========================================= */
+.nav-pills .nav-link.active {
+    background-color: var(--primary-color);
+    font-weight: 600;
 }
 
-input:disabled {
-    background-color: #f8f9fa !important;
-    opacity: 0.5;
-    cursor: not-allowed;
-    border-color: #dee2e6 !important;
+.nav-link {
+    color: #666;
+    cursor: pointer;
 }
 
-/* Animation de la flèche de l'accordéon */
-.accordion-button::after {
-    transition: transform 0.3s ease;
+/* =========================================
+   5. DASHBOARD FINANCIER (Balance)
+   ========================================= */
+.balance-card { border-left: 5px solid; }
+.balance-positive { border-left-color: #198754; background-color: #d1e7dd; color: #0f5132; }
+.balance-negative { border-left-color: #dc3545; background-color: #f8d7da; color: #842029; }
+
+/* Statut des paris (Bordures colorées) */
+.bet-pending { border-left: 4px solid #ffc107; }
+.bet-won { border-left: 4px solid #198754; }
+.bet-lost { border-left: 4px solid #dc3545; }
+
+/* =========================================
+   6. MODULES SPÉCIFIQUES
+   ========================================= */
+
+/* Heatmap Grid */
+.heatmap-cell {
+    width: 45px; height: 45px;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 8px;
+    font-weight: bold; color: white;
+    font-size: 0.9rem;
+    transition: transform 0.15s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    cursor: pointer;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
-.accordion-button:not(.collapsed)::after {
-    transform: rotate(-180deg);
-}
-/* Style personnalisé pour notre simulateur repliable */
-.toggle-icon {
-    transition: transform 0.3s ease;
-}
-.collapsed .toggle-icon {
-    transform: rotate(-90deg);
+.heatmap-cell:hover {
+    transform: scale(1.15);
+    z-index: 10;
 }
 
-/* Style pour les listes de stats */
+/* Listes de statistiques (petites listes) */
 .small-list .list-group-item {
     font-size: 0.9rem;
-    padding: 0.5rem 1rem;
+    padding: 0.6rem 1rem;
     border-bottom: 1px solid rgba(0,0,0,0.05);
     background-color: #fff;
     transition: background-color 0.2s;
@@ -54,6 +193,154 @@ input:disabled {
 .small-list .list-group-item:last-child {
     border-bottom: none;
 }
-.card-header small {
-    letter-spacing: 0.5px;
+
+/* Canvas Graphique */
+canvas {
+    max-height: 400px;
+}
+
+/* Badges */
+.badge {
+    font-size: 0.9em;
+}
+
+/* Inputs désactivés */
+input:disabled {
+    background-color: #f8f9fa !important;
+    opacity: 0.5;
+    cursor: not-allowed;
+    border-color: #dee2e6 !important;
+}
+
+/* =========================================
+   7. ANIMATIONS & UTILITAIRES
+   ========================================= */
+
+/* Effet survol Navbar Profil */
+.hover-bg-light:hover {
+    background-color: rgba(255, 255, 255, 0.15);
+}
+
+/* Fade In pour les résultats */
+.fade-in {
+    animation: fadeIn 0.5s ease-in-out;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* Animation Accordéon Bootstrap */
+.accordion-button::after {
+    transition: transform 0.3s ease;
+}
+.accordion-button:not(.collapsed)::after {
+    transform: rotate(-180deg);
+}
+
+/* Animation Icône repliable personnalisée */
+.toggle-icon {
+    transition: transform 0.3s ease;
+}
+.collapsed .toggle-icon {
+    transform: rotate(-90deg);
+}
+
+/* =========================================
+   8. STRUCTURE DE PAGE (Footer Sticky)
+   ========================================= */
+body {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.container.pb-5 {
+    flex: 1; /* Pousse le footer vers le bas */
+}
+
+/* =========================================
+   9. PIED DE PAGE (Footer)
+   ========================================= */
+.footer {
+    background-color: #ffffff;
+    border-top: 1px solid rgba(0,0,0,0.05);
+    padding: 2rem 0;
+    margin-top: auto;
+    font-size: 0.9rem;
+    color: #6c757d;
+}
+
+.footer a {
+    color: #6c757d;
+    text-decoration: none;
+    transition: color 0.2s;
+}
+
+.footer a:hover {
+    color: var(--primary-color);
+}
+
+.footer-social-btn {
+    width: 36px;
+    height: 36px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background-color: #f8f9fa;
+    border-radius: 50%;
+    margin-left: 0.5rem;
+    transition: all 0.2s ease;
+}
+
+.footer-social-btn:hover {
+    background-color: var(--primary-color);
+    color: white !important;
+    transform: translateY(-3px);
+}
+
+/* =========================================
+   10. ANIMATIONS AVANCÉES
+   ========================================= */
+
+/* 1. Apparition vers le haut (Slide Up) */
+.animate-up {
+    animation: slideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    opacity: 0;
+    transform: translateY(20px);
+}
+
+/* Délais pour l'effet "Cascade" */
+.delay-1 { animation-delay: 0.1s; }
+.delay-2 { animation-delay: 0.2s; }
+.delay-3 { animation-delay: 0.3s; }
+.delay-4 { animation-delay: 0.4s; }
+
+@keyframes slideUp {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* 2. Pulsation douce pour le bouton "Générer" */
+.btn-pulse {
+    animation: pulse-shadow 2s infinite;
+}
+
+@keyframes pulse-shadow {
+    0% { box-shadow: 0 0 0 0 rgba(255, 193, 7, 0.4); }
+    70% { box-shadow: 0 0 0 10px rgba(255, 193, 7, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(255, 193, 7, 0); }
+}
+
+/* 3. Effet Glassmorphism pour les modales */
+.modal-content {
+    backdrop-filter: blur(10px);
+    background-color: rgba(255, 255, 255, 0.95);
+}
+
+/* 4. Input Focus animé */
+.form-control:focus, .form-select:focus {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 10px rgba(13, 110, 253, 0.15);
 }

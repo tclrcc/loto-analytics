@@ -32,7 +32,7 @@ public class LotoController {
     }
 
     @PostMapping("/astro")
-    public ResponseEntity<AstroService.AstroResultDto> getAstro(@RequestBody AstroService.AstroProfileDto dto) {
+    public ResponseEntity<AstroResultDto> getAstro(@RequestBody AstroProfileDto dto) {
         return ResponseEntity.ok(astroService.analyserProfil(dto));
     }
 
@@ -40,7 +40,7 @@ public class LotoController {
     public ResponseEntity<List<PronosticResultDto>> generateHybrid(
             @RequestParam("date") String dateStr,
             @RequestParam(value = "count", defaultValue = "5") int count,
-            @RequestBody AstroService.AstroProfileDto profil
+            @RequestBody AstroProfileDto profil
     ) {
         LocalDate date = LocalDate.parse(dateStr);
         return ResponseEntity.ok(service.genererPronosticsHybrides(date, count, profil));

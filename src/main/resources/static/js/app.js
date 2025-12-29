@@ -183,6 +183,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 filtrerEtAfficher();
             });
         });
+
+        // 10. Correction Bug Affichage Graphique dans l'Accordéon (AJOUTÉ ICI)
+        const statsCollapse = document.getElementById('collapseStats');
+        if (statsCollapse) {
+            statsCollapse.addEventListener('shown.bs.collapse', function () {
+                // Force le redimensionnement du graphique une fois l'animation terminée
+                if (currentChart) {
+                    currentChart.resize();
+                }
+            });
+        }
     }
 
     // --- FONCTIONNALITÉS ---
@@ -453,6 +464,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }]
             },
             options: {
+                maintainAspectRatio: false, // Important pour le redimensionnement
                 plugins: { tooltip: { callbacks: { label: (ctx) => `N°${ctx.raw.num} : Sorti ${ctx.raw.realY}x (Retard: ${ctx.raw.realX}j)` } }, legend: {display: false} },
                 scales: { x: { title: {display: true, text: 'Écart (jours)'}, min: -1 }, y: { title: {display: true, text: 'Fréquence'} } }
             }
