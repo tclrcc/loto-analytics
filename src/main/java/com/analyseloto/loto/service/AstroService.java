@@ -32,6 +32,11 @@ public class AstroService {
         private int luckyChance; // 1 numéro
     }
 
+    /**
+     * Renvoie les numéros chanceux selon le profil astral
+     * @param profil
+     * @return
+     */
     public List<Integer> getLuckyNumbersOnly(AstroProfileDto profil) {
         LocalDate birthDate = LocalDate.parse(profil.getDateNaissance());
 
@@ -109,13 +114,18 @@ public class AstroService {
         return result;
     }
 
+    /**
+     * Calcul le numéro de chemin de vie de la personne
+     * @param date
+     * @return
+     */
     private int calculerCheminDeVie(LocalDate date) {
         // Somme de tous les chiffres : 1990-12-05 -> 1+9+9+0+1+2+0+5 = 27 -> 2+7 = 9
         String s = date.format(DateTimeFormatter.ofPattern("yyyyMMdd"));
         int sum = 0;
         for (char c : s.toCharArray()) sum += Character.getNumericValue(c);
 
-        // Réduction tant que > 9 (sauf 11, 22, 33 maîtres nombres, mais simplifions pour le Loto)
+        // Réduction tant que > 9 (sauf 11, 22, 33 maîtres nombres)
         while (sum > 9) {
             int temp = 0;
             String s2 = String.valueOf(sum);

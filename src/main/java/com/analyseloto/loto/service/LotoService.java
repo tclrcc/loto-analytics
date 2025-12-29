@@ -3,6 +3,7 @@ package com.analyseloto.loto.service;
 import com.analyseloto.loto.dto.*;
 import com.analyseloto.loto.entity.Tirage;
 import com.analyseloto.loto.repository.TirageRepository;
+import com.analyseloto.loto.util.Constantes;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -32,7 +33,7 @@ public class LotoService {
     private static final double POIDS_FREQ_JOUR = 3.0;
     private static final double POIDS_FORME_RECENTE = 15.0;
     private static final double POIDS_ECART_MOYEN = 0.4;
-    private static final double POIDS_TENSION_ECART = 12.0; // Nouveau : Bonus si écart > moyenne perso
+    private static final double POIDS_TENSION_ECART = 12.0; // Bonus si écart > moyenne perso
     private static final double POIDS_BOOST_ASTRO = 30.0;
     private static final double POIDS_BOOST_FINALE = 8.0;
     private static final double POIDS_AFFINITE_RNG = 3.0;
@@ -49,19 +50,39 @@ public class LotoService {
     // 1. GÉNÉRATION DE PRONOSTICS (ALGO AMÉLIORÉ)
     // ==================================================================================
 
+    /**
+     * Generation grilles Loto
+     * @param dateCible : date jeu
+     * @param nombreGrilles : nb grilles à générer
+     * @return
+     */
     public List<PronosticResultDto> genererMultiplesPronostics(LocalDate dateCible, int nombreGrilles) {
         return genererPronosticInterne(dateCible, nombreGrilles, null);
     }
 
+    /**
+     * Génération grilles Loto avec infos astrales
+     * @param dateCible : date jeu
+     * @param nombreGrilles : nb grilles à générer
+     * @param profil : profil astral
+     * @return
+     */
     public List<PronosticResultDto> genererPronosticsHybrides(LocalDate dateCible, int nombreGrilles, AstroService.AstroProfileDto profil) {
         return genererPronosticInterne(dateCible, nombreGrilles, profil);
     }
 
+    /**
+     * Méthode principale de calcul des pronostics des grilles
+     * @param dateCible : date jeu
+     * @param nombreGrilles : nb grilles à générer
+     * @param profilAstro : profil astral
+     * @return
+     */
     private List<PronosticResultDto> genererPronosticInterne(LocalDate dateCible, int nombreGrilles, AstroService.AstroProfileDto profilAstro) {
         List<PronosticResultDto> resultats = new ArrayList<>();
         int n = Math.min(Math.max(1, nombreGrilles), 10);
 
-        // 1. Chargement UNIQUE de la base (Perf)
+        // Chargements de tout l'historique des tirages
         List<Tirage> history = repository.findAll();
         if (history.isEmpty()) return new ArrayList<>();
 
@@ -69,7 +90,7 @@ public class LotoService {
         if (profilAstro != null) graine += profilAstro.getVille().toLowerCase().hashCode();
         Random rng = new Random(graine);
 
-        // 2. Analyses Préalables
+        // Détection des numéros les plus chauds récemment
         Set<Integer> hotFinales = detecterFinalesChaudes(history);
         List<Integer> boostNumbers = (profilAstro != null) ? astroService.getLuckyNumbersOnly(profilAstro) : Collections.emptyList();
 
@@ -113,7 +134,7 @@ public class LotoService {
             double avgDuo = simu.getPairs().stream().mapToDouble(MatchGroup::getRatio).average().orElse(0.0);
 
             resultats.add(new PronosticResultDto(
-                    boules.stream().sorted().collect(Collectors.toList()),
+                    boules.stream().sorted().toList(),
                     chance,
                     Math.round(avgDuo * 100.0) / 100.0,
                     maxDuo,
@@ -166,6 +187,14 @@ public class LotoService {
         return selection;
     }
 
+    /**
+     * Sélection des numéros selon l'affinité
+     * @param candidats
+     * @param selectionActuelle
+     * @param matrice
+     * @param rng
+     * @return
+     */
     private Integer selectionnerParAffinite(List<Integer> candidats, List<Integer> selectionActuelle, Map<Integer, Map<Integer, Integer>> matrice, Random rng) {
         Map<Integer, Double> scoresCandidats = new HashMap<>();
         for (Integer candidat : candidats) {
@@ -183,14 +212,25 @@ public class LotoService {
                 .orElse(candidats.get(0));
     }
 
+    /**
+     * Méthode déterminant le sceau dans lequel placer le numéro
+     * @param selection
+     * @param buckets
+     * @return
+     */
     private String determinerBucketCible(List<Integer> selection, Map<String, List<Integer>> buckets) {
-        long nbHot = selection.stream().filter(n -> buckets.getOrDefault("HOT", Collections.emptyList()).contains(n)).count();
-        long nbCold = selection.stream().filter(n -> buckets.getOrDefault("COLD", Collections.emptyList()).contains(n)).count();
-        if (nbHot < 2) return "HOT";
-        if (nbCold < 2) return "COLD";
-        return "NEUTRAL";
+        long nbHot = selection.stream().filter(n -> buckets.getOrDefault(Constantes.BUCKET_HOT, Collections.emptyList()).contains(n)).count();
+        long nbCold = selection.stream().filter(n -> buckets.getOrDefault(Constantes.BUCKET_COLD, Collections.emptyList()).contains(n)).count();
+        if (nbHot < 2) return Constantes.BUCKET_HOT;
+        if (nbCold < 2) return Constantes.BUCKET_COLD;
+        return Constantes.BUCKET_NEUTRAL;
     }
 
+    /**
+     * Méthode de détections des numéros les plus chauds récemments
+     * @param history : tous les tirages
+     * @return
+     */
     private Set<Integer> detecterFinalesChaudes(List<Tirage> history) {
         return history.stream()
                 .sorted(Comparator.comparing(Tirage::getDateTirage).reversed())
@@ -205,8 +245,16 @@ public class LotoService {
                 .collect(Collectors.toSet());
     }
 
-    // --- SCORING AVANCÉ (Mean Reversion) ---
-
+    /**
+     * Méthode de calcul des scores pour chaque numéro
+     * @param history
+     * @param maxNum
+     * @param jourCible
+     * @param isChance
+     * @param boostNumbers
+     * @param hotFinales
+     * @return
+     */
     private Map<Integer, Double> calculerScores(List<Tirage> history, int maxNum, DayOfWeek jourCible, boolean isChance, List<Integer> boostNumbers, Set<Integer> hotFinales) {
         Map<Integer, Double> scores = new HashMap<>();
         long totalTirages = history.size();
@@ -245,7 +293,7 @@ public class LotoService {
                 score += POIDS_BOOST_FINALE;
             }
 
-            // --- NOUVEAU : 6. Retour à la Moyenne (Tension) ---
+            // 6. Retour à la Moyenne (Tension) ---
             if (!isChance) {
                 List<Tirage> tiragesAvecCeNum = history.stream()
                         .filter(t -> t.getBoules().contains(num))
@@ -273,8 +321,11 @@ public class LotoService {
         return scores;
     }
 
-    // --- MATRICE DYNAMIQUE (Poids temporels) ---
-
+    /**
+     * Méthode construction des matrice affinités entre les numéros
+     * @param history
+     * @return
+     */
     private Map<Integer, Map<Integer, Integer>> construireMatriceAffinites(List<Tirage> history) {
         Map<Integer, Map<Integer, Integer>> matrix = new HashMap<>();
         for (int i = 1; i <= 49; i++) matrix.put(i, new HashMap<>());
@@ -289,7 +340,12 @@ public class LotoService {
             List<Integer> b = t.getBoules();
 
             // Poids dynamique : Récent = 3 pts, Moyen = 2 pts, Vieux = 1 pt
-            int poids = (count <= 50) ? 3 : (count <= 150 ? 2 : 1);
+            int poids;
+            if (count <= 50) {
+                poids = 3;
+            } else {
+                poids = (count <= 150) ? 2 : 1;
+            }
 
             for (int i = 0; i < b.size(); i++) {
                 for (int j = i + 1; j < b.size(); j++) {
@@ -303,18 +359,23 @@ public class LotoService {
         return matrix;
     }
 
+    /**
+     * Création des sceaux
+     * @param scores : scores des numéros
+     * @return
+     */
     private Map<String, List<Integer>> creerBuckets(Map<Integer, Double> scores) {
         List<Map.Entry<Integer, Double>> list = new ArrayList<>(scores.entrySet());
         list.sort((e1, e2) -> e2.getValue().compareTo(e1.getValue()));
         Map<String, List<Integer>> buckets = new HashMap<>();
 
         if (list.size() >= 24) {
-            buckets.put("HOT", list.stream().limit(12).map(Map.Entry::getKey).collect(Collectors.toList()));
-            buckets.put("COLD", list.stream().skip(list.size() - 12).map(Map.Entry::getKey).collect(Collectors.toList()));
-            buckets.put("NEUTRAL", list.stream().skip(12).limit(list.size() - 24).map(Map.Entry::getKey).collect(Collectors.toList()));
+            buckets.put("HOT", list.stream().limit(12).map(Map.Entry::getKey).toList());
+            buckets.put("COLD", list.stream().skip(list.size() - 12).map(Map.Entry::getKey).toList());
+            buckets.put("NEUTRAL", list.stream().skip(12).limit(list.size() - 24).map(Map.Entry::getKey).toList());
         } else {
-            buckets.put("HOT", list.stream().limit(list.size()/2).map(Map.Entry::getKey).collect(Collectors.toList()));
-            buckets.put("COLD", list.stream().skip(list.size()/2).map(Map.Entry::getKey).collect(Collectors.toList()));
+            buckets.put("HOT", list.stream().limit(list.size()/2).map(Map.Entry::getKey).toList());
+            buckets.put("COLD", list.stream().skip(list.size()/2).map(Map.Entry::getKey).toList());
             buckets.put("NEUTRAL", new ArrayList<>());
         }
         return buckets;
@@ -375,7 +436,7 @@ public class LotoService {
 
     private SimulationResultDto simulerGrilleDetaillee(List<Integer> boulesJouees, LocalDate dateSimul, List<Tirage> historique) {
         SimulationResultDto result = new SimulationResultDto();
-        result.setDateSimulee(dateSimul.format(DateTimeFormatter.ofPattern("dd/MM/yyyy")));
+        result.setDateSimulee(dateSimul.format(DateTimeFormatter.ofPattern(Constantes.FORMAT_DATE_STANDARD)));
         result.setJourSimule(dateSimul.getDayOfWeek().getDisplayName(TextStyle.FULL, Locale.FRANCE).toUpperCase());
         result.setQuintuplets(new ArrayList<>()); result.setQuartets(new ArrayList<>());
         result.setTrios(new ArrayList<>()); result.setPairs(new ArrayList<>());
@@ -385,7 +446,7 @@ public class LotoService {
             commun.retainAll(boulesJouees);
             int taille = commun.size();
             if (taille >= 2) {
-                String dateHist = t.getDateTirage().format(DateTimeFormatter.ofPattern("dd/MM/yyyy"));
+                String dateHist = t.getDateTirage().format(DateTimeFormatter.ofPattern(Constantes.FORMAT_DATE_STANDARD));
                 boolean memeJour = t.getDateTirage().getDayOfWeek() == dateSimul.getDayOfWeek();
                 addToResult(result, taille, commun, dateHist, memeJour, historique.size());
             }
@@ -425,25 +486,31 @@ public class LotoService {
         group.setRatio(Math.round(ratio * 100.0) / 100.0);
     }
 
-    // ==================================================================================
-    // 3. GESTION DES DONNÉES (IMPORT ROBUSTE)
-    // ==================================================================================
-
+    /**
+     * Méthode d'import du fichier csv recensant tous les tirages du Loto
+     * @param file
+     * @throws IOException
+     */
     public void importCsv(MultipartFile file) throws IOException {
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(file.getInputStream()))) {
             List<String> lines = reader.lines().toList();
-            DateTimeFormatter fmtStandard = DateTimeFormatter.ofPattern("dd/MM/yyyy");
-            DateTimeFormatter fmtIso = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+            DateTimeFormatter fmtStandard = DateTimeFormatter.ofPattern(Constantes.FORMAT_DATE_STANDARD);
+            DateTimeFormatter fmtIso = DateTimeFormatter.ofPattern(Constantes.FORMAT_DATE_STANDARD_INVERSE);
 
             for (String line : lines) {
                 if (line.trim().isEmpty() || line.startsWith("annee_numero") || line.startsWith("Tirage")) continue;
                 try {
                     String[] row;
-                    LocalDate date = null;
-                    int b1=0, b2=0, b3=0, b4=0, b5=0, chance=0;
+                    LocalDate date;
+                    int b1;
+                    int b2;
+                    int b3;
+                    int b4;
+                    int b5;
+                    int chance;
 
-                    if (line.contains(";")) { // Format FDJ CSV Standard
-                        row = line.split(";");
+                    if (line.contains(Constantes.DELIMITEUR_POINT_VIRGULE)) { // Format FDJ CSV Standard
+                        row = line.split(Constantes.DELIMITEUR_POINT_VIRGULE);
                         if (row.length < 10) continue;
                         try { date = LocalDate.parse(row[2], fmtStandard); } catch (Exception e) { continue; }
                         b1 = Integer.parseInt(row[4]); b2 = Integer.parseInt(row[5]);
@@ -459,7 +526,7 @@ public class LotoService {
                         b5 = Integer.parseInt(row[5]); chance = Integer.parseInt(row[7]);
                     }
 
-                    if (date != null && !repository.existsByDateTirage(date)) {
+                    if (!repository.existsByDateTirage(date)) {
                         Tirage t = new Tirage();
                         t.setDateTirage(date);
                         t.setBoule1(b1); t.setBoule2(b2); t.setBoule3(b3);
@@ -474,17 +541,33 @@ public class LotoService {
         }
     }
 
+    /**
+     * Méthode ajout d'un tirage manuellement
+     * @param dto
+     */
     public void ajouterTirageManuel(TirageManuelDto dto) {
+        // Vérification de l'unicité du tirage
         if (repository.existsByDateTirage(dto.getDateTirage())) throw new RuntimeException("Tirage existant");
+
+        // Contrôle des valeurs, pas de doublons autorisés
         Set<Integer> unique = new HashSet<>(Arrays.asList(dto.getBoule1(), dto.getBoule2(), dto.getBoule3(), dto.getBoule4(), dto.getBoule5()));
         if (unique.size() < 5) throw new RuntimeException("Doublons");
+
+        // Construction de l'objet Tirage
         Tirage t = new Tirage();
         t.setDateTirage(dto.getDateTirage());
         t.setBoule1(dto.getBoule1()); t.setBoule2(dto.getBoule2()); t.setBoule3(dto.getBoule3());
         t.setBoule4(dto.getBoule4()); t.setBoule5(dto.getBoule5()); t.setNumeroChance(dto.getNumeroChance());
+
+        // Enregistrement du tirage
         repository.save(t);
     }
 
+    /**
+     * Renvoie les statistiques des numéros pour un jour
+     * @param jourFiltre
+     * @return
+     */
     public StatsReponse getStats(String jourFiltre) {
         List<Tirage> all = repository.findAll();
         if (jourFiltre != null && !jourFiltre.isEmpty()) {
@@ -494,8 +577,11 @@ public class LotoService {
         LocalDate minDate = all.stream().map(Tirage::getDateTirage).min(LocalDate::compareTo).orElse(LocalDate.now());
         LocalDate maxDate = all.stream().map(Tirage::getDateTirage).max(LocalDate::compareTo).orElse(LocalDate.now());
         DateTimeFormatter fmt = DateTimeFormatter.ofPattern("dd/MM/yyyy");
-        Map<Integer, Integer> freqMap = new HashMap<>(); Map<Integer, LocalDate> lastSeenMap = new HashMap<>();
-        Map<Integer, Integer> freqChance = new HashMap<>(); Map<Integer, LocalDate> lastSeenChance = new HashMap<>();
+        // Déclaration des maps des fréquences
+        Map<Integer, Integer> freqMap = new HashMap<>();
+        Map<Integer, LocalDate> lastSeenMap = new HashMap<>();
+        Map<Integer, Integer> freqChance = new HashMap<>();
+        Map<Integer, LocalDate> lastSeenChance = new HashMap<>();
 
         for (Tirage t : all) {
             for (Integer b : t.getBoules()) {
