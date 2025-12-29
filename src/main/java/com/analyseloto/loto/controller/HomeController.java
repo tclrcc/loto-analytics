@@ -15,9 +15,9 @@ import java.util.List;
 @Controller
 @RequiredArgsConstructor
 public class HomeController {
-
+    // Repositories
     private final UserRepository userRepository;
-    private final UserBetRepository betRepository; // <-- Injection
+    private final UserBetRepository betRepository;
 
     @GetMapping("/")
     public String home(Model model, Principal principal) {
@@ -27,7 +27,7 @@ public class HomeController {
         model.addAttribute("prenom", user.getFirstName());
         model.addAttribute("astroSigne", user.getZodiacSign());
 
-        // --- NOUVEAU : GESTION DU BILAN ---
+        // Gestion du bilan
         List<UserBet> bets = betRepository.findByUserOrderByDateJeuDesc(user);
         model.addAttribute("bets", bets);
 
@@ -39,6 +39,7 @@ public class HomeController {
                 .sum();
         double solde = totalGains - totalDepense;
 
+        // Données pour le bilan financier
         model.addAttribute("totalDepense", totalDepense);
         model.addAttribute("totalGains", totalGains);
         model.addAttribute("solde", solde);

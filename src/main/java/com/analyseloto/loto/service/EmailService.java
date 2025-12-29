@@ -12,6 +12,12 @@ import org.springframework.stereotype.Service;
 public class EmailService {
     private final JavaMailSender mailSender;
 
+    /**
+     * Envoi email (format HTML)
+     * @param to destinataire
+     * @param subject objet
+     * @param htmlBody contenu
+     */
     public void sendHtmlEmail(String to, String subject, String htmlBody) {
         try {
             MimeMessage message = mailSender.createMimeMessage();
@@ -31,9 +37,9 @@ public class EmailService {
 
     /**
      * Envoi email confirmation après inscription utilisateur
-     * @param to
-     * @param name
-     * @param link
+     * @param to destinataire
+     * @param name nom user
+     * @param link lien
      */
     public void sendConfirmationEmail(String to, String name, String link) {
         String subject = "Validez votre compte Loto Master AI";

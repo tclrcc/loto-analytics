@@ -10,6 +10,6 @@ public class AdminController {
 
     @GetMapping
     public String adminPage() {
-        return "admin"; // Renverra le fichier templates/admin.html
+        return "admin";
     }
 }

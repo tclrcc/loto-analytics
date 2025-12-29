@@ -21,19 +21,39 @@ import java.util.UUID;
 @Controller
 @RequiredArgsConstructor
 public class AuthController {
-
+    // Repositories
     private final UserRepository userRepository;
     private final ConfirmationTokenRepository tokenRepository;
-    private final PasswordEncoder passwordEncoder;
+    // Services
     private final EmailService emailService;
+    // Utils
+    private final PasswordEncoder passwordEncoder;
 
+    /**
+     * Affichage page login
+     * @return
+     */
     @GetMapping("/login")
     public String loginPage() { return "login"; }
 
+    /**
+     * Affichage page création compte
+     * @return
+     */
     @GetMapping("/register")
     public String registerPage() { return "register"; }
 
-    // --- 1. INSCRIPTION AVEC ENVOI MAIL ---
+    /**
+     * Action création nouvel utilisateur
+     * @param email email
+     * @param password mot de passe
+     * @param firstName prénom
+     * @param birthDate date de naissance
+     * @param birthTime heure de naissance
+     * @param birthCity ville de naissance
+     * @param zodiacSign signe astrologique
+     * @return
+     */
     @PostMapping("/register")
     public String registerUser(@RequestParam String email,
                                @RequestParam String password,
@@ -42,23 +62,27 @@ public class AuthController {
                                @RequestParam String birthTime,
                                @RequestParam String birthCity,
                                @RequestParam String zodiacSign) {
-
+        // On ne crée pas un compte à un email déjà existant
         if (userRepository.findByEmail(email).isPresent()) {
             return "redirect:/register?error";
         }
 
-        // Création User (activé = false par défaut)
+        // Création User
         User u = new User();
         u.setEmail(email);
+        // Cryptage du mot de passe
         u.setPassword(passwordEncoder.encode(password));
         u.setFirstName(firstName);
         u.setBirthDate(birthDate);
         u.setBirthTime(birthTime);
         u.setBirthCity(birthCity);
         u.setZodiacSign(zodiacSign);
+        // Inactif par défaut
         u.setEnabled(false);
+        // Rôle USER par défaut
         u.setRole("USER");
 
+        // Enregistrement de l'utilisateur
         userRepository.save(u);
 
         // Création Token
@@ -69,6 +93,7 @@ public class AuthController {
                 LocalDateTime.now().plusHours(24), // Expire dans 24h
                 u
         );
+        // Enregistrement du token de confirmation
         tokenRepository.save(confirmationToken);
 
         // Envoi Email (Adapter le lien avec votre domaine/port)
@@ -79,9 +104,14 @@ public class AuthController {
         return "redirect:/login?mailSent";
     }
 
-    // --- 2. VALIDATION DU LIEN ---
+    /**
+     * Action confirmation activation du compte (depuis email)
+     * @param token token
+     * @param model model
+     * @return
+     */
     @GetMapping("/confirm")
-    @Transactional // Pour s'assurer que les modifs en base sont atomiques
+    @Transactional
     public String confirmToken(@RequestParam("token") String token, Model model) {
         ConfirmationToken confirmToken = tokenRepository.findByToken(token)
                 .orElse(null);

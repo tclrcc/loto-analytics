@@ -28,7 +28,7 @@ public class SecurityConfig {
                         .anyRequest().authenticated()
                 )
                 .formLogin(form -> form
-                        .loginPage("/login") // Notre page HTML personnalisée
+                        .loginPage("/login")
                         .defaultSuccessUrl("/", true) // Redirection après succès
                         .permitAll()
                 )
@@ -45,7 +45,11 @@ public class SecurityConfig {
         return new BCryptPasswordEncoder(); // Pour crypter les mots de passe
     }
 
-    // Indique à Spring comment chercher un utilisateur en base de données
+    /**
+     * Chargement de l'utilisateur en BDD pour Spring
+     * @param userRepo : repo
+     * @return Infos User
+     */
     @Bean
     public UserDetailsService userDetailsService(UserRepository userRepo) {
         return email -> userRepo.findByEmail(email)
