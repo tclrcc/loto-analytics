@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -44,6 +45,50 @@ public class LotoController {
     ) {
         LocalDate date = LocalDate.parse(dateStr);
         return ResponseEntity.ok(service.genererPronosticsHybrides(date, count, profil));
+    }
+
+    @GetMapping("/comparer-algos")
+    @ResponseBody // Pour renvoyer du JSON brut facile à lire
+    public Map<String, List<PronosticResultDto>> comparerAlgorithmes(
+            @RequestParam(required = false) String date) {
+
+        LocalDate dateCible = (date != null) ? LocalDate.parse(date) : LocalDate.now();
+        return service.comparerAlgorithmes(dateCible);
+    }
+
+    @GetMapping("/graph-data")
+    public ResponseEntity<GraphDto> getGraphData() {
+        // 1. Récupérer les stats brutes pour la taille des nœuds
+        StatsReponse stats = service.getStats(null);
+        List<GraphDto.Node> nodes = new ArrayList<>();
+
+        // Création des Nœuds (Boules 1-49)
+        for (LotoService.StatPoint p : stats.getPoints()) {
+            if (!p.isChance()) {
+                // Taille basée sur la fréquence
+                nodes.add(new GraphDto.Node(p.getNumero(), String.valueOf(p.getNumero()), p.getFrequence(), "#4F46E5"));
+            }
+        }
+
+        // 2. Récupérer la matrice d'affinité pour les Liens
+        Map<Integer, Map<Integer, Integer>> matrix = service.getMatriceAffinitesPublic();
+        List<GraphDto.Edge> edges = new ArrayList<>();
+
+        // Création des Liens (On ne garde que les liens forts pour éviter un fouillis)
+        for (Integer source : matrix.keySet()) {
+            Map<Integer, Integer> cibles = matrix.get(source);
+            for (Map.Entry<Integer, Integer> entry : cibles.entrySet()) {
+                Integer target = entry.getKey();
+                Integer weight = entry.getValue();
+
+                // Règle : On affiche le lien seulement si source < target (pour éviter les doublons A->B et B->A)
+                if (source < target && weight > 25) {
+                    edges.add(new GraphDto.Edge(source, target, weight));
+                }
+            }
+        }
+
+        return ResponseEntity.ok(new GraphDto(nodes, edges));
     }
 
     @GetMapping("/stats")

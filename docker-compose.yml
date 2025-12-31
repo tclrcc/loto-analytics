@@ -1,17 +1,34 @@
 version: '3.8'
-
 services:
-  postgres:
-    image: postgres:15-alpine
-    container_name: loto-db-container
-    ports:
-      - "5432:5432"
+  db:
+    image: postgres:15
+    container_name: loto_db
     environment:
-      POSTGRES_USER: loto
-      POSTGRES_PASSWORD: password
       POSTGRES_DB: lotodb
+      POSTGRES_USER: loto
+      # On utilise la variable définie dans le fichier .env
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
     volumes:
-      - loto-data:/var/lib/postgresql/data  # <--- Ceci sauvegarde vos données sur votre disque dur
+      - pgdata:/var/lib/postgresql/data
+    restart: always
+
+  app:
+    build: .
+    container_name: loto_app
+    ports:
+      - "80:8080"
+    depends_on:
+      - db
+    environment:
+      # Connexion BDD
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/lotodb
+      SPRING_DATASOURCE_USERNAME: loto
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD} # La même variable
+
+      # Email
+      SPRING_MAIL_USERNAME: tonycoloricchio01@gmail.com
+      SPRING_MAIL_PASSWORD: ${MAIL_PASSWORD} # Variable secrète
+    restart: always
 
 volumes:
-  loto-data:
+  pgdata:

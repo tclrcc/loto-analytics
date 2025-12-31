@@ -6,3 +6,4 @@ mvnw.cmd
 *.iml
 .DS_Store
 help.md
+.env

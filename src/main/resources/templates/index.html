@@ -14,6 +14,39 @@
     <link th:href="@{/css/style.css}" rel="stylesheet">
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <style>
+
+    :root {
+    --primary-gradient: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%);
+    }
+
+    /* 1. NAVBAR - LE FIX EST ICI */
+    .navbar-custom {
+    background: linear-gradient(to right, #0f172a, #1e293b); /* Fond sombre solide */
+    }
+
+    .navbar-custom .nav-link {
+    color: rgba(255, 255, 255, 0.95) !important; /* Quasi blanc */
+    font-size: 1.05rem;
+    margin-right: 15px;
+    }
+
+    .navbar-custom .nav-link:hover {
+    color: #ffffff !important;
+    text-shadow: 0 0 10px rgba(255,255,255,0.5);
+    }
+
+    /* 2. Autres styles Premium (Garder ceux d'avant) */
+    body { background-color: #f3f4f6; font-family: 'Poppins', sans-serif; }
+    .stat-card { transition: all 0.3s ease; border: none; border-radius: 1rem; }
+    .stat-card:hover { transform: translateY(-5px); box-shadow: 0 10px 20px rgba(0,0,0,0.1); }
+    .balance-card-gradient { background: var(--primary-gradient); color: white; }
+    .loto-ball-input { width: 50px; height: 50px; border-radius: 50%; text-align: center; font-weight: 700; font-size: 1.2rem; border: 2px solid #e5e7eb; margin: 0 auto; transition: all 0.2s; }
+    .loto-ball-input:focus { border-color: #4F46E5; box-shadow: 0 0 0 4px rgba(79, 70, 229, 0.1); }
+    .btn-magic { background: linear-gradient(45deg, #F59E0B, #FBBF24); border: none; color: #fff; font-weight: 600; box-shadow: 0 4px 15px rgba(245, 158, 11, 0.4); }
+    .btn-magic:hover { transform: scale(1.02); color: #fff; }
+    </style>
 </head>
 <body>
 
@@ -271,10 +304,16 @@
                         </div>
                     </div>
 
-                    <ul class="nav nav-tabs justify-content-center border-bottom-0" id="graphTabs" role="tablist">
-                        <li class="nav-item"><button class="nav-link active rounded-top-3 px-4" id="tab-main" data-bs-toggle="tab" data-target="main">🔵 Boules</button></li>
-                        <li class="nav-item"><button class="nav-link text-danger rounded-top-3 px-4" id="tab-chance" data-bs-toggle="tab" data-target="chance">🔴 Chance</button></li>
-                        <li class="nav-item"><button class="nav-link text-success rounded-top-3 px-4" id="tab-heat" data-bs-toggle="tab" data-target="heat">🌡️ Heatmap</button></li>
+                    <ul class="nav nav-pills justify-content-center bg-light p-2 rounded-3 mb-3 shadow-sm" id="graphTabs" role="tablist" style="max-width: fit-content; margin: 0 auto;">
+                        <li class="nav-item">
+                            <button class="nav-link active rounded-3 px-4 fw-bold" id="tab-main" data-bs-toggle="pill" data-target="main">🔵 Boules</button>
+                        </li>
+                        <li class="nav-item">
+                            <button class="nav-link rounded-3 px-4 fw-bold text-danger" id="tab-chance" data-bs-toggle="pill" data-target="chance">🔴 Chance</button>
+                        </li>
+                        <li class="nav-item">
+                            <button class="nav-link rounded-3 px-4 fw-bold text-success" id="tab-heat" data-bs-toggle="pill" data-target="heat">🌡️ Heatmap</button>
+                        </li>
                     </ul>
 
                     <div class="mt-3">
@@ -318,6 +357,89 @@
                 </div>
             </div>
         </div>
+        <div class="card border-0 shadow-sm mt-4">
+            <div class="card-header bg-white fw-bold"><i class="bi bi-share-fill me-2"></i>Réseau d'Affinités</div>
+            <div class="card-body p-0">
+                <div id="networkGraph" style="height: 500px; background: #f8f9fa;"></div>
+            </div>
+        </div>
+
+        <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+
+        <script>
+            document.addEventListener("DOMContentLoaded", function() {
+                fetch('/api/loto/graph-data')
+                    .then(response => response.json())
+                    .then(data => {
+                        const container = document.getElementById('networkGraph');
+
+                        const options = {
+                            nodes: {
+                                shape: 'dot',
+                                size: 20,
+                                font: {
+                                    size: 16,
+                                    color: '#000000', // Texte noir pour lisibilité
+                                    strokeWidth: 2,   // Contour blanc autour du texte
+                                    strokeColor: '#ffffff'
+                                },
+                                borderWidth: 2,
+                                shadow: true
+                            },
+                            edges: {
+                                width: 1,
+                                color: { color: '#cbd5e1', highlight: '#4F46E5', opacity: 0.6 },
+                                smooth: {
+                                    type: 'continuous' // Courbes plus douces
+                                }
+                            },
+                            physics: {
+                                enabled: true,
+                                solver: 'forceAtlas2Based', // Algorithme plus stable que BarnesHut
+                                forceAtlas2Based: {
+                                    gravitationalConstant: -50, // Répulsion modérée
+                                    centralGravity: 0.01,
+                                    springLength: 100,
+                                    springConstant: 0.08
+                                },
+                                stabilization: {
+                                    enabled: true,
+                                    iterations: 1000, // On pré-calcule 1000 fois avant d'afficher
+                                    updateInterval: 25,
+                                    onlyDynamicEdges: false,
+                                    fit: true
+                                },
+                                minVelocity: 0.75 // S'arrête dès que ça bouge doucement
+                            },
+                            interaction: {
+                                hover: true,
+                                dragNodes: true, // On peut bouger les boules manuellement
+                                zoomView: true,
+                                dragView: true
+                            }
+                        };
+
+                        // Création du réseau
+                        var network = new vis.Network(container, data, options);
+
+                        // --- L'ASTUCE MAGIQUE ---
+                        // Une fois que le graph est stable, on coupe la physique !
+                        network.on("stabilizationIterationsDone", function () {
+                            network.setOptions( { physics: false } );
+                        });
+
+                        // Si on clique sur une boule, on réactive un peu la physique pour que ça bouge fluide
+                        network.on("dragStart", function (params) {
+                            network.setOptions( { physics: true } );
+                        });
+
+                        // Quand on lâche, on re-fige
+                        network.on("dragEnd", function (params) {
+                            network.setOptions( { physics: false } );
+                        });
+                    });
+            });
+        </script>
     </div>
 
     <div class="modal fade" id="modalAstro" tabindex="-1">
