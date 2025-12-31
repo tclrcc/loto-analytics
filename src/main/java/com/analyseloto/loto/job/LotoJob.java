@@ -22,12 +22,15 @@ import java.util.stream.Collectors;
 @Component
 @RequiredArgsConstructor
 public class LotoJob {
-
+    // Services
     private final LotoService lotoService;
     private final EmailService emailService;
-    private final UserRepository userRepository; // Nouveau : accès à la BDD utilisateurs
+    // Repositories
+    private final UserRepository userRepository;
 
-    // CRON : 08h00 tous les Lundi, Mercredi, Samedi
+    /**
+     * Envoi mail pronostics à chaque utilisateur, à 8h les jours de tirage
+     */
     @Scheduled(cron = "0 0 8 * * MON,WED,SAT")
     public void envoyerPronosticsPersonnalises() {
         log.info("📢 Lancement du Job Pronostics Personnalisés...");
@@ -45,6 +48,11 @@ public class LotoJob {
         for (User user : users) {
             // On saute ceux qui ont désactivé les notifs (si vous avez géré ce champ)
             if (!user.isSubscribeToEmails()) continue;
+
+            if (user.getBirthDate() == null || user.getZodiacSign() == null || user.getZodiacSign().isEmpty()) {
+                log.info("L'utilisateur {} n'a pas d'infos astro. Pas d'email personnalisé.", user.getEmail());
+                continue; // On passe au suivant
+            }
 
             try {
                 // A. Construction du Profil Astral de l'utilisateur

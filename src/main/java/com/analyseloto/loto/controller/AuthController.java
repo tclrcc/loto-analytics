@@ -61,11 +61,11 @@ public class AuthController {
     @PostMapping("/register")
     public String registerUser(@RequestParam String email,
                                @RequestParam String password,
-                               @RequestParam String firstName,
-                               @RequestParam LocalDate birthDate,
-                               @RequestParam String birthTime,
-                               @RequestParam String birthCity,
-                               @RequestParam String zodiacSign) {
+                               @RequestParam(required = false) String firstName,
+                               @RequestParam(required = false) LocalDate birthDate,
+                               @RequestParam(required = false) String birthTime,
+                               @RequestParam(required = false) String birthCity,
+                               @RequestParam(required = false) String zodiacSign) {
         // On ne crée pas un compte à un email déjà existant
         if (userRepository.findByEmail(email).isPresent()) {
             return "redirect:/register?error";
@@ -76,15 +76,20 @@ public class AuthController {
         u.setEmail(email);
         // Cryptage du mot de passe
         u.setPassword(passwordEncoder.encode(password));
-        u.setFirstName(firstName);
-        u.setBirthDate(birthDate);
-        u.setBirthTime(birthTime);
-        u.setBirthCity(birthCity);
-        u.setZodiacSign(zodiacSign);
         // Inactif par défaut
         u.setEnabled(false);
         // Rôle USER par défaut
         u.setRole("USER");
+
+        u.setFirstName((firstName != null && !firstName.isEmpty()) ? firstName : "Joueur");
+        if (birthDate != null) {
+            u.setBirthDate(birthDate);
+        }
+        if (birthTime != null && !birthTime.isEmpty()) {
+            u.setBirthTime(birthTime);
+        }
+        u.setBirthCity(birthCity);
+        u.setZodiacSign(zodiacSign);
 
         // Enregistrement de l'utilisateur
         userRepository.save(u);

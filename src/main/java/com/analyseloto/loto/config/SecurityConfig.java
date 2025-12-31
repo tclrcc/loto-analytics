@@ -1,6 +1,9 @@
 package com.analyseloto.loto.config;
 
 import com.analyseloto.loto.repository.UserRepository;
+import com.analyseloto.loto.security.CustomLoginFailureHandler;
+import com.analyseloto.loto.security.CustomLoginSuccessHandler;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -15,6 +18,10 @@ import org.springframework.security.web.SecurityFilterChain;
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {
+    @Autowired
+    private CustomLoginFailureHandler failureHandler;
+    @Autowired
+    private CustomLoginSuccessHandler successHandler;
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
@@ -22,14 +29,15 @@ public class SecurityConfig {
                 .csrf(AbstractHttpConfigurer::disable) // Désactivé pour simplifier les appels API
                 .authorizeHttpRequests(auth -> auth
                         // Pages publiques
-                        .requestMatchers("/login", "/register", "/confirm", "/css/**", "/js/**", "/images/**").permitAll()
+                        .requestMatchers("/login", "/register", "/confirm", "/forgot-password", "/reset-password", "/css/**", "/js/**", "/images/**").permitAll()
                         // Pages admin
                         .requestMatchers("/admin/**", "/api/loto/import", "/api/loto/add").hasRole("ADMIN")
                         .anyRequest().authenticated()
                 )
                 .formLogin(form -> form
                         .loginPage("/login")
-                        .defaultSuccessUrl("/", true) // Redirection après succès
+                        .successHandler(successHandler)
+                        .failureHandler(failureHandler)
                         .permitAll()
                 )
                 .logout(logout -> logout
@@ -58,6 +66,7 @@ public class SecurityConfig {
                         .password(u.getPassword())
                         .roles(u.getRole())
                         .disabled(!u.isEnabled())
+                        .accountLocked(!u.isAccountNonLocked())
                         .build())
                 .orElseThrow(() -> new UsernameNotFoundException("Utilisateur introuvable"));
     }
