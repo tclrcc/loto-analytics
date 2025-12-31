@@ -5,7 +5,7 @@ COPY src ./src
 # On compile directement sur le serveur pour éviter les soucis de version
 RUN mvn clean package -DskipTests
 
-FROM openjdk:17-jdk-slim
+FROM eclipse-temurin:17-jdk-jammy
 WORKDIR /app
 COPY --from=build /app/target/*.jar app.jar
 EXPOSE 8080

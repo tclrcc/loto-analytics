@@ -12,6 +12,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -35,6 +36,9 @@ public class LotoService {
     private final TirageRepository repository;
     private final AstroService astroService;
     private final UserBetRepository betRepository;
+
+    @Value("${app.base-url:http://localhost:8080}")
+    private String baseUrl;
 
     // --- CONFIGURATION DYNAMIQUE (A/B TESTING) ---
     @Data
@@ -503,7 +507,7 @@ public class LotoService {
                 + "<p>Suite au tirage du <strong>" + date + "</strong>, nous avons détecté un gain sur l'une de vos grilles.</p>"
                 + "<h1 style='color:green;'>" + String.format("%.2f", gain) + " €</h1>"
                 + "<p>Connectez-vous pour voir les détails.</p>"
-                + "<br><a href='http://localhost:8080/login'>Voir mon compte</a>"
+                + "<br><a href='" + baseUrl + "/login'>Voir mon compte</a>"
                 + "</body></html>";
 
         try {

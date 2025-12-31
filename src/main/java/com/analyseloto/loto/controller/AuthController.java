@@ -7,6 +7,7 @@ import com.analyseloto.loto.repository.UserRepository;
 import com.analyseloto.loto.service.EmailService;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -28,6 +29,9 @@ public class AuthController {
     private final EmailService emailService;
     // Utils
     private final PasswordEncoder passwordEncoder;
+
+    @Value("${app.base-url:http://localhost:8080}")
+    private String baseUrl;
 
     /**
      * Affichage page login
@@ -97,7 +101,7 @@ public class AuthController {
         tokenRepository.save(confirmationToken);
 
         // Envoi Email (Adapter le lien avec votre domaine/port)
-        String link = "http://localhost:8080/confirm?token=" + token;
+        String link = baseUrl + "/confirm?token=" + token;
         emailService.sendConfirmationEmail(email, firstName, link);
 
         // Redirection vers login avec message spécial

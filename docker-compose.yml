@@ -1,4 +1,3 @@
-version: '3.8'
 services:
   db:
     image: postgres:15
@@ -28,6 +27,7 @@ services:
       # Email
       SPRING_MAIL_USERNAME: tonycoloricchio01@gmail.com
       SPRING_MAIL_PASSWORD: ${MAIL_PASSWORD} # Variable secrète
+      APP_BASE_URL: http://51.254.133.205
     restart: always
 
 volumes:
