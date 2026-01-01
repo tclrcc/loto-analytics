@@ -4,20 +4,25 @@
 :root {
     --primary-color: #0d6efd;
     --secondary-bg: #f8f9fa;
+    /* Ajout du dégradé global */
+    --primary-gradient: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%);
 }
 
 body {
     font-family: 'Poppins', sans-serif;
-    background-color: #f0f2f5;
+    background-color: #f3f4f6; /* Harmonisé avec le HTML */
     color: #333;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
 }
 
 /* =========================================
    2. NAVBAR PREMIUM
    ========================================= */
 .navbar-custom {
-    /* Dégradé profond et élégant (Bleu Nuit vers Indigo) */
-    background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 50%, #312e81 100%);
+    /* Le fix sombre demandé (Bleu nuit profond) */
+    background: linear-gradient(to right, #0f172a, #1e293b);
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
     padding-top: 0.8rem;
     padding-bottom: 0.8rem;
@@ -31,21 +36,24 @@ body {
     text-shadow: 0 2px 4px rgba(0,0,0,0.2);
 }
 
-.nav-link {
+.navbar-custom .nav-link {
     font-weight: 500;
-    color: rgba(255, 255, 255, 0.8) !important;
+    color: rgba(255, 255, 255, 0.95) !important;
     transition: all 0.3s ease;
     position: relative;
     padding: 0.5rem 1rem !important;
+    margin-right: 15px;
 }
 
-/* Petit point lumineux au survol */
-.nav-link:hover {
-    color: #fff !important;
+/* Effet de survol Premium (Point lumineux + Texte blanc pur) */
+.navbar-custom .nav-link:hover {
+    color: #ffffff !important;
+    text-shadow: 0 0 10px rgba(255,255,255,0.5);
     transform: translateY(-1px);
 }
 
-.nav-link::after {
+/* Ligne dorée animée sous les liens */
+.navbar-custom .nav-link::after {
     content: '';
     position: absolute;
     width: 0;
@@ -57,7 +65,7 @@ body {
     transform: translateX(-50%);
 }
 
-.nav-link:hover::after {
+.navbar-custom .nav-link:hover::after {
     width: 20px;
 }
 
@@ -110,11 +118,6 @@ body {
     color: #dc2626;
 }
 
-@keyframes slideDown {
-    from { opacity: 0; transform: translateY(-10px); }
-    to { opacity: 1; transform: translateY(0); }
-}
-
 /* =========================================
    3. CARTES & CONTENEURS
    ========================================= */
@@ -126,33 +129,60 @@ body {
 }
 
 .card:hover {
-    transform: translateY(-2px); /* L'effet "levé" du fichier original */
+    transform: translateY(-2px);
     box-shadow: 0 6px 15px rgba(0,0,0,0.08);
 }
 
-.card-header small {
-    letter-spacing: 0.5px;
+/* Styles spécifiques Stats (depuis HTML) */
+.stat-card {
+    transition: all 0.3s ease;
+    border: none;
+    border-radius: 1rem;
+}
+.stat-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+}
+.balance-card-gradient {
+    background: var(--primary-gradient);
+    color: white;
+}
+
+.container.pb-5 {
+    flex: 1; /* Pousse le footer vers le bas */
 }
 
 /* =========================================
-   4. ÉLÉMENTS DE NAVIGATION (Onglets)
+   4. NAVIGATION ONGLETS (Nav Pills)
    ========================================= */
-.nav-pills .nav-link.active {
-    background-color: var(--primary-color);
+/* Style harmonisé pour les onglets d'analyse */
+.nav-pills .nav-link {
+    color: #4b5563 !important; /* Gris foncé pour le texte inactif */
+    background-color: #ffffff;
+    border: 1px solid #e5e7eb;
+    margin: 0 2px;
     font-weight: 600;
-}
-
-.nav-link {
-    color: #666;
+    transition: all 0.2s;
     cursor: pointer;
 }
 
+.nav-pills .nav-link:hover {
+    background-color: #f3f4f6;
+    color: #4F46E5 !important;
+}
+
+.nav-pills .nav-link.active {
+    background: var(--primary-gradient) !important;
+    color: #ffffff !important;
+    border-color: transparent;
+    box-shadow: 0 4px 6px rgba(79, 70, 229, 0.3);
+}
+
 /* =========================================
-   5. DASHBOARD FINANCIER (Balance)
+   5. DASHBOARD FINANCIER & STATUTS
    ========================================= */
-.balance-card { border-left: 5px solid; }
-.balance-positive { border-left-color: #198754; background-color: #d1e7dd; color: #0f5132; }
-.balance-negative { border-left-color: #dc3545; background-color: #f8d7da; color: #842029; }
+.balance-positive { border-left: 5px solid #198754; background-color: #d1e7dd; color: #0f5132; }
+.balance-negative { border-left: 5px solid #dc3545; background-color: #f8d7da; color: #842029; }
 
 /* Statut des paris (Bordures colorées) */
 .bet-pending { border-left: 4px solid #ffc107; }
@@ -160,8 +190,38 @@ body {
 .bet-lost { border-left: 4px solid #dc3545; }
 
 /* =========================================
-   6. MODULES SPÉCIFIQUES
+   6. MODULES SPÉCIFIQUES (Boules, Heatmap)
    ========================================= */
+
+/* Styles des boules (Badge résultat) */
+.loto-badge {
+    width: 28px;
+    height: 28px;
+    line-height: 26px;
+    font-size: 0.85rem;
+    font-weight: 700;
+    display: inline-block;
+    padding: 0;
+    text-align: center;
+    transition: all 0.3s ease;
+}
+
+/* Styles des boules (Input Formulaire) */
+.loto-ball-input {
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    text-align: center;
+    font-weight: 700;
+    font-size: 1.2rem;
+    border: 2px solid #e5e7eb;
+    margin: 0 auto;
+    transition: all 0.2s;
+}
+.loto-ball-input:focus {
+    border-color: #4F46E5;
+    box-shadow: 0 0 0 4px rgba(79, 70, 229, 0.1);
+}
 
 /* Heatmap Grid */
 .heatmap-cell {
@@ -179,85 +239,133 @@ body {
     z-index: 10;
 }
 
-/* Listes de statistiques (petites listes) */
-.small-list .list-group-item {
-    font-size: 0.9rem;
-    padding: 0.6rem 1rem;
-    border-bottom: 1px solid rgba(0,0,0,0.05);
-    background-color: #fff;
-    transition: background-color 0.2s;
-}
-.small-list .list-group-item:hover {
-    background-color: #f8f9fa;
-}
-.small-list .list-group-item:last-child {
-    border-bottom: none;
-}
+/* Effets visuels boules */
+.opacity-50 { opacity: 0.4; filter: grayscale(100%); }
+.glowing-border { box-shadow: 0 0 8px rgba(220, 53, 69, 0.6); animation: pulse-red 2s infinite; }
 
 /* Canvas Graphique */
-canvas {
-    max-height: 400px;
+canvas { max-height: 400px; }
+
+/* =========================================
+   7. PLUGINS CUSTOM (DataTables & Flatpickr)
+   ========================================= */
+
+/* --- DATATABLES PAGINATION --- */
+.dataTables_wrapper .dataTables_paginate {
+    padding-top: 1rem;
+    display: flex;
+    justify-content: center;
+    gap: 5px;
 }
 
-/* Badges */
-.badge {
-    font-size: 0.9em;
+.dataTables_wrapper .page-item .page-link {
+    border: none;
+    border-radius: 50% !important;
+    width: 38px; height: 38px;
+    display: flex; align-items: center; justify-content: center;
+    color: #6b7280; font-weight: 600; font-size: 0.9rem;
+    background-color: transparent;
+    transition: all 0.2s ease-in-out;
+    margin: 0 2px;
 }
 
-/* Inputs désactivés */
-input:disabled {
-    background-color: #f8f9fa !important;
-    opacity: 0.5;
-    cursor: not-allowed;
-    border-color: #dee2e6 !important;
+.dataTables_wrapper .page-item .page-link:focus { box-shadow: none; }
+
+.dataTables_wrapper .page-item:not(.active):not(.disabled) .page-link:hover {
+    background-color: #e0e7ff;
+    color: #4F46E5;
+    transform: translateY(-2px);
+}
+
+.dataTables_wrapper .page-item.active .page-link {
+    background: var(--primary-gradient);
+    color: white;
+    box-shadow: 0 4px 10px rgba(79, 70, 229, 0.4);
+    transform: scale(1.1);
+}
+
+.dataTables_wrapper .page-item.disabled .page-link {
+    background-color: transparent;
+    color: #d1d5db;
+}
+
+.dataTables_wrapper .dataTables_info {
+    font-size: 0.8rem;
+    color: #9ca3af;
+    text-align: center;
+    margin-top: 10px;
+    font-style: italic;
+}
+
+/* --- FLATPICKR CALENDAR --- */
+.flatpickr-day.selected, .flatpickr-day.startRange, .flatpickr-day.endRange,
+.flatpickr-day.selected.inRange, .flatpickr-day.selected:focus, .flatpickr-day.selected:hover {
+    background: var(--primary-gradient) !important;
+    border-color: #4F46E5 !important;
+}
+.flatpickr-day.disabled, .flatpickr-day.disabled:hover {
+    color: #cbd5e1 !important;
+    background: transparent !important;
 }
 
 /* =========================================
-   7. ANIMATIONS & UTILITAIRES
+   8. ANIMATIONS & BOUTONS
    ========================================= */
 
-/* Effet survol Navbar Profil */
-.hover-bg-light:hover {
-    background-color: rgba(255, 255, 255, 0.15);
+/* Bouton Magique (Dégradé Orange) */
+.btn-magic {
+    background: linear-gradient(45deg, #F59E0B, #FBBF24);
+    border: none;
+    color: #fff;
+    font-weight: 600;
+    box-shadow: 0 4px 15px rgba(245, 158, 11, 0.4);
+}
+.btn-magic:hover {
+    transform: scale(1.02);
+    color: #fff;
 }
 
-/* Fade In pour les résultats */
-.fade-in {
-    animation: fadeIn 0.5s ease-in-out;
+/* Apparition vers le haut */
+.animate-up {
+    animation: slideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    opacity: 0;
+    transform: translateY(20px);
 }
-
-@keyframes fadeIn {
-    from { opacity: 0; transform: translateY(10px); }
+@keyframes slideUp {
+    from { opacity: 0; transform: translateY(20px); }
     to { opacity: 1; transform: translateY(0); }
 }
 
-/* Animation Accordéon Bootstrap */
-.accordion-button::after {
-    transition: transform 0.3s ease;
+/* Délais */
+.delay-1 { animation-delay: 0.1s; }
+.delay-2 { animation-delay: 0.2s; }
+.delay-3 { animation-delay: 0.3s; }
+.delay-4 { animation-delay: 0.4s; }
+
+/* Pulsations */
+.btn-pulse { animation: pulse-shadow 2s infinite; }
+@keyframes pulse-shadow {
+    0% { box-shadow: 0 0 0 0 rgba(255, 193, 7, 0.4); }
+    70% { box-shadow: 0 0 0 10px rgba(255, 193, 7, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(255, 193, 7, 0); }
 }
-.accordion-button:not(.collapsed)::after {
-    transform: rotate(-180deg);
+@keyframes pulse-red {
+    0% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.7); }
+    70% { box-shadow: 0 0 0 6px rgba(220, 53, 69, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0); }
 }
 
-/* Animation Icône repliable personnalisée */
-.toggle-icon {
-    transition: transform 0.3s ease;
-}
-.collapsed .toggle-icon {
-    transform: rotate(-90deg);
+/* Menu Dropdown Animation */
+@keyframes slideDown {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
 }
 
-/* =========================================
-   8. STRUCTURE DE PAGE (Footer Sticky)
-   ========================================= */
-body {
-    min-height: 100vh;
-    display: flex;
-    flex-direction: column;
-}
-
-.container.pb-5 {
-    flex: 1; /* Pousse le footer vers le bas */
+/* Fade In */
+.fade-in { animation: fadeIn 0.5s ease-in-out; }
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
 }
 
 /* =========================================
@@ -272,22 +380,12 @@ body {
     color: #6c757d;
 }
 
-.footer a {
-    color: #6c757d;
-    text-decoration: none;
-    transition: color 0.2s;
-}
-
-.footer a:hover {
-    color: var(--primary-color);
-}
+.footer a { color: #6c757d; text-decoration: none; transition: color 0.2s; }
+.footer a:hover { color: var(--primary-color); }
 
 .footer-social-btn {
-    width: 36px;
-    height: 36px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
+    width: 36px; height: 36px;
+    display: inline-flex; align-items: center; justify-content: center;
     background-color: #f8f9fa;
     border-radius: 50%;
     margin-left: 0.5rem;
@@ -301,46 +399,25 @@ body {
 }
 
 /* =========================================
-   10. ANIMATIONS AVANCÉES
+   10. UTILITAIRES DIVERS
    ========================================= */
-
-/* 1. Apparition vers le haut (Slide Up) */
-.animate-up {
-    animation: slideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-    opacity: 0;
-    transform: translateY(20px);
+/* Input Focus */
+.form-control:focus, .form-select:focus {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 10px rgba(13, 110, 253, 0.15);
 }
 
-/* Délais pour l'effet "Cascade" */
-.delay-1 { animation-delay: 0.1s; }
-.delay-2 { animation-delay: 0.2s; }
-.delay-3 { animation-delay: 0.3s; }
-.delay-4 { animation-delay: 0.4s; }
-
-@keyframes slideUp {
-    from { opacity: 0; transform: translateY(20px); }
-    to { opacity: 1; transform: translateY(0); }
-}
-
-/* 2. Pulsation douce pour le bouton "Générer" */
-.btn-pulse {
-    animation: pulse-shadow 2s infinite;
-}
-
-@keyframes pulse-shadow {
-    0% { box-shadow: 0 0 0 0 rgba(255, 193, 7, 0.4); }
-    70% { box-shadow: 0 0 0 10px rgba(255, 193, 7, 0); }
-    100% { box-shadow: 0 0 0 0 rgba(255, 193, 7, 0); }
-}
-
-/* 3. Effet Glassmorphism pour les modales */
+/* Glassmorphism Modales */
 .modal-content {
     backdrop-filter: blur(10px);
     background-color: rgba(255, 255, 255, 0.95);
 }
 
-/* 4. Input Focus animé */
-.form-control:focus, .form-select:focus {
-    transform: translateY(-1px);
-    box-shadow: 0 4px 10px rgba(13, 110, 253, 0.15);
+/* Petite listes stats */
+.small-list .list-group-item {
+    font-size: 0.9rem; padding: 0.6rem 1rem;
+    border-bottom: 1px solid rgba(0,0,0,0.05);
+    background-color: #fff; transition: background-color 0.2s;
 }
+.small-list .list-group-item:hover { background-color: #f8f9fa; }
+.small-list .list-group-item:last-child { border-bottom: none; }

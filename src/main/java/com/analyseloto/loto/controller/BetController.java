@@ -79,6 +79,10 @@ public class BetController {
         bet.setGain(gain);
         betRepository.save(bet);
 
+        if (gain > 0) {
+            return "redirect:/?win=" + gain;
+        }
+
         return "redirect:/?gainUpdated";
     }
 

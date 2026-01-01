@@ -719,7 +719,8 @@ public class LotoService {
         repository.save(t);
 
         // On lance la vérification des gains
-        verifierGainsEtNotifier(t);
+        // TODO : modifier méthode calcul des gains
+//        verifierGainsEtNotifier(t);
     }
 
     @Data public static class StatPoint { private int numero; private int frequence; private int ecart; private boolean isChance; }

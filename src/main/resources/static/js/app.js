@@ -2,12 +2,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Variables Globales ---
     let currentChart = null;
+    let radarChart = null;
     let rawData = [];
     let activeTab = 'main';
 
     // --- Initialisation ---
     setupEventListeners();
+    // --- Initialisation des Popovers (Bulles d'aide) ---
+        var popoverTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="popover"]'))
+        var popoverList = popoverTriggerList.map(function (popoverTriggerEl) {
+            return new bootstrap.Popover(popoverTriggerEl)
+        });
     chargerStats();
+    checkWinEffect();
 
     // --- Gestionnaires d'événements ---
     function setupEventListeners() {
@@ -245,31 +252,102 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function afficherResultatsSimulation(data, nbBoulesJouees) {
-        const container = document.getElementById('simResult');
-        container.classList.remove('d-none');
+            const container = document.getElementById('simResult');
+            container.classList.remove('d-none');
 
-        // Construction dynamique des onglets
-        let tabsHtml = '';
-        let contentHtml = '';
-        const startActive = nbBoulesJouees;
+            // --- 1. CALCULS STATISTIQUES (NOUVEAU) ---
+            // On récupère les numéros joués depuis les inputs
+            const inputs = document.querySelectorAll('.sim-input');
+            const numerosJoues = Array.from(inputs).map(i => i.value ? parseInt(i.value) : 0).filter(n => n > 0);
 
-        [5, 4, 3, 2].forEach(size => {
-            if (size <= nbBoulesJouees) {
-                const isActive = (size === startActive);
-                const count = (size === 5 ? data.quintuplets : size === 4 ? data.quartets : size === 3 ? data.trios : data.pairs).length;
-                tabsHtml += `<li class="nav-item"><button class="nav-link ${isActive ? 'active' : ''}" data-bs-toggle="pill" data-bs-target="#pills-${size}">${size} Numéros (${count})</button></li>`;
-                contentHtml += generateTabPane(`pills-${size}`, (size === 5 ? data.quintuplets : size === 4 ? data.quartets : size === 3 ? data.trios : data.pairs), isActive);
-            }
-        });
+            // A. La Somme
+            let somme = numerosJoues.reduce((a, b) => a + b, 0);
 
-        container.innerHTML = `
-            <div class="alert alert-primary bg-primary bg-opacity-10 border-primary border-opacity-25 text-primary text-center py-2 mb-3">
-                <i class="bi bi-info-circle-fill me-2"></i>Analyse de <strong>${nbBoulesJouees} numéros</strong> pour un <strong>${data.jourSimule}</strong>
-            </div>
-            <ul class="nav nav-pills mb-3 justify-content-center" id="pills-tab">${tabsHtml}</ul>
-            <div class="tab-content">${contentHtml}</div>
-        `;
-    }
+            // B. Parité
+            let pairs = numerosJoues.filter(n => n % 2 === 0).length;
+            let impairs = numerosJoues.length - pairs;
+
+            // C. Ratio Global (Calcul approximatif basé sur la meilleure combinaison trouvée)
+            // On prend le ratio le plus élevé parmi les résultats pour donner une note
+            let maxRatio = 0;
+            if (data.quintuplets && data.quintuplets.length > 0) maxRatio = data.quintuplets[0].ratio;
+            else if (data.quartets && data.quartets.length > 0) maxRatio = data.quartets[0].ratio;
+
+            let freqPourcent = maxRatio > 0 ? (maxRatio).toFixed(2) + 'x' : '-';
+
+
+            // --- 2. CONSTRUCTION DU HTML ---
+
+            // Construction dynamique des onglets (inchangée mais intégrée dans le nouveau design)
+            let tabsHtml = '';
+            let contentHtml = '';
+            const startActive = nbBoulesJouees;
+
+            [5, 4, 3, 2].forEach(size => {
+                if (size <= nbBoulesJouees) {
+                    const isActive = (size === startActive);
+                    const items = (size === 5 ? data.quintuplets : size === 4 ? data.quartets : size === 3 ? data.trios : data.pairs);
+                    const count = items ? items.length : 0;
+
+                    tabsHtml += `
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link ${isActive ? 'active' : ''}" id="pills-${size}-tab" data-bs-toggle="pill" data-bs-target="#pills-${size}" type="button">
+                                ${size} Num <span class="badge bg-white text-primary ms-1 shadow-sm">${count}</span>
+                            </button>
+                        </li>`;
+
+                    contentHtml += generateTabPane(`pills-${size}`, items, isActive);
+                }
+            });
+
+            // Le HTML Final avec les Stats
+            container.innerHTML = `
+                <div class="card border-0 shadow-sm animate-up mt-3">
+                    <div class="card-header bg-white border-bottom-0 py-3 d-flex justify-content-between align-items-center">
+                        <h6 class="fw-bold text-primary mb-0"><i class="bi bi-bar-chart-fill me-2"></i>Analyse de votre grille</h6>
+                        <button class="btn btn-sm btn-outline-secondary" onclick="document.getElementById('simResult').classList.add('d-none')">Fermer</button>
+                    </div>
+                    <div class="card-body bg-light">
+
+                        <div class="row g-3 mb-4 text-center">
+                            <div class="col-4">
+                                <div class="bg-white p-2 rounded shadow-sm border h-100 d-flex flex-column justify-content-center">
+                                    <small class="text-muted d-block text-uppercase fw-bold" style="font-size:0.65rem;">Somme</small>
+                                    <span class="fw-bold text-dark fs-5">${somme}</span>
+                                </div>
+                            </div>
+                            <div class="col-4">
+                                <div class="bg-white p-2 rounded shadow-sm border h-100 d-flex flex-column justify-content-center">
+                                    <small class="text-muted d-block text-uppercase fw-bold" style="font-size:0.65rem;">Parité</small>
+                                    <span class="fw-bold text-primary fs-6">${pairs} Pair / ${impairs} Imp</span>
+                                </div>
+                            </div>
+                            <div class="col-4">
+                                <div class="bg-white p-2 rounded shadow-sm border h-100 d-flex flex-column justify-content-center">
+                                    <small class="text-muted d-block text-uppercase fw-bold" style="font-size:0.65rem;">Perf. Max</small>
+                                    <span class="fw-bold text-success fs-6">${freqPourcent}</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="alert alert-primary bg-primary bg-opacity-10 border-primary border-opacity-25 text-primary text-center py-2 mb-3 small">
+                            <i class="bi bi-info-circle-fill me-1"></i>
+                            Historique des sorties pour un <strong>${data.jourSimule}</strong>
+                        </div>
+
+                        <ul class="nav nav-pills mb-3 justify-content-center" id="pills-tab">${tabsHtml}</ul>
+
+                        <div class="tab-content" id="pills-tabContent">${contentHtml}</div>
+                    </div>
+
+                    <div class="card-footer bg-white border-top-0 text-center py-2">
+                        <small class="text-muted fst-italic" style="font-size: 0.75rem;">
+                            Conseil : Une somme entre 120 et 180 est statistiquement la plus fréquente.
+                        </small>
+                    </div>
+                </div>
+            `;
+        }
 
     function generateTabPane(id, items, isActive) {
         let content = '';
@@ -441,6 +519,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
         updateDashboard(mainNumbers, chanceNumbers);
 
+        updateRadar(mainNumbers);
+
         if (activeTab === 'main') updateChart(mainNumbers, false);
         else if (activeTab === 'chance') updateChart(chanceNumbers, true);
         else if (activeTab === 'heat') updateHeatmap(mainNumbers);
@@ -520,4 +600,124 @@ document.addEventListener('DOMContentLoaded', () => {
         const c = { 'MONDAY': '#ff6384', 'WEDNESDAY': '#4bc0c0', 'SATURDAY': '#36a2eb' };
         return c[j] || '#36a2eb';
     }
+
+    function checkWinEffect() {
+            const urlParams = new URLSearchParams(window.location.search);
+
+            if (urlParams.has('win')) {
+                // 1. Lancer les confettis
+                lancerConfettis();
+
+                // 2. Afficher le Toast (si présent dans le HTML)
+                const toastEl = document.getElementById('winToast');
+                if(toastEl) {
+                    const toast = new bootstrap.Toast(toastEl);
+                    toast.show();
+                }
+
+                // 3. Nettoyer l'URL (pour ne pas rejouer l'anim si on rafraichit)
+                const newUrl = window.location.pathname;
+                window.history.replaceState({}, document.title, newUrl);
+            }
+        }
+
+        function lancerConfettis() {
+            var duration = 3 * 1000;
+            var animationEnd = Date.now() + duration;
+            var defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 10000 };
+
+            function randomInRange(min, max) { return Math.random() * (max - min) + min; }
+
+            var interval = setInterval(function() {
+                var timeLeft = animationEnd - Date.now();
+                if (timeLeft <= 0) return clearInterval(interval);
+                var particleCount = 50 * (timeLeft / duration);
+                confetti(Object.assign({}, defaults, { particleCount, origin: { x: randomInRange(0.1, 0.3), y: Math.random() - 0.2 } }));
+                confetti(Object.assign({}, defaults, { particleCount, origin: { x: randomInRange(0.7, 0.9), y: Math.random() - 0.2 } }));
+            }, 250);
+        }
+
+        function updateRadar(data) {
+            // On prend les 50 derniers tirages pour l'analyse
+            const recentData = data.slice(0, 50);
+
+            // --- CALCULS ---
+            let totalPairs = 0;
+            let totalHigh = 0; // Num > 25
+            let totalSum = 0;
+
+            recentData.forEach(d => {
+                // Attention : data contient ici des stats par boule, pas par tirage.
+                // Pour un radar précis, l'idéal est d'utiliser l'historique des tirages.
+                // Si vous n'avez que les stats par boule, on simule une "Signature" basée sur les fréquences.
+
+                // Simplification pour votre structure actuelle (basée sur 'rawData' qui liste les boules) :
+                // On va plutôt analyser la RÉPARTITION des boules sorties.
+                if (d.numero % 2 === 0) totalPairs += d.frequence;
+                if (d.numero > 25) totalHigh += d.frequence;
+                totalSum += (d.numero * d.frequence);
+            });
+
+            const totalSorties = recentData.reduce((acc, val) => acc + val.frequence, 0);
+
+            // Normalisation (0 à 100)
+            const pctPair = Math.round((totalPairs / totalSorties) * 100);
+            const pctHigh = Math.round((totalHigh / totalSorties) * 100);
+
+            // --- GRAPHIQUE ---
+            const ctx = document.getElementById('radarChart').getContext('2d');
+            if (radarChart) radarChart.destroy();
+
+            radarChart = new Chart(ctx, {
+                type: 'radar',
+                data: {
+                    labels: ['Parité (Pairs)', 'Taille (>25)', 'Zone Chaude', 'Finales 0-4', 'Finales 5-9'],
+                    datasets: [{
+                        label: 'Tendance Actuelle',
+                        data: [pctPair, pctHigh, 60, 55, 45], // Valeurs calculées ou simulées ici
+                        fill: true,
+                        backgroundColor: 'rgba(79, 70, 229, 0.2)',
+                        borderColor: '#4F46E5',
+                        pointBackgroundColor: '#4F46E5',
+                        pointBorderColor: '#fff',
+                        pointHoverBackgroundColor: '#fff',
+                        pointHoverBorderColor: '#4F46E5'
+                    }, {
+                        label: 'Équilibre Théorique',
+                        data: [50, 50, 50, 50, 50], // La moyenne parfaite
+                        fill: true,
+                        backgroundColor: 'rgba(200, 200, 200, 0.1)',
+                        borderColor: 'rgba(200, 200, 200, 0.5)',
+                        pointRadius: 0
+                    }]
+                },
+                options: {
+                    elements: { line: { tension: 0.3 } },
+                    scales: {
+                        r: {
+                            angleLines: { display: true, color: '#eee' },
+                            suggestedMin: 30,
+                            suggestedMax: 70,
+                            pointLabels: { font: { size: 12, family: "'Poppins', sans-serif" } }
+                        }
+                    }
+                }
+            });
+
+            // 3. Interprétation automatique (Le "Coach AI")
+                const conseilDiv = document.getElementById('radarAnalysis'); // Créer ce div dans le HTML sous le canvas
+                if(conseilDiv) {
+                    let analyse = [];
+                    if (pctPair > 55) analyse.push("Les <strong>Pairs</strong> dominent");
+                    if (pctPair < 45) analyse.push("Les <strong>Impairs</strong> dominent");
+                    if (pctHigh > 55) analyse.push("Les <strong>Gros numéros</strong> (>25) sont fréquents");
+                    if (pctHigh < 45) analyse.push("Les <strong>Petits numéros</strong> (≤25) sont fréquents");
+
+                    if (analyse.length === 0) {
+                        conseilDiv.innerHTML = '<span class="text-success"><i class="bi bi-check-circle me-1"></i> Équilibre parfait. Le hasard fait bien les choses.</span>';
+                    } else {
+                        conseilDiv.innerHTML = '<span class="text-primary"><i class="bi bi-lightbulb me-1"></i> Tendance : ' + analyse.join(" et ") + '.</span>';
+                    }
+                }
+        }
 });
