@@ -55,7 +55,7 @@
                     </a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link" href="https://www.fdj.fr/jeux-de-tirage/loto" target="_blank">
+                    <a class="nav-link" href="https://www.fdj.fr/jeux-de-lotoTirage/loto" target="_blank">
                         <i class="bi bi-ticket-perforated me-1"></i>Site FDJ
                     </a>
                 </li>
@@ -81,7 +81,16 @@
                     <ul class="dropdown-menu dropdown-menu-end dropdown-menu-custom" aria-labelledby="userDropdown">
                         <li>
                             <h6 class="dropdown-header">Mon Compte</h6>
+                            <div class="px-3 pb-2 text-muted" style="font-size: 0.7rem;" th:if="${lastLogin != null}">
+                                <i class="bi bi-clock-history me-1"></i>
+                                Vu le <span th:text="${#temporals.format(lastLogin, 'dd/MM/yyyy à HH:mm')}"></span>
+                            </div>
+                            <div class="px-3 pb-2 text-muted" style="font-size: 0.7rem;" th:if="${lastLogin == null}">
+                                <i class="bi bi-stars me-1"></i> Première connexion !
+                            </div>
                         </li>
+                        <li><hr class="dropdown-divider m-0 mb-2"></li>
+
                         <li>
                             <a class="dropdown-item" th:href="@{/profile}">
                                 <i class="bi bi-person-circle me-2 text-primary"></i>Mon Profil
@@ -257,47 +266,47 @@
 
                         <td class="text-center">
                             <div class="d-inline-flex align-items-center gap-1"
-                                 th:with="tirage=${draws != null ? draws.get(bet.dateJeu) : null}">
+                                 th:with="lotoTirage=${draws != null ? draws.get(bet.dateJeu) : null}">
 
         <span class="badge rounded-circle shadow-sm loto-badge"
               th:text="${bet.b1}"
-              th:classappend="${tirage == null} ? 'bg-white border border-secondary text-dark' :
-                              (${#lists.contains(tirage.boules, bet.b1)} ? 'bg-success border-success text-white' : 'bg-light border-light text-muted opacity-50')">
+              th:classappend="${lotoTirage == null} ? 'bg-white border border-secondary text-dark' :
+                              (${#lists.contains(lotoTirage.boules, bet.b1)} ? 'bg-success border-success text-white' : 'bg-light border-light text-muted opacity-50')">
         </span>
 
                                 <span class="badge rounded-circle shadow-sm loto-badge"
                                       th:text="${bet.b2}"
-                                      th:classappend="${tirage == null} ? 'bg-white border border-secondary text-dark' :
-                              (${#lists.contains(tirage.boules, bet.b2)} ? 'bg-success border-success text-white' : 'bg-light border-light text-muted opacity-50')">
+                                      th:classappend="${lotoTirage == null} ? 'bg-white border border-secondary text-dark' :
+                              (${#lists.contains(lotoTirage.boules, bet.b2)} ? 'bg-success border-success text-white' : 'bg-light border-light text-muted opacity-50')">
         </span>
 
                                 <span class="badge rounded-circle shadow-sm loto-badge"
                                       th:text="${bet.b3}"
-                                      th:classappend="${tirage == null} ? 'bg-white border border-secondary text-dark' :
-                              (${#lists.contains(tirage.boules, bet.b3)} ? 'bg-success border-success text-white' : 'bg-light border-light text-muted opacity-50')">
+                                      th:classappend="${lotoTirage == null} ? 'bg-white border border-secondary text-dark' :
+                              (${#lists.contains(lotoTirage.boules, bet.b3)} ? 'bg-success border-success text-white' : 'bg-light border-light text-muted opacity-50')">
         </span>
 
                                 <span class="badge rounded-circle shadow-sm loto-badge"
                                       th:text="${bet.b4}"
-                                      th:classappend="${tirage == null} ? 'bg-white border border-secondary text-dark' :
-                              (${#lists.contains(tirage.boules, bet.b4)} ? 'bg-success border-success text-white' : 'bg-light border-light text-muted opacity-50')">
+                                      th:classappend="${lotoTirage == null} ? 'bg-white border border-secondary text-dark' :
+                              (${#lists.contains(lotoTirage.boules, bet.b4)} ? 'bg-success border-success text-white' : 'bg-light border-light text-muted opacity-50')">
         </span>
 
                                 <span class="badge rounded-circle shadow-sm loto-badge"
                                       th:text="${bet.b5}"
-                                      th:classappend="${tirage == null} ? 'bg-white border border-secondary text-dark' :
-                              (${#lists.contains(tirage.boules, bet.b5)} ? 'bg-success border-success text-white' : 'bg-light border-light text-muted opacity-50')">
+                                      th:classappend="${lotoTirage == null} ? 'bg-white border border-secondary text-dark' :
+                              (${#lists.contains(lotoTirage.boules, bet.b5)} ? 'bg-success border-success text-white' : 'bg-light border-light text-muted opacity-50')">
         </span>
 
                                 <span class="badge rounded-circle shadow-sm loto-badge ms-2"
                                       th:text="${bet.chance}"
-                                      th:classappend="${tirage == null} ? 'bg-danger text-white' :
-                              (${tirage.numeroChance == bet.chance} ? 'bg-danger border-danger text-white glowing-border' : 'bg-light border-light text-danger opacity-50')">
+                                      th:classappend="${lotoTirage == null} ? 'bg-danger text-white' :
+                              (${lotoTirage.numeroChance == bet.chance} ? 'bg-danger border-danger text-white glowing-border' : 'bg-light border-light text-danger opacity-50')">
         </span>
 
-                                <i th:if="${tirage != null}" class="bi bi-info-circle-fill text-muted ms-1 small"
+                                <i th:if="${lotoTirage != null}" class="bi bi-info-circle-fill text-muted ms-1 small"
                                    data-bs-toggle="tooltip"
-                                   th:title="'Tirage : ' + ${tirage.boules} + ' [C' + ${tirage.numeroChance} + ']'"></i>
+                                   th:title="'Tirage : ' + ${lotoTirage.boules} + ' [C' + ${lotoTirage.numeroChance} + ']'"></i>
                             </div>
                         </td>
 
@@ -595,7 +604,7 @@
             <form th:action="@{/bets/add}" method="post" class="modal-content">
                 <div class="modal-header"><h5 class="modal-title">📝 Enregistrer une grille</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
                 <div class="modal-body">
-                    <div class="mb-3"><label class="form-label small">Date du tirage</label><input type="date" name="dateJeu" class="form-control" required th:value="${#dates.format(#dates.createNow(), 'yyyy-MM-dd')}"></div>
+                    <div class="mb-3"><label class="form-label small">Date du lotoTirage</label><input type="date" name="dateJeu" class="form-control" required th:value="${#dates.format(#dates.createNow(), 'yyyy-MM-dd')}"></div>
                     <label class="form-label small">Numéros joués</label>
                     <div class="input-group mb-3"><input type="number" name="b1" class="form-control" placeholder="1" required><input type="number" name="b2" class="form-control" placeholder="2" required><input type="number" name="b3" class="form-control" placeholder="3" required><input type="number" name="b4" class="form-control" placeholder="4" required><input type="number" name="b5" class="form-control" placeholder="5" required><input type="number" name="chance" class="form-control border-danger text-danger fw-bold" placeholder="C" required></div>
                     <div class="mb-3"><label class="form-label small">Coût de la grille (€)</label><input type="number" step="0.01" name="mise" class="form-control" value="2.20" required></div>

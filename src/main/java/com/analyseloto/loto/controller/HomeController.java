@@ -1,9 +1,9 @@
 package com.analyseloto.loto.controller;
 
-import com.analyseloto.loto.entity.Tirage;
+import com.analyseloto.loto.entity.LotoTirage;
 import com.analyseloto.loto.entity.User;
 import com.analyseloto.loto.entity.UserBet;
-import com.analyseloto.loto.repository.TirageRepository;
+import com.analyseloto.loto.repository.LotoTirageRepository;
 import com.analyseloto.loto.repository.UserBetRepository;
 import com.analyseloto.loto.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -26,7 +26,7 @@ public class HomeController {
     // Repositories
     private final UserRepository userRepository;
     private final UserBetRepository betRepository;
-    private final TirageRepository tirageRepository;
+    private final LotoTirageRepository lotoTirageRepository;
 
     @GetMapping("/")
     public String home(Model model, Principal principal) {
@@ -34,6 +34,7 @@ public class HomeController {
         User user = userRepository.findByEmail(email).orElseThrow();
 
         model.addAttribute("prenom", user.getFirstName());
+        model.addAttribute("lastLogin", user.getLastLogin());
         model.addAttribute("astroSigne", user.getZodiacSign());
 
         // Gestion du bilan
@@ -53,11 +54,11 @@ public class HomeController {
                 .collect(Collectors.toSet());
 
         // On recherche les résultats officiels pour ces dates
-        List<Tirage> tiragesOfficiels = tirageRepository.findByDateTirageIn(datesJouees);
+        List<LotoTirage> tiragesOfficiels = lotoTirageRepository.findByDateTirageIn(datesJouees);
 
         // On transforme la liste en Map
-        Map<LocalDate, Tirage> resultsMap = tiragesOfficiels.stream()
-                .collect(Collectors.toMap(Tirage::getDateTirage, Function.identity()));
+        Map<LocalDate, LotoTirage> resultsMap = tiragesOfficiels.stream()
+                .collect(Collectors.toMap(LotoTirage::getDateTirage, Function.identity()));
         model.addAttribute("draws", resultsMap);
 
         // Calculs Financiers

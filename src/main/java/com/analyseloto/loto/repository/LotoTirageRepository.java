@@ -1,13 +1,15 @@
 package com.analyseloto.loto.repository;
 
-import com.analyseloto.loto.entity.Tirage;
+import com.analyseloto.loto.entity.LotoTirage;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
 
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Set;
 
-public interface TirageRepository extends JpaRepository<Tirage, Long> {
+@Repository
+public interface LotoTirageRepository extends JpaRepository<LotoTirage, Long> {
     /**
      * Méthode recherche si le tirage existe déjà pour une date donnée
      * @param date date tirage
@@ -20,5 +22,5 @@ public interface TirageRepository extends JpaRepository<Tirage, Long> {
      * @param datesJouees set dates
      * @return
      */
-    List<Tirage> findByDateTirageIn(Set<LocalDate> datesJouees);
+    List<LotoTirage> findByDateTirageIn(Set<LocalDate> datesJouees);
 }

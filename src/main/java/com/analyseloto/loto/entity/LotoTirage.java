@@ -11,7 +11,7 @@ import java.util.List;
 @Table(name = "tirage", uniqueConstraints = {
         @UniqueConstraint(columnNames = "dateTirage")
 })
-public class Tirage {
+public class LotoTirage {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;

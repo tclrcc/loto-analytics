@@ -45,6 +45,9 @@ public class User {
     @Column(name = "lock_time")
     private LocalDateTime lockTime;
 
+    @Column(name = "last_login")
+    private LocalDateTime lastLogin;
+
     /**
      * Méthode pour savoir si l'utilisateur est bloqué ou non
      * @return

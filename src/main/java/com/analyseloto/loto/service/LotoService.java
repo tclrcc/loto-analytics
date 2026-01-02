@@ -1,10 +1,10 @@
 package com.analyseloto.loto.service;
 
 import com.analyseloto.loto.dto.*;
-import com.analyseloto.loto.entity.Tirage;
+import com.analyseloto.loto.entity.LotoTirage;
 import com.analyseloto.loto.entity.User;
 import com.analyseloto.loto.entity.UserBet;
-import com.analyseloto.loto.repository.TirageRepository;
+import com.analyseloto.loto.repository.LotoTirageRepository;
 import com.analyseloto.loto.repository.UserBetRepository;
 import com.analyseloto.loto.util.Constantes;
 import lombok.AllArgsConstructor;
@@ -26,14 +26,13 @@ import java.time.format.TextStyle;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.stream.Collectors;
-import java.util.stream.IntStream;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class LotoService {
     private final EmailService emailService;
-    private final TirageRepository repository;
+    private final LotoTirageRepository repository;
     private final AstroService astroService;
     private final UserBetRepository betRepository;
 
@@ -96,7 +95,7 @@ public class LotoService {
         List<PronosticResultDto> resultats = new ArrayList<>();
         int n = Math.min(Math.max(1, nombreGrilles), 10);
 
-        List<Tirage> history = repository.findAll();
+        List<LotoTirage> history = repository.findAll();
         if (history.isEmpty()) return new ArrayList<>();
 
         long graine = dateCible.toEpochDay() + config.getNomStrategie().hashCode();
@@ -108,8 +107,8 @@ public class LotoService {
         List<Integer> boostNumbers = (profilAstro != null) ? astroService.getLuckyNumbersOnly(profilAstro) : Collections.emptyList();
 
         // Markov : On récupère le dernier tirage pour savoir "d'où on part"
-        List<Tirage> sortedHistory = new ArrayList<>(history);
-        sortedHistory.sort(Comparator.comparing(Tirage::getDateTirage).reversed());
+        List<LotoTirage> sortedHistory = new ArrayList<>(history);
+        sortedHistory.sort(Comparator.comparing(LotoTirage::getDateTirage).reversed());
         List<Integer> dernierTirageConnu = sortedHistory.get(0).getBoules();
         Map<Integer, Map<Integer, Integer>> matriceMarkov = construireMatriceMarkov(history);
 
@@ -164,11 +163,11 @@ public class LotoService {
     // 2. SOLUTION 1 : CHAÎNES DE MARKOV (Séquentiel)
     // ==================================================================================
 
-    private Map<Integer, Map<Integer, Integer>> construireMatriceMarkov(List<Tirage> history) {
+    private Map<Integer, Map<Integer, Integer>> construireMatriceMarkov(List<LotoTirage> history) {
         Map<Integer, Map<Integer, Integer>> markov = new HashMap<>();
         // Tri chronologique (Ancien -> Récent)
-        List<Tirage> chrono = new ArrayList<>(history);
-        chrono.sort(Comparator.comparing(Tirage::getDateTirage));
+        List<LotoTirage> chrono = new ArrayList<>(history);
+        chrono.sort(Comparator.comparing(LotoTirage::getDateTirage));
 
         for (int i = 0; i < chrono.size() - 1; i++) {
             List<Integer> t1 = chrono.get(i).getBoules();
@@ -317,15 +316,15 @@ public class LotoService {
     // 5. FONCTIONS DE SCORE & UTILITAIRES (Mises à jour)
     // ==================================================================================
 
-    private Map<Integer, Double> calculerScores(List<Tirage> history, int maxNum, DayOfWeek jourCible,
+    private Map<Integer, Double> calculerScores(List<LotoTirage> history, int maxNum, DayOfWeek jourCible,
                                                 boolean isChance, List<Integer> boostNumbers,
                                                 Set<Integer> hotFinales, AlgoConfig config,
                                                 List<Integer> dernierTirage,
                                                 Map<Integer, Map<Integer, Integer>> matriceMarkov) {
         Map<Integer, Double> scores = new HashMap<>();
         long totalTirages = history.size();
-        List<Tirage> histJour = history.stream().filter(t -> t.getDateTirage().getDayOfWeek() == jourCible).toList();
-        List<Tirage> histSorted = history.stream().sorted(Comparator.comparing(Tirage::getDateTirage).reversed()).toList();
+        List<LotoTirage> histJour = history.stream().filter(t -> t.getDateTirage().getDayOfWeek() == jourCible).toList();
+        List<LotoTirage> histSorted = history.stream().sorted(Comparator.comparing(LotoTirage::getDateTirage).reversed()).toList();
 
         for (int i = 1; i <= maxNum; i++) {
             final int num = i;
@@ -374,7 +373,7 @@ public class LotoService {
         return scores;
     }
 
-    private boolean tiragesSuffisants(List<Tirage> history, int num) {
+    private boolean tiragesSuffisants(List<LotoTirage> history, int num) {
         return history.stream().filter(t -> t.getBoules().contains(num)).count() > 5;
     }
 
@@ -432,13 +431,13 @@ public class LotoService {
 
     // --- HELPERS EXISTANTS ---
 
-    private Map<Integer, Map<Integer, Integer>> construireMatriceAffinites(List<Tirage> history) {
+    private Map<Integer, Map<Integer, Integer>> construireMatriceAffinites(List<LotoTirage> history) {
         Map<Integer, Map<Integer, Integer>> matrix = new HashMap<>();
         for (int i = 1; i <= 49; i++) matrix.put(i, new HashMap<>());
-        List<Tirage> sorted = new ArrayList<>(history);
-        sorted.sort(Comparator.comparing(Tirage::getDateTirage).reversed());
+        List<LotoTirage> sorted = new ArrayList<>(history);
+        sorted.sort(Comparator.comparing(LotoTirage::getDateTirage).reversed());
         int count = 0;
-        for (Tirage t : sorted) {
+        for (LotoTirage t : sorted) {
             count++;
             int poids = (count <= 50) ? 3 : (count <= 150 ? 2 : 1);
             List<Integer> b = t.getBoules();
@@ -456,15 +455,15 @@ public class LotoService {
      * Méthode qui calcule les gains pour TOUS les joueurs sur ce tirage
      * et envoie un mail aux gagnants.
      */
-    public void verifierGainsEtNotifier(Tirage tirage) {
-        log.info("📢 Vérification des gains pour le tirage du {}", tirage.getDateTirage());
+    public void verifierGainsEtNotifier(LotoTirage lotoTirage) {
+        log.info("📢 Vérification des gains pour le tirage du {}", lotoTirage.getDateTirage());
 
         // 1. Trouver toutes les grilles jouées pour cette date
-        List<UserBet> parisDuJour = betRepository.findByDateJeu(tirage.getDateTirage());
+        List<UserBet> parisDuJour = betRepository.findByDateJeu(lotoTirage.getDateTirage());
 
         for (UserBet bet : parisDuJour) {
             // 2. Calculer le gain
-            double gain = calculerGain(bet, tirage);
+            double gain = calculerGain(bet, lotoTirage);
 
             // 3. Mettre à jour en base
             bet.setGain(gain);
@@ -472,12 +471,12 @@ public class LotoService {
 
             // 4. Envoyer un mail (Seulement si gain > 0 ou si vous voulez notifier tout le monde)
             if (gain > 0) {
-                envoyerMailGain(bet.getUser(), gain, tirage.getDateTirage());
+                envoyerMailGain(bet.getUser(), gain, lotoTirage.getDateTirage());
             }
         }
     }
 
-    private double calculerGain(UserBet bet, Tirage t) {
+    private double calculerGain(UserBet bet, LotoTirage t) {
         // Logique simplifiée des gains FDJ (À adapter selon les règles officielles si besoin)
         List<Integer> userNums = List.of(bet.getB1(), bet.getB2(), bet.getB3(), bet.getB4(), bet.getB5());
         List<Integer> drawNums = t.getBoules();
@@ -531,8 +530,8 @@ public class LotoService {
         return buckets;
     }
 
-    private Set<Integer> detecterFinalesChaudes(List<Tirage> history) {
-        return history.stream().sorted(Comparator.comparing(Tirage::getDateTirage).reversed()).limit(20)
+    private Set<Integer> detecterFinalesChaudes(List<LotoTirage> history) {
+        return history.stream().sorted(Comparator.comparing(LotoTirage::getDateTirage).reversed()).limit(20)
                 .flatMap(t -> t.getBoules().stream()).map(b -> b % 10)
                 .collect(Collectors.groupingBy(f -> f, Collectors.counting()))
                 .entrySet().stream().sorted((e1, e2) -> Long.compare(e2.getValue(), e1.getValue()))
@@ -580,7 +579,7 @@ public class LotoService {
     /**
      * Compare la grille jouée avec tout l'historique pour trouver les correspondances (2, 3, 4, 5 numéros)
      */
-    private SimulationResultDto simulerGrilleDetaillee(List<Integer> boulesJouees, LocalDate dateSimul, List<Tirage> historique) {
+    private SimulationResultDto simulerGrilleDetaillee(List<Integer> boulesJouees, LocalDate dateSimul, List<LotoTirage> historique) {
         SimulationResultDto result = new SimulationResultDto();
 
         // Formatage de la date pour l'affichage
@@ -599,7 +598,7 @@ public class LotoService {
         result.setPairs(new ArrayList<>());
 
         // Boucle sur tout l'historique
-        for (Tirage t : historique) {
+        for (LotoTirage t : historique) {
             List<Integer> commun = new ArrayList<>(t.getBoules());
             commun.retainAll(boulesJouees); // Garde uniquement les numéros communs
 
@@ -704,7 +703,7 @@ public class LotoService {
                         b4=Integer.parseInt(row[4]); b5=Integer.parseInt(row[5]); c=Integer.parseInt(row[7]);
                     }
                     if (!repository.existsByDateTirage(date)) {
-                        Tirage t = new Tirage(); t.setDateTirage(date); t.setBoule1(b1); t.setBoule2(b2); t.setBoule3(b3); t.setBoule4(b4); t.setBoule5(b5); t.setNumeroChance(c);
+                        LotoTirage t = new LotoTirage(); t.setDateTirage(date); t.setBoule1(b1); t.setBoule2(b2); t.setBoule3(b3); t.setBoule4(b4); t.setBoule5(b5); t.setNumeroChance(c);
                         repository.save(t);
                     }
                 } catch(Exception e) { log.error("Erreur ligne: {}", line); }
@@ -714,7 +713,7 @@ public class LotoService {
 
     public void ajouterTirageManuel(TirageManuelDto dto) {
         if (repository.existsByDateTirage(dto.getDateTirage())) throw new RuntimeException("Existe déjà");
-        Tirage t = new Tirage(); t.setDateTirage(dto.getDateTirage());
+        LotoTirage t = new LotoTirage(); t.setDateTirage(dto.getDateTirage());
         t.setBoule1(dto.getBoule1()); t.setBoule2(dto.getBoule2()); t.setBoule3(dto.getBoule3()); t.setBoule4(dto.getBoule4()); t.setBoule5(dto.getBoule5()); t.setNumeroChance(dto.getNumeroChance());
         repository.save(t);
 
@@ -725,13 +724,13 @@ public class LotoService {
 
     @Data public static class StatPoint { private int numero; private int frequence; private int ecart; private boolean isChance; }
     public StatsReponse getStats(String jourFiltre) {
-        List<Tirage> all = repository.findAll();
+        List<LotoTirage> all = repository.findAll();
         if (jourFiltre != null && !jourFiltre.isEmpty()) {
             try { all = all.stream().filter(t -> t.getDateTirage().getDayOfWeek() == DayOfWeek.valueOf(jourFiltre.toUpperCase())).toList(); } catch (Exception e) {}
         }
         if (all.isEmpty()) return new StatsReponse(new ArrayList<>(), "-", "-", 0);
-        LocalDate minDate = all.stream().map(Tirage::getDateTirage).min(LocalDate::compareTo).orElse(LocalDate.now());
-        LocalDate maxDate = all.stream().map(Tirage::getDateTirage).max(LocalDate::compareTo).orElse(LocalDate.now());
+        LocalDate minDate = all.stream().map(LotoTirage::getDateTirage).min(LocalDate::compareTo).orElse(LocalDate.now());
+        LocalDate maxDate = all.stream().map(LotoTirage::getDateTirage).max(LocalDate::compareTo).orElse(LocalDate.now());
         DateTimeFormatter fmt = DateTimeFormatter.ofPattern("dd/MM/yyyy");
 
         Map<Integer, Integer> freqMap = new HashMap<>();
@@ -739,7 +738,7 @@ public class LotoService {
         Map<Integer, Integer> freqChance = new HashMap<>();
         Map<Integer, LocalDate> lastSeenChance = new HashMap<>();
 
-        for (Tirage t : all) {
+        for (LotoTirage t : all) {
             for (Integer b : t.getBoules()) {
                 freqMap.merge(b, 1, Integer::sum);
                 if (!lastSeenMap.containsKey(b) || t.getDateTirage().isAfter(lastSeenMap.get(b))) lastSeenMap.put(b, t.getDateTirage());
