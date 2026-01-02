@@ -456,7 +456,7 @@ public class LotoService {
      * Méthode qui calcule les gains pour TOUS les joueurs sur ce tirage
      * et envoie un mail aux gagnants.
      */
-    private void verifierGainsEtNotifier(Tirage tirage) {
+    public void verifierGainsEtNotifier(Tirage tirage) {
         log.info("📢 Vérification des gains pour le tirage du {}", tirage.getDateTirage());
 
         // 1. Trouver toutes les grilles jouées pour cette date
@@ -757,5 +757,71 @@ public class LotoService {
             LocalDate last = lastSeenChance.get(i); s.setEcart(last == null ? 999 : (int) ChronoUnit.DAYS.between(last, maxDate)); stats.add(s);
         }
         return new StatsReponse(stats, minDate.format(fmt), maxDate.format(fmt), all.size());
+    }
+
+    public UserStatsDto calculerStatistiquesJoueur(User user) {
+        List<UserBet> bets = betRepository.findByUser(user);
+        UserStatsDto stats = new UserStatsDto();
+
+        stats.setTotalGrilles(bets.size());
+        stats.setDepenseTotale(bets.stream().mapToDouble(UserBet::getMise).sum());
+        stats.setGainTotal(bets.stream().filter(b -> b.getGain() != null).mapToDouble(UserBet::getGain).sum());
+
+        if (bets.isEmpty()) return stats;
+
+        // 1. Fréquence des Numéros (1-49) et Chance (1-10)
+        Map<Integer, Integer> freqBoules = new HashMap<>();
+        Map<Integer, Integer> freqChance = new HashMap<>();
+        long totalSomme = 0;
+        int countPairs = 0;
+        int totalNumerosJoues = bets.size() * 5;
+
+        for (UserBet bet : bets) {
+            List<Integer> gr = List.of(bet.getB1(), bet.getB2(), bet.getB3(), bet.getB4(), bet.getB5());
+
+            // Somme
+            totalSomme += gr.stream().mapToInt(Integer::intValue).sum();
+
+            // Parité & Fréquence
+            for (Integer n : gr) {
+                freqBoules.merge(n, 1, Integer::sum);
+                if (n % 2 == 0) countPairs++;
+            }
+
+            // Chance
+            freqChance.merge(bet.getChance(), 1, Integer::sum);
+        }
+
+        // 2. Calculs Moyennes
+        stats.setMoyenneSomme(Math.round((double) totalSomme / bets.size()));
+        stats.setTotalPairsJoues(countPairs);
+        stats.setTotalImpairsJoues(totalNumerosJoues - countPairs);
+
+        // Parité formatée
+        double ratioPair = (double) countPairs / totalNumerosJoues; // ex: 0.6
+        int p = (int) Math.round(ratioPair * 5); // ex: 3
+        stats.setPariteMoyenne(p + " Pairs / " + (5 - p) + " Impairs");
+
+        // 3. Top Listes (Stream API pour trier par fréquence)
+        stats.setTopBoules(freqBoules.entrySet().stream()
+                .sorted((e1, e2) -> e2.getValue().compareTo(e1.getValue())) // Tri décroissant
+                .limit(5)
+                .map(e -> new UserStatsDto.StatNumero(e.getKey(), e.getValue()))
+                .collect(Collectors.toList()));
+
+        stats.setTopChance(freqChance.entrySet().stream()
+                .sorted((e1, e2) -> e2.getValue().compareTo(e1.getValue()))
+                .limit(3)
+                .map(e -> new UserStatsDto.StatNumero(e.getKey(), e.getValue()))
+                .collect(Collectors.toList()));
+
+        // 4. Numéros jamais joués (Optionnel mais sympa)
+        List<Integer> jamais = new ArrayList<>();
+        for(int i=1; i<=49; i++) {
+            if(!freqBoules.containsKey(i)) jamais.add(i);
+        }
+        stats.setNumJamaisJoues(jamais);
+
+        return stats;
     }
 }

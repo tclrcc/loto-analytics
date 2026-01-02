@@ -1,15 +1,19 @@
 package com.analyseloto.loto.controller;
 
 import com.analyseloto.loto.dto.*;
+import com.analyseloto.loto.entity.User;
+import com.analyseloto.loto.repository.UserRepository;
 import com.analyseloto.loto.service.AstroService;
 import com.analyseloto.loto.service.LotoService;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
+import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.security.Principal;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
@@ -21,6 +25,7 @@ import java.util.Map;
 public class LotoController {
     private final LotoService service;
     private final AstroService astroService;
+    private final UserRepository userRepository;
 
     @PostMapping("/import")
     public ResponseEntity<String> uploadFile(@RequestParam("file") MultipartFile file) {

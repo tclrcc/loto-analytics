@@ -88,9 +88,7 @@
                             </a>
                         </li>
                         <li>
-                            <a class="dropdown-item" href="#statsAccordion" onclick="document.getElementById('headingStats').scrollIntoView({behavior: 'smooth'})">
-                                <i class="bi bi-bar-chart-fill me-2 text-info"></i>Mes Stats
-                            </a>
+                            <a class="dropdown-item" th:href="@{/profile/stats}"> <i class="bi bi-bar-chart-fill me-2 text-info"></i>Mes Stats</a>
                         </li>
                         <li><hr class="dropdown-divider"></li>
                         <li>
@@ -732,5 +730,33 @@
 <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
 <script th:src="@{/js/app.js}"></script>
 <script>function setBetId(id){document.getElementById('gainBetId').value=id;}</script>
+
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/driver.js@1.0.1/dist/driver.css"/>
+<script src="https://cdn.jsdelivr.net/npm/driver.js@1.0.1/dist/driver.js.iife.js"></script>
+
+<script>
+    document.addEventListener("DOMContentLoaded", function() {
+        // On vérifie si l'utilisateur a déjà vu le tour (via localStorage)
+        if (!localStorage.getItem('lotoTourSeen')) {
+
+            const driver = window.driver.js.driver;
+            const driverObj = driver({
+                showProgress: true,
+                steps: [
+                    { element: '.navbar-brand', popover: { title: 'Bienvenue !', description: 'Découvrez Loto Master AI en 30 secondes.' } },
+                    { element: '#formSimulateur', popover: { title: 'Le Cerveau IA', description: 'C\'est ici que tout commence. Entrez une date, choisissez une quantité et laissez l\'IA calculer.' } },
+                    { element: '#btnMagic', popover: { title: 'Génération Magique', description: 'Cliquez ici pour générer des grilles optimisées par nos algorithmes.' } },
+                    { element: '#statsAccordion', popover: { title: 'Analysez tout', description: 'Consultez les statistiques détaillées, les heatmaps et les graphiques ici.' } },
+                    { element: '#betsTable', popover: { title: 'Vos Grilles', description: 'Retrouvez ici vos paris enregistrés et vérifiez vos gains.' } }
+                ],
+                onDestroyed: () => {
+                    localStorage.setItem('lotoTourSeen', 'true'); // On ne le montre plus
+                }
+            });
+
+            driverObj.drive();
+        }
+    });
+</script>
 </body>
 </html>

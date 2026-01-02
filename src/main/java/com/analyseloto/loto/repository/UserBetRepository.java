@@ -12,4 +12,5 @@ public interface UserBetRepository extends JpaRepository<UserBet, Long> {
     List<UserBet> findByUserOrderByDateJeuDesc(User user);
     List<UserBet> findByUserId(Long userId);
     List<UserBet> findByDateJeu(LocalDate dateJeu);
+    List<UserBet> findByUser(User user);
 }

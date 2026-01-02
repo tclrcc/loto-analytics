@@ -14,7 +14,24 @@ document.addEventListener('DOMContentLoaded', () => {
             return new bootstrap.Popover(popoverTriggerEl)
         });
     chargerStats();
+    chargerFavoris();
     checkWinEffect();
+
+    document.getElementById('btnSaveFav').addEventListener('click', () => {
+        const inputs = document.querySelectorAll('.sim-input');
+        const nums = Array.from(inputs).map(i => i.value).filter(v => v);
+
+        if(nums.length < 5) return alert("Saisissez 5 numéros !");
+
+        let favoris = JSON.parse(localStorage.getItem('mesFavorisLoto') || "[]");
+        favoris.push(nums);
+        localStorage.setItem('mesFavorisLoto', JSON.stringify(favoris));
+
+        chargerFavoris();
+
+        // Petit effet visuel
+        confetti({ particleCount: 30, spread: 50, origin: { y: 0.6 } });
+    });
 
     // --- Gestionnaires d'événements ---
     function setupEventListeners() {
@@ -204,6 +221,31 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // --- FONCTIONNALITÉS ---
+
+    function chargerFavoris() {
+        const container = document.getElementById('favList');
+        container.innerHTML = '';
+        let favoris = JSON.parse(localStorage.getItem('mesFavorisLoto') || "[]");
+
+        favoris.forEach((nums, index) => {
+            const badge = document.createElement('span');
+            badge.className = "badge bg-white text-dark border cursor-pointer p-2 shadow-sm";
+            badge.innerHTML = `<i class="bi bi-star-fill text-warning me-1"></i> ${nums.join('-')}`;
+            badge.onclick = () => {
+                const inputs = document.querySelectorAll('.sim-input');
+                nums.forEach((n, i) => { if(inputs[i]) inputs[i].value = n; });
+            };
+
+            // Double clic pour supprimer
+            badge.ondblclick = () => {
+                favoris.splice(index, 1);
+                localStorage.setItem('mesFavorisLoto', JSON.stringify(favoris));
+                chargerFavoris();
+            };
+
+            container.appendChild(badge);
+        });
+    }
 
     function afficherResultatAstro(data) {
         const resDiv = document.getElementById('astroResult');
