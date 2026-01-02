@@ -1,58 +1,170 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="fr" xmlns:th="http://www.thymeleaf.org">
 <head>
     <meta charset="UTF-8">
-    <title>Connexion - Loto Master</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Connexion - Loto Master AI</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
+
+    <style>
+        body {
+            font-family: 'Poppins', sans-serif;
+            background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 50%, #312e81 100%);
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            position: relative;
+        }
+
+        /* Cercles d'ambiance en arrière-plan */
+        .circle {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(80px);
+            z-index: 0;
+            animation: float 10s infinite ease-in-out;
+        }
+        .c1 { width: 300px; height: 300px; background: #4F46E5; top: -50px; left: -50px; opacity: 0.4; }
+        .c2 { width: 400px; height: 400px; background: #7C3AED; bottom: -100px; right: -100px; opacity: 0.3; animation-delay: 2s; }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(20px); }
+        }
+
+        .login-card {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 20px;
+            width: 100%;
+            max-width: 420px;
+            z-index: 10;
+            padding: 2.5rem;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+            animation: slideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(30px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .brand-icon {
+            width: 60px; height: 60px;
+            background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%);
+            color: white;
+            border-radius: 16px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.8rem;
+            margin: 0 auto 1.5rem auto;
+            box-shadow: 0 10px 15px -3px rgba(79, 70, 229, 0.3);
+        }
+
+        .form-control {
+            padding: 0.8rem 1rem 0.8rem 2.5rem; /* Espace pour l'icône */
+            border-radius: 10px;
+            border: 1px solid #e2e8f0;
+            background-color: #f8fafc;
+            font-size: 0.95rem;
+        }
+        .form-control:focus {
+            background-color: #fff;
+            box-shadow: 0 0 0 4px rgba(79, 70, 229, 0.1);
+            border-color: #4F46E5;
+        }
+
+        /* Icônes dans les inputs */
+        .input-icon-wrapper { position: relative; }
+        .input-icon {
+            position: absolute;
+            left: 15px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #94a3b8;
+            transition: color 0.2s;
+        }
+        .form-control:focus + .input-icon, .form-control:focus ~ .input-icon {
+            color: #4F46E5;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%);
+            border: none;
+            padding: 0.8rem;
+            border-radius: 10px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            transition: all 0.3s;
+        }
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px -5px rgba(79, 70, 229, 0.4);
+            background: linear-gradient(135deg, #4338ca 0%, #6d28d9 100%);
+        }
+
+        .link-custom {
+            color: #64748b;
+            text-decoration: none;
+            font-size: 0.9rem;
+            transition: color 0.2s;
+        }
+        .link-custom:hover { color: #4F46E5; }
+    </style>
 </head>
-<body class="bg-light d-flex align-items-center justify-content-center" style="height: 100vh;">
-<div class="card shadow p-4" style="width: 400px;">
-    <h3 class="text-center text-primary mb-4">🔐 Connexion</h3>
+<body>
 
-    <div th:if="${param.logout}" class="alert alert-info">Vous avez été déconnecté.</div>
-    <div th:if="${param.success}" class="alert alert-success">Compte créé ! Connectez-vous.</div>
+<div class="circle c1"></div>
+<div class="circle c2"></div>
 
-    <div th:if="${param.mailSent}" class="alert alert-info">
-        📩 Un email de confirmation a été envoyé.<br>Veuillez cliquer sur le lien pour activer votre compte.
+<div class="login-card">
+    <div class="text-center">
+        <div class="brand-icon">
+            <i class="bi bi-dice-5-fill"></i>
+        </div>
+        <h4 class="fw-bold text-dark mb-1">Bienvenue</h4>
+        <p class="text-muted small mb-4">Connectez-vous à Loto Master AI</p>
     </div>
 
-    <div th:if="${param.verified}" class="alert alert-success">
-        ✅ Compte activé avec succès ! Vous pouvez vous connecter.
-    </div>
-
-    <div th:if="${param.expired}" class="alert alert-warning">
-        ⚠️ Ce lien a expiré. Veuillez vous réinscrire.
-    </div>
-
-    <div th:if="${param.tokenError}" class="alert alert-danger">
-        ❌ Lien de confirmation invalide.
-    </div>
-
-    <div th:if="${param.alreadyConfirmed}" class="alert alert-info">
-        ℹ️ Ce compte est déjà activé. Connectez-vous.
-    </div>
-
-    <div th:if="${param.error}" class="alert alert-danger">
-        Email ou mot de passe incorrect (ou compte non activé).
+    <div class="mb-4">
+        <div th:if="${param.logout}" class="alert alert-info py-2 small border-0 bg-info bg-opacity-10 text-info"><i class="bi bi-info-circle me-2"></i>Déconnexion réussie.</div>
+        <div th:if="${param.error}" class="alert alert-danger py-2 small border-0 bg-danger bg-opacity-10 text-danger"><i class="bi bi-exclamation-circle me-2"></i>Identifiants incorrects.</div>
+        <div th:if="${param.mailSent}" class="alert alert-success py-2 small border-0 bg-success bg-opacity-10 text-success"><i class="bi bi-envelope-check me-2"></i>Lien de confirmation envoyé !</div>
+        <div th:if="${param.verified}" class="alert alert-success py-2 small border-0 bg-success bg-opacity-10 text-success"><i class="bi bi-check-circle me-2"></i>Compte activé ! Connectez-vous.</div>
+        <div th:if="${param.tokenError}" class="alert alert-danger py-2 small border-0 bg-danger bg-opacity-10 text-danger"><i class="bi bi-x-circle me-2"></i>Lien invalide ou expiré.</div>
+        <div th:if="${param.error != null and param.error[0] == 'locked'}" class="alert alert-warning py-2 small border-0 bg-warning bg-opacity-10 text-warning fw-bold"><i class="bi bi-lock-fill me-2"></i>Compte temporairement verrouillé.</div>
     </div>
 
     <form action="/login" method="post">
-        <div class="mb-3">
-            <label>Email</label>
-            <input type="email" name="username" class="form-control" required>
+        <div class="mb-3 input-icon-wrapper">
+            <i class="bi bi-envelope input-icon"></i>
+            <input type="email" name="username" class="form-control ps-5" placeholder="Votre email" required autofocus>
         </div>
-        <div class="mb-3">
-            <label>Mot de passe</label>
-            <input type="password" name="password" class="form-control" required>
+
+        <div class="mb-3 input-icon-wrapper">
+            <i class="bi bi-key input-icon"></i>
+            <input type="password" name="password" class="form-control ps-5" placeholder="Votre mot de passe" required>
         </div>
-        <div class="mb-3 text-end">
-            <a href="/forgot-password" class="small text-decoration-none">Mot de passe oublié ?</a>
+
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="remember-me" name="remember-me">
+                <label class="form-check-label small text-muted" for="remember-me">Se souvenir</label>
+            </div>
+            <a href="/forgot-password" class="link-custom small">Mot de passe oublié ?</a>
         </div>
+
         <button type="submit" class="btn btn-primary w-100">Se connecter</button>
     </form>
-    <div class="text-center mt-3">
-        <a href="/register">Pas encore de compte ? S'inscrire</a>
+
+    <div class="text-center mt-4 pt-3 border-top">
+        <p class="small text-muted mb-0">Pas encore de compte ? <a href="/register" class="text-primary fw-bold text-decoration-none">S'inscrire</a></p>
     </div>
 </div>
+
 </body>
 </html>

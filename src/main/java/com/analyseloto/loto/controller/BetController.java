@@ -4,14 +4,22 @@ import com.analyseloto.loto.entity.User;
 import com.analyseloto.loto.entity.UserBet;
 import com.analyseloto.loto.repository.UserBetRepository;
 import com.analyseloto.loto.repository.UserRepository;
+import com.analyseloto.loto.service.PdfService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 
+import java.io.IOException;
 import java.security.Principal;
 import java.time.LocalDate;
+import java.util.List;
 
 @Controller
 @RequestMapping("/bets")
@@ -20,6 +28,8 @@ public class BetController {
     // Repositories
     private final UserBetRepository betRepository;
     private final UserRepository userRepository;
+    // Services
+    private final PdfService pdfService;
 
     /**
      * Ajouter une grille jouée par l'utilisateur
@@ -102,5 +112,25 @@ public class BetController {
         }
 
         return "redirect:/?betDeleted";
+    }
+
+    @GetMapping("/export/pdf")
+    public ResponseEntity<byte[]> exportBetsToPdf(Principal principal) throws IOException {
+        // 1. Récupérer l'utilisateur
+        User user = userRepository.findByEmail(principal.getName()).orElseThrow();
+
+        // 2. Récupérer ses grilles (Idéalement seulement celles à venir ou récentes)
+        List<UserBet> bets = betRepository.findByUserOrderByDateJeuDesc(user);
+
+        // 3. Générer le PDF
+        byte[] pdfContent = pdfService.generateBetPdf(bets, user.getFirstName());
+
+        // 4. Renvoyer le fichier
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_PDF);
+        String filename = "mes_grilles_loto.pdf";
+        headers.setContentDispositionFormData("attachment", filename);
+
+        return new ResponseEntity<>(pdfContent, headers, HttpStatus.OK);
     }
 }

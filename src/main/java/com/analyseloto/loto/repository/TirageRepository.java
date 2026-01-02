@@ -8,6 +8,17 @@ import java.util.List;
 import java.util.Set;
 
 public interface TirageRepository extends JpaRepository<Tirage, Long> {
+    /**
+     * Méthode recherche si le tirage existe déjà pour une date donnée
+     * @param date date tirage
+     * @return
+     */
     boolean existsByDateTirage(LocalDate date);
+
+    /**
+     * Méthode recherche tirages selon un Set de dates
+     * @param datesJouees set dates
+     * @return
+     */
     List<Tirage> findByDateTirageIn(Set<LocalDate> datesJouees);
 }

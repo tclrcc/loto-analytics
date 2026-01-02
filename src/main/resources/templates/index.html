@@ -214,6 +214,9 @@
                     <span th:text="${bets.size()}"></span> grilles jouées au total
                 </small>
             </div>
+            <a th:href="@{/bets/export/pdf}" class="btn btn-sm btn-outline-danger shadow-sm" target="_blank" title="Imprimer mes grilles">
+                <i class="bi bi-file-earmark-pdf-fill me-1"></i>PDF
+            </a>
             <button class="btn btn-sm btn-dark shadow-sm" data-bs-toggle="modal" data-bs-target="#modalAddBet">
                 <i class="bi bi-plus-lg me-1"></i>Ajouter
             </button>
