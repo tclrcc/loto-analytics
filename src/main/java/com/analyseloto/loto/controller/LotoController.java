@@ -119,7 +119,7 @@ public class LotoController {
         return ResponseEntity.ok(service.genererMultiplesPronostics(date, count));
     }
 
-    @PostMapping("/add")
+    @PostMapping("/add-result")
     public ResponseEntity<String> ajouterManuel(@RequestBody TirageManuelDto dto) {
         try {
             service.ajouterTirageManuel(dto);

@@ -503,7 +503,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const date = document.getElementById('mDate').value;
         if(!date || isNaN(chance)) return alert("Champs invalides");
         try {
-            await fetch('/api/loto/add', {
+            await fetch('/api/loto/add-result', {
                 method:'POST', headers:{'Content-Type':'application/json'},
                 body:JSON.stringify({dateTirage:date, boule1:boules[0], boule2:boules[1], boule3:boules[2], boule4:boules[3], boule5:boules[4], numeroChance:chance})
             });

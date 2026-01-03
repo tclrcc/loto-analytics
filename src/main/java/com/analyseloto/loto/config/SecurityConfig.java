@@ -31,7 +31,7 @@ public class SecurityConfig {
                         // Pages publiques
                         .requestMatchers("/login", "/register", "/confirm", "/forgot-password", "/reset-password", "/css/**", "/js/**", "/images/**").permitAll()
                         // Pages admin
-                        .requestMatchers("/admin/**", "/api/loto/import", "/api/loto/add").hasRole("ADMIN")
+                        .requestMatchers("/admin/**", "/api/loto/import", "/api/loto/add-result").hasRole("ADMIN")
                         .anyRequest().authenticated()
                 )
                 .formLogin(form -> form
