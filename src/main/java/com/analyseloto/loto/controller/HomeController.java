@@ -39,17 +39,10 @@ public class HomeController {
 
         // Gestion du bilan
         List<UserBet> bets = betRepository.findByUserOrderByDateJeuDesc(user);
-        // Tri de la liste selon gains
-        List<UserBet> sortedBets = bets.stream()
-                        .sorted(
-                            Comparator.comparing(UserBet::getDateJeu).reversed()
-                                    .thenComparing(UserBet::getGain, Comparator.nullsFirst(Comparator.reverseOrder()))
-                        )
-                        .toList();
-        model.addAttribute("bets", sortedBets);
+        model.addAttribute("bets", bets);
 
         // On récupère toutes les dates uniques jouées par l'utilisateur
-        Set<LocalDate> datesJouees = sortedBets.stream()
+        Set<LocalDate> datesJouees = bets.stream()
                 .map(UserBet::getDateJeu)
                 .collect(Collectors.toSet());
 
@@ -62,8 +55,8 @@ public class HomeController {
         model.addAttribute("draws", resultsMap);
 
         // Calculs Financiers
-        double totalDepense = sortedBets.stream().mapToDouble(UserBet::getMise).sum();
-        double totalGains = sortedBets.stream()
+        double totalDepense = bets.stream().mapToDouble(UserBet::getMise).sum();
+        double totalGains = bets.stream()
                 .filter(b -> b.getGain() != null)
                 .mapToDouble(UserBet::getGain)
                 .sum();

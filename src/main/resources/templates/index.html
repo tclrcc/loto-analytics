@@ -257,7 +257,7 @@
                     <tr th:each="bet : ${bets}"
                         th:classappend="${bet.dateJeu.isEqual(#temporals.createToday())} ? 'table-warning border-start border-4 border-warning' : ''">
 
-                        <td class="ps-4">
+                        <td class="ps-4" th:data-order="${bet.dateJeu}">
                             <div class="d-flex flex-column">
                                 <span class="fw-bold text-dark" th:text="${#temporals.format(bet.dateJeu, 'dd MMM yyyy')}">Date</span>
                                 <small class="text-muted text-capitalize" th:text="${#temporals.dayOfWeekName(bet.dateJeu)}">Jour</small>
@@ -764,6 +764,124 @@
             });
 
             driverObj.drive();
+        }
+    });
+</script>
+<script>
+    document.addEventListener("DOMContentLoaded", function() {
+
+        // --- FONCTION : Trouver la prochaine date de Loto ---
+        function getNextLotoDate() {
+            let date = new Date();
+            // On boucle jusqu'à trouver un jour valide (1=Lun, 3=Mer, 6=Sam)
+            while (true) {
+                let day = date.getDay();
+                if (day === 1 || day === 3 || day === 6) {
+                    return date;
+                }
+                // Sinon on ajoute 1 jour
+                date.setDate(date.getDate() + 1);
+            }
+        }
+
+        // --- FONCTION : Forcer la date si vide ---
+        function ensureDateIsSet() {
+            const input = document.getElementById('simDate');
+            // Si le champ est vide
+            if (!input.value) {
+                const nextDate = getNextLotoDate();
+                // On met à jour via l'instance Flatpickr pour garder le formatage
+                if (input._flatpickr) {
+                    input._flatpickr.setDate(nextDate, true); // true = déclenche les événements de changement
+                }
+            }
+        }
+
+        // --- NOUVELLE FONCTION : Transférer un prono vers la modale d'ajout ---
+        window.preparerGrille = function(b1, b2, b3, b4, b5, chance) {
+
+            // 1. Récupérer la date sélectionnée dans le simulateur
+            const simDateValue = document.getElementById('simDate').value;
+
+            // 2. Remplir la date dans la modale (compatible Flatpickr)
+            const modalDateInput = document.querySelector("#modalAddBet input[name='dateJeu']");
+            if (modalDateInput && modalDateInput._flatpickr) {
+                modalDateInput._flatpickr.setDate(simDateValue, true);
+            } else if (modalDateInput) {
+                modalDateInput.value = simDateValue;
+            }
+
+            // 3. Remplir les boules
+            // On cible le formulaire dans la modale
+            const form = document.querySelector("#modalAddBet form");
+            if(form) {
+                form.querySelector("input[name='b1']").value = b1;
+                form.querySelector("input[name='b2']").value = b2;
+                form.querySelector("input[name='b3']").value = b3;
+                form.querySelector("input[name='b4']").value = b4;
+                form.querySelector("input[name='b5']").value = b5;
+                form.querySelector("input[name='chance']").value = chance;
+            }
+
+            // 4. Ouvrir la modale Bootstrap
+            const modalEl = document.getElementById('modalAddBet');
+            // 'getOrCreateInstance' est plus sûr pour éviter les conflits
+            const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+            modal.show();
+        };
+
+        // --- Configuration Flatpickr ---
+        const lotoConfig = {
+            "locale": "fr",
+            "dateFormat": "Y-m-d",
+            "altInput": true,
+            "altFormat": "l j F Y",
+            "allowInput": true,
+            "defaultDate": getNextLotoDate(), // <--- AJOUT : Pré-remplit au chargement !
+            "disable": [
+                function(date) {
+                    return (date.getDay() !== 1 && date.getDay() !== 3 && date.getDay() !== 6);
+                }
+            ],
+            "onDayCreate": function(dObj, dStr, fp, dayElem) {
+                if (dayElem.dateObj.getDay() === 1 || dayElem.dateObj.getDay() === 3 || dayElem.dateObj.getDay() === 6) {
+                    dayElem.innerHTML += "<span style='display:block; width:4px; height:4px; background:#4F46E5; border-radius:50%; margin:0 auto;'></span>";
+                }
+            }
+        };
+
+        // 1. Initialisation Simulateur
+        flatpickr("#simDate", lotoConfig);
+
+        // 2. Initialisation Modal Ajout
+        flatpickr("input[name='dateJeu']", lotoConfig);
+
+        // 3. Initialisation Astro
+        flatpickr("#astroDate", {
+            "locale": "fr",
+            "dateFormat": "Y-m-d",
+            "altInput": true,
+            "altFormat": "j F Y"
+        });
+
+        // --- LISTENERS : On vérifie la date au clic ---
+
+        // Bouton Générer (Magic)
+        const btnMagic = document.getElementById('btnMagic');
+        if (btnMagic) {
+            // On utilise 'mousedown' pour être sûr que la date se met AVANT que le click ne lance le calcul
+            btnMagic.addEventListener('mousedown', ensureDateIsSet);
+        }
+
+        // Bouton Analyser (Submit du formulaire)
+        const formSimulateur = document.getElementById('formSimulateur');
+        if (formSimulateur) {
+            formSimulateur.addEventListener('submit', function() {
+                ensureDateIsSet();
+            });
+            // Aussi sur le bouton loupe spécifiquement
+            const btnSearch = formSimulateur.querySelector('button[type="submit"]');
+            if(btnSearch) btnSearch.addEventListener('mousedown', ensureDateIsSet);
         }
     });
 </script>

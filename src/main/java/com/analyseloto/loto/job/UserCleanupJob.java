@@ -41,6 +41,8 @@ public class UserCleanupJob {
 
         if (tokensExpires.isEmpty()) {
             log.info("Aucun utilisateur à supprimer aujourd'hui");
+            // Enregistrement log
+            jobMonitorService.endJob(jobLog, "SUCCESS", "Suppression comptes inactifs terminé.");
             return;
         }
 
@@ -72,7 +74,7 @@ public class UserCleanupJob {
         log.info("🧹 Lancement du nettoyage de la base de données...");
 
         // Enregistrement début job
-        JobLog jobLog = jobMonitorService.startJob("SUPPRIMER_COMPTES_INACTIVES");
+        JobLog jobLog = jobMonitorService.startJob("NETTOYAGE_BDD");
 
         log.info("Début du nettoyage des tokens de renouvellement de mot de passe expirés.");
         // Supprimer les token de renouvellement de mot de passe expirés
@@ -80,7 +82,7 @@ public class UserCleanupJob {
         log.info("Fin du nettoyage des tokens de renouvellement de mot de passe expirés.");
 
         // Enregistrement log
-        jobMonitorService.endJob(jobLog, "SUCCESS", "Suppression comptes inactifs terminé.");
+        jobMonitorService.endJob(jobLog, "SUCCESS", "Nettoyage BDD terminé.");
 
         log.info("🧹 Base de données nettoyée.");
     }
