@@ -1,0 +1,149 @@
+package com.analyseloto.loto.service;
+
+import com.analyseloto.loto.dto.TirageManuelDto;
+import com.analyseloto.loto.repository.LotoTirageRepository;
+import com.opencsv.CSVParserBuilder;
+import com.opencsv.CSVReader;
+import com.opencsv.CSVReaderBuilder;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.ResponseEntity;
+import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestTemplate;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+
+import java.io.BufferedReader;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
+
+@Service
+@Slf4j
+@RequiredArgsConstructor
+public class FdjService {
+
+    private final LotoTirageRepository tirageRepository;
+    private final LotoService lotoService;
+
+    // API officielle utilisée par le front FDJ
+    private static final String FDJ_API_URL = "https://www.fdj.fr/api/service-draws/v1/games/loto/draws?include=results,addons&range=0-1";
+
+    /**
+     * Méthode récupérant automatiquement le dernier tirage du Loto via API
+     * @return
+     */
+    public boolean recupererDernierTirage() {
+        log.info("🌍 Appel API FDJ...");
+        try {
+            RestTemplate restTemplate = new RestTemplate();
+            HttpHeaders headers = new HttpHeaders();
+            // User-Agent pour passer pour un navigateur
+            headers.set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36");
+
+            ResponseEntity<String> response = restTemplate.exchange(
+                    FDJ_API_URL, HttpMethod.GET, new HttpEntity<>(headers), String.class
+            );
+
+            if (!response.getStatusCode().is2xxSuccessful()) return false;
+
+            ObjectMapper mapper = new ObjectMapper();
+            JsonNode root = mapper.readTree(response.getBody());
+
+            // Le JSON est un tableau, on prend le premier élément (le plus récent)
+            if (root.isArray() && !root.isEmpty()) {
+                return traiterJsonTirage(root.get(0));
+            }
+
+        } catch (Exception e) {
+            log.error("❌ Erreur API FDJ", e);
+        }
+        return false;
+    }
+
+    /**
+     * Méthode pour traiter le fichier JSON contenant les 2 derniers résultats du Loto
+     * @param drawNode
+     * @return
+     */
+    private boolean traiterJsonTirage(JsonNode drawNode) {
+        try {
+            // 1. Récupération de la date (ex: ""2026-01-03T20:55:00+01:00"")
+            String dateStr = drawNode.get("drawn_at").asText().substring(0, 10);
+            LocalDate dateTirage = LocalDate.parse(dateStr, DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+
+            // Vérification que le tirage n'existe pas dans la base
+            if (tirageRepository.existsByDateTirage(dateTirage)) {
+                log.info("📅 Tirage du {} déjà en base.", dateTirage);
+                return false;
+            }
+
+            // 2. Extraction des boules et de la chance
+            List<Integer> boules = new ArrayList<>();
+            int numeroChance = -1;
+
+            JsonNode results = drawNode.get("results");
+            if (results.isArray()) {
+                for (JsonNode result : results) {
+                    // draw_index = 1 => tirage principal
+                    // draw_index = 2 => second tirage
+                    int drawIndex = result.get("draw_index").asInt();
+                    // type = "number" => numéro tiré
+                    // type = "special" => numéro chance
+                    String type = result.get("type").asText();
+                    String valueStr = result.get("value").asText();
+
+                    // On ne s'intéresse qu'au tirage principal (LOTO)
+                    if (drawIndex != 1 || (!type.equals("number") && !type.equals("special"))) continue;
+
+                    int value = Integer.parseInt(valueStr);
+
+                    if ("number".equals(type)) {
+                        boules.add(value); // Cas Boule Classique
+                    } else {
+                        numeroChance = value; // Cas Numéro Chance
+                    }
+                }
+            }
+
+            // Validation cohérence des boules
+            if (boules.size() < 5 || numeroChance == -1) {
+                log.error("⚠️ Données incomplètes pour le tirage du {}", dateTirage);
+                return false;
+            }
+
+            // On trie les boules pour être propre (9, 29, 30...)
+            Collections.sort(boules);
+
+            // 4. Création DTO
+            TirageManuelDto dto = new TirageManuelDto();
+            dto.setDateTirage(dateTirage);
+            dto.setBoule1(boules.get(0));
+            dto.setBoule2(boules.get(1));
+            dto.setBoule3(boules.get(2));
+            dto.setBoule4(boules.get(3));
+            dto.setBoule5(boules.get(4));
+            dto.setNumeroChance(numeroChance);
+
+            // 5. Sauvegarde du tirage
+            lotoService.ajouterTirageManuel(dto);
+            log.info("✨ SUCCESS ! Tirage importé : {}", dto);
+            return true;
+
+        } catch (Exception e) {
+            log.error("❌ Erreur parsing JSON", e);
+            return false;
+        }
+    }
+}

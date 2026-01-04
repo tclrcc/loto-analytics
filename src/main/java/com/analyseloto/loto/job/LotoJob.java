@@ -7,10 +7,7 @@ import com.analyseloto.loto.entity.User;
 import com.analyseloto.loto.entity.UserBet;
 import com.analyseloto.loto.repository.UserBetRepository;
 import com.analyseloto.loto.repository.UserRepository;
-import com.analyseloto.loto.service.AstroService;
-import com.analyseloto.loto.service.EmailService;
-import com.analyseloto.loto.service.JobMonitorService;
-import com.analyseloto.loto.service.LotoService;
+import com.analyseloto.loto.service.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -30,9 +27,25 @@ public class LotoJob {
     private final LotoService lotoService;
     private final EmailService emailService;
     private final JobMonitorService jobMonitorService;
+    private final FdjService fdjService;
     // Repositories
     private final UserRepository userRepository;
     private final UserBetRepository betRepository;
+
+    /**
+     * Récupération automatique du dernier tirage tous les soirs de tirage à 21h45
+     */
+    @Scheduled(cron = "0 45 21 * * MON,WED,SAT", zone = "Europe/Paris")
+    public void recupererResultatsFdj() {
+        log.info("🤖 Job Auto : Vérification FDJ...");
+
+        // Appel de la méthode de récupération
+        boolean newTirage = fdjService.recupererDernierTirage();
+
+        if (newTirage) {
+            log.info("✅ Base mise à jour avec le dernier tirage !");
+        }
+    }
 
     /**
      * Envoi mail pronostics à chaque utilisateur, à 8h les jours de tirage

@@ -117,6 +117,43 @@
 
 <div class="container pb-5">
 
+    <div th:if="${lastDraw != null}" class="card border-0 shadow mb-4 animate-up overflow-hidden text-white"
+         style="background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%);">
+
+        <div class="position-absolute end-0 top-50 translate-middle-y opacity-10 pe-3 d-none d-md-block">
+            <i class="bi bi-trophy-fill" style="font-size: 8rem;"></i>
+        </div>
+
+        <div class="card-body p-4 position-relative">
+            <div class="row align-items-center">
+                <div class="col-lg-4 text-center text-lg-start mb-3 mb-lg-0">
+                    <div class="badge bg-white bg-opacity-25 mb-2 px-3 py-1 rounded-pill text-uppercase"
+                         style="font-size: 0.7rem; letter-spacing: 1px;">
+                        <i class="bi bi-megaphone-fill me-1"></i> Résultat Officiel
+                    </div>
+                    <h2 class="fw-bold mb-0 text-white">
+                        <span th:text="${#temporals.format(lastDraw.dateTirage, 'EEEE d MMMM')}">Lundi 1 Janvier</span>
+                    </h2>
+                    <small class="text-white-50">Tirage FDJ</small>
+                </div>
+
+                <div class="col-lg-8">
+                    <div class="d-flex justify-content-center align-items-center gap-2 gap-md-3 flex-wrap">
+                        <span class="ball-display shadow" th:text="${lastDraw.boule1}">1</span>
+                        <span class="ball-display shadow" th:text="${lastDraw.boule2}">2</span>
+                        <span class="ball-display shadow" th:text="${lastDraw.boule3}">3</span>
+                        <span class="ball-display shadow" th:text="${lastDraw.boule4}">4</span>
+                        <span class="ball-display shadow" th:text="${lastDraw.boule5}">5</span>
+
+                        <div style="width: 1px; height: 40px; background: rgba(255,255,255,0.3);" class="mx-2 d-none d-md-block"></div>
+
+                        <span class="ball-display ball-chance shadow pulse-animation" th:text="${lastDraw.numeroChance}">C</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="alert alert-light border d-flex align-items-center justify-content-center shadow-sm py-2 mb-4 small animate-up" role="alert" id="infoPeriode" style="display: none !important;">
         <i class="bi bi-calendar-range me-2 text-primary"></i>
         <span>Historique : <strong id="nbTirages">0</strong> tirages (<span class="text-primary" id="dateMin">-</span> au <span class="text-primary" id="dateMax">-</span>)</span>

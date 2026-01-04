@@ -62,6 +62,11 @@ public class HomeController {
                 .sum();
         double solde = totalGains - totalDepense;
 
+        // Récupération du dernier tirage
+        lotoTirageRepository.findTopByOrderByDateTirageDesc().ifPresent(tirage -> {
+            model.addAttribute("lastDraw", tirage);
+        });
+
         // Données pour le bilan financier
         model.addAttribute("totalDepense", totalDepense);
         model.addAttribute("totalGains", totalGains);

@@ -142,8 +142,16 @@
     <form action="/login" method="post">
         <div class="mb-3 input-icon-wrapper">
             <i class="bi bi-envelope input-icon"></i>
-            <input type="email" name="username" class="form-control ps-5" placeholder="Votre email" required autofocus
-                autocomplete="username">
+            <input type="email"
+                   name="username"
+                   class="form-control ps-5"
+                   placeholder="Votre email"
+                   required
+                   autofocus
+                   autocomplete="username"
+                   th:value="${(session.SPRING_SECURITY_LAST_USERNAME != null and
+                   !#strings.isEmpty(session.SPRING_SECURITY_LAST_USERNAME)) ? session.SPRING_SECURITY_LAST_USERNAME
+                   : ((cookie != null and cookie['saved_email'] != null) ? cookie['saved_email'].value : '')}">
         </div>
 
         <div class="mb-3 input-icon-wrapper">

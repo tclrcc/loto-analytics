@@ -48,6 +48,7 @@ public class SecurityConfig {
                         .key(rememberKey)
                         .tokenValiditySeconds(2592000) // Durée 30 jours (en secondes)
                         .rememberMeParameter("remember-me")
+                        .useSecureCookie(false)
                 )
                 .logout(logout -> logout
                         .logoutSuccessUrl("/login?logout")
