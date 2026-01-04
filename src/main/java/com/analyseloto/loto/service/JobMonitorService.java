@@ -12,14 +12,26 @@ import java.util.List;
 @Service
 @RequiredArgsConstructor
 public class JobMonitorService {
+    // Repositories
     private final JobLogRepository jobLogRepository;
 
+    /**
+     * Enregistrement log job
+     * @param name nom job
+     * @return
+     */
     @Transactional
     public JobLog startJob(String name) {
         JobLog log = new JobLog(name);
         return jobLogRepository.save(log);
     }
 
+    /**
+     * Modification statut et message d'un job
+     * @param log log
+     * @param status état
+     * @param message message
+     */
     @Transactional
     public void endJob(JobLog log, String status, String message) {
         log.setEndTime(LocalDateTime.now());
@@ -32,7 +44,11 @@ public class JobMonitorService {
         jobLogRepository.save(log);
     }
 
-    public List<JobLog> getHistory() {
+    /**
+     * Renvoie liste des 50 derniers jobs
+     * @return liste jobs
+     */
+    public List<JobLog> getHistory50Jobs() {
         return jobLogRepository.findTop50ByOrderByStartTimeDesc();
     }
 }

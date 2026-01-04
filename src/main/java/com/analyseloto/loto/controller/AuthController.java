@@ -5,19 +5,17 @@ import com.analyseloto.loto.entity.User;
 import com.analyseloto.loto.repository.ConfirmationTokenRepository;
 import com.analyseloto.loto.repository.UserRepository;
 import com.analyseloto.loto.service.EmailService;
+import com.analyseloto.loto.service.UserService;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Controller;
-import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.UUID;
 
 @Controller
 @RequiredArgsConstructor
@@ -27,9 +25,11 @@ public class AuthController {
     private final ConfirmationTokenRepository tokenRepository;
     // Services
     private final EmailService emailService;
-    // Utils
-    private final PasswordEncoder passwordEncoder;
+    private final UserService userService;
 
+    /**
+     * Valeur de l'URL de l'appli selon l'environnement
+     */
     @Value("${app.base-url:http://localhost:8080}")
     private String baseUrl;
 
@@ -71,42 +71,18 @@ public class AuthController {
             return "redirect:/register?error";
         }
 
-        // Création User
-        User u = new User();
-        u.setEmail(email);
-        // Cryptage du mot de passe
-        u.setPassword(passwordEncoder.encode(password));
-        // Inactif par défaut
-        u.setEnabled(false);
-        // Rôle USER par défaut
-        u.setRole("USER");
-
-        u.setFirstName((firstName != null && !firstName.isEmpty()) ? firstName : "Joueur");
-        if (birthDate != null) {
-            u.setBirthDate(birthDate);
-        }
-        if (birthTime != null && !birthTime.isEmpty()) {
-            u.setBirthTime(birthTime);
-        }
-        u.setBirthCity(birthCity);
-        u.setZodiacSign(zodiacSign);
-
+        // Création utilisateur
+        User user = userService.createNewUser(email, password, firstName, birthDate, birthTime, birthCity, zodiacSign);
         // Enregistrement de l'utilisateur
-        userRepository.save(u);
+        userRepository.save(user);
 
-        // Création Token
-        String token = UUID.randomUUID().toString();
-        ConfirmationToken confirmationToken = new ConfirmationToken(
-                token,
-                LocalDateTime.now(),
-                LocalDateTime.now().plusHours(24), // Expire dans 24h
-                u
-        );
-        // Enregistrement du token de confirmation
+        // Création token
+        ConfirmationToken confirmationToken = userService.createConfirmationTokenUser(user);
+        // Enregistrement du token
         tokenRepository.save(confirmationToken);
 
-        // Envoi Email (Adapter le lien avec votre domaine/port)
-        String link = baseUrl + "/confirm?token=" + token;
+        // Envoi Email avec le token
+        String link = baseUrl + "/confirm?token=" + confirmationToken.getToken();
         emailService.sendConfirmationEmail(email, firstName, link);
 
         // Redirection vers login avec message spécial
@@ -116,12 +92,12 @@ public class AuthController {
     /**
      * Action confirmation activation du compte (depuis email)
      * @param token token
-     * @param model model
      * @return
      */
     @GetMapping("/confirm")
     @Transactional
-    public String confirmToken(@RequestParam("token") String token, Model model) {
+    public String confirmToken(@RequestParam("token") String token) {
+        // Récupération du token pour savoir s'il existe ou non
         ConfirmationToken confirmToken = tokenRepository.findByToken(token)
                 .orElse(null);
 
@@ -133,15 +109,16 @@ public class AuthController {
             return "redirect:/login?alreadyConfirmed"; // Déjà cliqué
         }
 
+        // Récupération date d'expiration
         LocalDateTime expiredAt = confirmToken.getExpiresAt();
         if (expiredAt.isBefore(LocalDateTime.now())) {
-            return "redirect:/login?expired"; // Trop tard
+            return "redirect:/login?expired"; // Token expiré
         }
 
         // Validation réussie
         confirmToken.setConfirmedAt(LocalDateTime.now());
 
-        // On active l'utilisateur
+        // Activation de l'utilisateur
         User user = confirmToken.getUser();
         user.setEnabled(true);
         userRepository.save(user);

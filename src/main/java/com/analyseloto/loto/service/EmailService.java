@@ -4,6 +4,7 @@ import com.analyseloto.loto.dto.PronosticResultDto;
 import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeMessage;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
@@ -16,6 +17,7 @@ import java.util.Locale;
 import java.util.stream.Collectors;
 
 @Service
+@Slf4j
 @RequiredArgsConstructor
 public class EmailService {
     private final JavaMailSender mailSender;
@@ -37,11 +39,11 @@ public class EmailService {
             helper.setFrom("Loto Master AI <no-reply@lotomaster.com>");
             helper.setTo(to);
             helper.setSubject(subject);
-            helper.setText(htmlBody, true); // true = HTML
+            helper.setText(htmlBody, true);
 
             mailSender.send(message);
         } catch (MessagingException e) {
-            e.printStackTrace();
+            log.error("Impossible d'envoyer l'email", e);
             throw new RuntimeException("Erreur envoi mail");
         }
     }
@@ -53,80 +55,82 @@ public class EmailService {
      * @param link lien
      */
     public void sendConfirmationEmail(String to, String name, String link) {
+        // Objet du mail
         String subject = "🚀 Activez votre compte Loto Master AI";
 
-        // On utilise StringBuilder pour construire le HTML proprement
-        StringBuilder html = new StringBuilder();
+        // Construction du contenu
+        String html = "<!DOCTYPE html>" +
+                "<html><head>" +
+                "<meta charset='UTF-8'>" +
+                "<meta name='viewport' content='width=device-width, initial-scale=1.0'>" +
+                "</head>" +
+                "<body style='margin: 0; padding: 0; font-family: \"Segoe UI\", Helvetica, Arial, sans-serif; background-color: #f3f4f6; color: #333333;'>" +
 
-        // --- DEBUT DU TEMPLATE ---
-        html.append("<!DOCTYPE html>");
-        html.append("<html><head>");
-        html.append("<meta charset='UTF-8'>");
-        html.append("<meta name='viewport' content='width=device-width, initial-scale=1.0'>");
-        html.append("</head>");
-        html.append("<body style='margin: 0; padding: 0; font-family: \"Segoe UI\", Helvetica, Arial, sans-serif; background-color: #f3f4f6; color: #333333;'>");
+                // Conteneur Principal (Fond gris)
+                "<div style='width: 100%; padding: 40px 0; background-color: #f3f4f6;'>" +
 
-        // Conteneur Principal (Fond gris)
-        html.append("<div style='width: 100%; padding: 40px 0; background-color: #f3f4f6;'>");
+                // Carte Blanche Centrée
+                "<div style='max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.1);'>" +
 
-        // Carte Blanche Centrée
-        html.append("<div style='max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.1);'>");
+                // En-tête (Header) avec couleur de marque
+                "<div style='background-color: #4F46E5; padding: 30px; text-align: center;'>" +
+                "<h1 style='color: #ffffff; margin: 0; font-size: 24px; letter-spacing: 1px;'>🎱 Loto Master AI</h1>" +
+                "</div>" +
 
-        // En-tête (Header) avec couleur de marque
-        html.append("<div style='background-color: #4F46E5; padding: 30px; text-align: center;'>");
-        html.append("<h1 style='color: #ffffff; margin: 0; font-size: 24px; letter-spacing: 1px;'>🎱 Loto Master AI</h1>");
-        html.append("</div>");
+                // Corps du message
+                "<div style='padding: 40px 30px;'>" +
 
-        // Corps du message
-        html.append("<div style='padding: 40px 30px;'>");
+                // Salutations
+                "<h2 style='color: #1f2937; margin-top: 0; font-size: 20px;'>Bonjour " + name + " ! 👋</h2>" +
+                "<p style='font-size: 16px; line-height: 1.6; color: #4b5563; margin-bottom: 25px;'>" +
+                "Merci de rejoindre la communauté. Votre assistant intelligent d'analyse de Loto est prêt." +
+                "<br>Pour commencer, veuillez confirmer votre adresse email en cliquant sur le bouton ci-dessous :" +
+                "</p>" +
 
-        // Salutations
-        html.append("<h2 style='color: #1f2937; margin-top: 0; font-size: 20px;'>Bonjour ").append(name).append(" ! 👋</h2>");
-        html.append("<p style='font-size: 16px; line-height: 1.6; color: #4b5563; margin-bottom: 25px;'>");
-        html.append("Merci de rejoindre la communauté. Votre assistant intelligent d'analyse de Loto est prêt.");
-        html.append("<br>Pour commencer, veuillez confirmer votre adresse email en cliquant sur le bouton ci-dessous :");
-        html.append("</p>");
+                // Bouton d'action (CTA)
+                "<div style='text-align: center; margin: 35px 0;'>" +
+                "<a href='" + link + "' style='background-color: #4F46E5; color: #ffffff; padding: 14px 30px; text-decoration: none; border-radius: 50px; font-weight: bold; font-size: 16px; display: inline-block; box-shadow: 0 4px 6px rgba(79, 70, 229, 0.3);'>" +
+                "ACTIVER MON COMPTE" +
+                "</a>" +
+                "</div>" +
 
-        // Bouton d'action (CTA)
-        html.append("<div style='text-align: center; margin: 35px 0;'>");
-        html.append("<a href='").append(link).append("' style='background-color: #4F46E5; color: #ffffff; padding: 14px 30px; text-decoration: none; border-radius: 50px; font-weight: bold; font-size: 16px; display: inline-block; box-shadow: 0 4px 6px rgba(79, 70, 229, 0.3);'>");
-        html.append("ACTIVER MON COMPTE");
-        html.append("</a>");
-        html.append("</div>");
+                // Infos expiration
+                "<p style='font-size: 14px; color: #6b7280; text-align: center; margin-top: 20px;'>" +
+                "⏳ Ce lien est valide pendant <strong>24 heures</strong>." +
+                "</p>" +
 
-        // Infos expiration
-        html.append("<p style='font-size: 14px; color: #6b7280; text-align: center; margin-top: 20px;'>");
-        html.append("⏳ Ce lien est valide pendant <strong>24 heures</strong>.");
-        html.append("</p>");
+                // Lien de secours (si le bouton ne marche pas)
+                "<div style='border-top: 1px solid #e5e7eb; margin-top: 30px; padding-top: 20px; font-size: 12px; color: #9ca3af; word-break: break-all;'>" +
+                "Si le bouton ne fonctionne pas, copiez ce lien dans votre navigateur :<br>" +
+                "<a href='" + link + "' style='color: #4F46E5; text-decoration: underline;'>" + link + "</a>" +
+                "</div>" +
+                "</div>" + // Fin Corps
 
-        // Lien de secours (si le bouton ne marche pas)
-        html.append("<div style='border-top: 1px solid #e5e7eb; margin-top: 30px; padding-top: 20px; font-size: 12px; color: #9ca3af; word-break: break-all;'>");
-        html.append("Si le bouton ne fonctionne pas, copiez ce lien dans votre navigateur :<br>");
-        html.append("<a href='").append(link).append("' style='color: #4F46E5; text-decoration: underline;'>").append(link).append("</a>");
-        html.append("</div>");
-
-        html.append("</div>"); // Fin Corps
-
-        // Footer
-        html.append("<div style='background-color: #f9fafb; padding: 20px; text-align: center; font-size: 12px; color: #9ca3af; border-top: 1px solid #e5e7eb;'>");
-        html.append("<p style='margin: 0;'>&copy; 2025 Loto Master AI. Tous droits réservés.</p>");
-        html.append("<p style='margin: 5px 0 0 0;'>Si vous n'êtes pas à l'origine de cette inscription, ignorez simplement cet email.</p>");
-        html.append("</div>");
-
-        html.append("</div>"); // Fin Carte
-        html.append("</div>"); // Fin Conteneur Principal
-        html.append("</body></html>");
+                // Footer
+                "<div style='background-color: #f9fafb; padding: 20px; text-align: center; font-size: 12px; color: #9ca3af; border-top: 1px solid #e5e7eb;'>" +
+                "<p style='margin: 0;'>&copy; 2025 Loto Master AI. Tous droits réservés.</p>" +
+                "<p style='margin: 5px 0 0 0;'>Si vous n'êtes pas à l'origine de cette inscription, ignorez simplement cet email.</p>" +
+                "</div>" +
+                "</div>" + // Fin Carte
+                "</div>" + // Fin Conteneur Principal
+                "</body></html>";
 
         // Envoi
-        sendHtmlEmail(to, subject, html.toString());
+        sendHtmlEmail(to, subject, html);
     }
 
+    /**
+     * Construction du contenu du mail des pronostics générés
+     * @param pronos liste pronos
+     * @param date date jeu
+     * @param prenom prénom
+     * @return contenu
+     */
     public String buildPersonalizedHtmlBody(List<PronosticResultDto> pronos, LocalDate date, String prenom) {
         StringBuilder sb = new StringBuilder();
 
-        // Formatage date joli : "Lundi 29 Décembre"
+        // Formatage date type : "Lundi 29 Décembre"
         String dateJolie = date.format(DateTimeFormatter.ofPattern("EEEE d MMMM", Locale.FRANCE));
-        // Mettre la première lettre en majuscule
         dateJolie = dateJolie.substring(0, 1).toUpperCase() + dateJolie.substring(1);
 
         sb.append("<html><body style='font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #333;'>");
@@ -183,8 +187,10 @@ public class EmailService {
      * Envoi du Bilan Financier Hebdo (Dépenses, Gains, Bénéfice)
      */
     public void sendBudgetAlertEmail(String to, String name, double depenses, double gains, double benefice, String periode) {
+        // Objet du mail
         String subject = "💰 Votre bilan Loto de la semaine (Loto Master AI)";
         StringBuilder html = new StringBuilder();
+        // Construction du lien vers les stats du joueur
         String link = baseUrl + "/profile/stats";
 
         // Détermination de la couleur et du signe pour le bénéfice
@@ -257,6 +263,7 @@ public class EmailService {
 
         html.append("</div></div></div></body></html>");
 
+        // Envoi mail
         sendHtmlEmail(to, subject, html.toString());
     }
 }

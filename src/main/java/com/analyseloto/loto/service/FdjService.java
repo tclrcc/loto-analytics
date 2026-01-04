@@ -2,9 +2,6 @@ package com.analyseloto.loto.service;
 
 import com.analyseloto.loto.dto.TirageManuelDto;
 import com.analyseloto.loto.repository.LotoTirageRepository;
-import com.opencsv.CSVParserBuilder;
-import com.opencsv.CSVReader;
-import com.opencsv.CSVReaderBuilder;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpEntity;
@@ -16,25 +13,19 @@ import org.springframework.web.client.RestTemplate;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
-import java.io.BufferedReader;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.net.HttpURLConnection;
-import java.net.URL;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipInputStream;
 
 @Service
 @Slf4j
 @RequiredArgsConstructor
 public class FdjService {
-
+    // Repositories
     private final LotoTirageRepository tirageRepository;
+    // Services
     private final LotoService lotoService;
 
     // API officielle utilisée par le front FDJ
@@ -49,9 +40,10 @@ public class FdjService {
         try {
             RestTemplate restTemplate = new RestTemplate();
             HttpHeaders headers = new HttpHeaders();
-            // User-Agent pour passer pour un navigateur
+            // Permet de passer pour un navigateur
             headers.set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36");
 
+            // Appel API
             ResponseEntity<String> response = restTemplate.exchange(
                     FDJ_API_URL, HttpMethod.GET, new HttpEntity<>(headers), String.class
             );

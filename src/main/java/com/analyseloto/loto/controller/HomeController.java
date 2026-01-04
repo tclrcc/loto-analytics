@@ -13,7 +13,6 @@ import org.springframework.web.bind.annotation.GetMapping;
 
 import java.security.Principal;
 import java.time.LocalDate;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -28,16 +27,24 @@ public class HomeController {
     private final UserBetRepository betRepository;
     private final LotoTirageRepository lotoTirageRepository;
 
+    /**
+     * Affichage de la page d'accueil
+     * @param model model
+     * @param principal utilisateur
+     * @return
+     */
     @GetMapping("/")
     public String home(Model model, Principal principal) {
+        // Récupération utilisateur
         String email = principal.getName();
         User user = userRepository.findByEmail(email).orElseThrow();
 
+        // Infos utilisateur
         model.addAttribute("prenom", user.getFirstName());
         model.addAttribute("lastLogin", user.getLastLogin());
         model.addAttribute("astroSigne", user.getZodiacSign());
 
-        // Gestion du bilan
+        // Récupération des grilles
         List<UserBet> bets = betRepository.findByUserOrderByDateJeuDesc(user);
         model.addAttribute("bets", bets);
 
@@ -48,6 +55,11 @@ public class HomeController {
 
         // On recherche les résultats officiels pour ces dates
         List<LotoTirage> tiragesOfficiels = lotoTirageRepository.findByDateTirageIn(datesJouees);
+
+        // Récupération du dernier tirage
+        lotoTirageRepository.findTopByOrderByDateTirageDesc().ifPresent(tirage -> {
+            model.addAttribute("lastDraw", tirage);
+        });
 
         // On transforme la liste en Map
         Map<LocalDate, LotoTirage> resultsMap = tiragesOfficiels.stream()
@@ -61,11 +73,6 @@ public class HomeController {
                 .mapToDouble(UserBet::getGain)
                 .sum();
         double solde = totalGains - totalDepense;
-
-        // Récupération du dernier tirage
-        lotoTirageRepository.findTopByOrderByDateTirageDesc().ifPresent(tirage -> {
-            model.addAttribute("lastDraw", tirage);
-        });
 
         // Données pour le bilan financier
         model.addAttribute("totalDepense", totalDepense);

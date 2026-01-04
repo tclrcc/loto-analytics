@@ -16,6 +16,13 @@ import java.util.List;
 @Service
 public class PdfService {
 
+    /**
+     * Création du fichier PDF contenant les grilles de l'utilisateur
+     * @param bets liste des grilles
+     * @param prenom prénom utilisateur
+     * @return
+     * @throws IOException
+     */
     public byte[] generateBetPdf(List<UserBet> bets, String prenom) throws IOException {
         try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
             Document document = new Document(PageSize.A4);

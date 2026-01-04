@@ -59,9 +59,13 @@ public class SecurityConfig {
         return http.build();
     }
 
+    /**
+     * Encodeur mot de passe
+     * @return bean
+     */
     @Bean
     public PasswordEncoder passwordEncoder() {
-        return new BCryptPasswordEncoder(); // Pour crypter les mots de passe
+        return new BCryptPasswordEncoder();
     }
 
     /**

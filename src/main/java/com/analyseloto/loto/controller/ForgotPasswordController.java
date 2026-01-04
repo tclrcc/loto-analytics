@@ -11,31 +11,48 @@ import org.springframework.web.bind.annotation.RequestParam;
 @Controller
 @RequiredArgsConstructor
 public class ForgotPasswordController {
-
+    // Service
     private final PasswordResetService passwordResetService;
 
-    // 1. Afficher la page "Mot de passe oublié"
+    /**
+     * Affichage page "Mot de passe oublié"
+     * @return
+     */
     @GetMapping("/forgot-password")
     public String showForgotPasswordForm() {
         return "forgot_password";
     }
 
-    // 2. Traiter la demande d'email
+    /**
+     * Action traitant la demande d'envoi d'email pour réinitialiser le mot de passe
+     * @param email
+     * @return
+     */
     @PostMapping("/forgot-password")
     public String processForgotPassword(@RequestParam String email) {
         passwordResetService.processForgotPassword(email);
-        // On redirige toujours vers succès pour ne pas fuiter d'infos
+
         return "redirect:/forgot-password?sent";
     }
 
-    // 3. Afficher le formulaire de nouveau mot de passe (après clic mail)
+    /**
+     * Affichage formulaire pour remplir le nouveau mot de passe
+     * @param token
+     * @param model
+     * @return
+     */
     @GetMapping("/reset-password")
     public String showResetPasswordForm(@RequestParam String token, Model model) {
         model.addAttribute("token", token);
         return "reset_password";
     }
 
-    // 4. Traiter le changement de mot de passe
+    /**
+     * Action traitant la réinitialisation du mot de passe
+     * @param token
+     * @param password
+     * @return
+     */
     @PostMapping("/reset-password")
     public String processResetPassword(@RequestParam String token, @RequestParam String password) {
         boolean result = passwordResetService.resetPassword(token, password);

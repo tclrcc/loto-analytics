@@ -6,7 +6,7 @@ import com.analyseloto.loto.repository.UserBetRepository;
 import com.analyseloto.loto.repository.UserRepository;
 import com.analyseloto.loto.service.PdfService;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j; // 1. Ajoutez les logs
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -22,7 +22,7 @@ import java.security.Principal;
 import java.time.LocalDate;
 import java.util.List;
 
-@Slf4j // Permet d'écrire dans la console serveur
+@Slf4j
 @Controller
 @RequestMapping("/bets")
 @RequiredArgsConstructor
@@ -32,6 +32,19 @@ public class BetController {
     private final UserRepository userRepository;
     private final PdfService pdfService;
 
+    /**
+     * Action d'ajout d'une nouvelle grille de jeu
+     * @param principal utilisateur
+     * @param dateJeu date du tirage
+     * @param b1 numéro 1
+     * @param b2 numéro 2
+     * @param b3 numéro 3
+     * @param b4 numéro 4
+     * @param b5 numéro 5
+     * @param chance numéro chance
+     * @param mise mise
+     * @return
+     */
     @PostMapping("/add")
     public String addBet(Principal principal,
                          @RequestParam LocalDate dateJeu,
@@ -40,14 +53,13 @@ public class BetController {
                          @RequestParam double mise) {
 
         try {
-            // 1. Logs pour débuguer sur OVH
             log.info("Tentative d'ajout de grille pour {} : Date={}, M={}", principal.getName(), dateJeu, mise);
 
-            // 2. Vérification utilisateur
+            // Vérification utilisateur
             User user = userRepository.findByEmail(principal.getName())
                     .orElseThrow(() -> new RuntimeException("Utilisateur introuvable"));
 
-            // 3. Création
+            // Création de la grille
             UserBet bet = new UserBet();
             bet.setUser(user);
             bet.setDateJeu(dateJeu);
@@ -55,61 +67,91 @@ public class BetController {
             bet.setChance(chance);
             bet.setMise(mise);
 
-            // 4. Enregistrement
+            // Enregistrement de la grille
             betRepository.save(bet);
 
             log.info("Grille sauvegardée avec succès ID={}", bet.getId());
             return "redirect:/?betAdded";
 
         } catch (Exception e) {
-            // 5. GESTION D'ERREUR ROBUSTE
             log.error("Erreur lors de l'ajout de la grille sur OVH : ", e);
-            // On redirige avec un paramètre d'erreur pour l'afficher à l'utilisateur
             return "redirect:/?error=saveFailed";
         }
     }
 
-    // ... Le reste (update, delete, export) ne change pas,
-    // mais vous pouvez ajouter des try-catch similaires si besoin.
-
+    /**
+     * Action de modification de la valeur du gain d'une grille jouée
+     * @param principal utilisateur
+     * @param betId identifiant de la grille
+     * @param gain gain
+     * @return
+     */
     @PostMapping("/update")
     public String updateGain(Principal principal, @RequestParam Long betId, @RequestParam double gain) {
         try {
+            // Récupération de la grille
             UserBet bet = betRepository.findById(betId).orElseThrow();
+            // Contrôle si utilisateur de la grille != utilisateur actuel
             if (!bet.getUser().getEmail().equals(principal.getName())) {
                 return "redirect:/?error=unauthorized";
             }
+
+            // Enregistrement du nouveau gain
             bet.setGain(gain);
             betRepository.save(bet);
-            return (gain > 0) ? "redirect:/?win=" + gain : "redirect:/?gainUpdated";
         } catch (Exception e) {
             log.error("Erreur update gain", e);
             return "redirect:/?error=updateFailed";
         }
+
+        // Redirection
+        return (gain > 0) ? "redirect:/?win=" + gain : "redirect:/?gainUpdated";
     }
 
+    /**
+     * Action de suppression d'une grille
+     * @param principal utilisateur
+     * @param betId identifiant de la grille
+     * @return
+     */
     @PostMapping("/delete")
     public String deleteBet(Principal principal, @RequestParam Long betId) {
         try {
+            // Récupération de la grille
             UserBet bet = betRepository.findById(betId).orElseThrow();
+            // Contrôle possession de la grille de l'utilisateur
             if (bet.getUser().getEmail().equals(principal.getName())) {
                 betRepository.delete(bet);
             }
-            return "redirect:/?betDeleted";
         } catch (Exception e) {
             log.error("Erreur delete", e);
             return "redirect:/?error=deleteFailed";
         }
+
+        // Redirection
+        return "redirect:/?betDeleted";
     }
 
+    /**
+     * Action d'export des grilles en PDF
+     * @param principal
+     * @return
+     * @throws IOException
+     */
     @GetMapping("/export/pdf")
     public ResponseEntity<byte[]> exportBetsToPdf(Principal principal) throws IOException {
+        // Récupération de l'utilisateur et de ses grilles
         User user = userRepository.findByEmail(principal.getName()).orElseThrow();
         List<UserBet> bets = betRepository.findByUserOrderByDateJeuDesc(user);
+
+        // Génération du PDF avec headers
         byte[] pdfContent = pdfService.generateBetPdf(bets, user.getFirstName());
+        // Construction headers
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_PDF);
         headers.setContentDispositionFormData("attachment", "mes_grilles_loto.pdf");
+
+        // Réponse PDF
         return new ResponseEntity<>(pdfContent, headers, HttpStatus.OK);
     }
 }
