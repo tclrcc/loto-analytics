@@ -142,12 +142,14 @@
     <form action="/login" method="post">
         <div class="mb-3 input-icon-wrapper">
             <i class="bi bi-envelope input-icon"></i>
-            <input type="email" name="username" class="form-control ps-5" placeholder="Votre email" required autofocus>
+            <input type="email" name="username" class="form-control ps-5" placeholder="Votre email" required autofocus
+                autocomplete="username">
         </div>
 
         <div class="mb-3 input-icon-wrapper">
             <i class="bi bi-key input-icon"></i>
-            <input type="password" name="password" class="form-control ps-5" placeholder="Votre mot de passe" required>
+            <input type="password" name="password" class="form-control ps-5" placeholder="Votre mot de passe" required
+                autocomplete="current-password">
         </div>
 
         <div class="d-flex justify-content-between align-items-center mb-4">

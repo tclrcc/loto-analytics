@@ -4,6 +4,7 @@ import com.analyseloto.loto.repository.UserRepository;
 import com.analyseloto.loto.security.CustomLoginFailureHandler;
 import com.analyseloto.loto.security.CustomLoginSuccessHandler;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -23,6 +24,9 @@ public class SecurityConfig {
     @Autowired
     private CustomLoginSuccessHandler successHandler;
 
+    @Value("${loto.security.remember-key}")
+    private String rememberKey;
+
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
@@ -40,8 +44,14 @@ public class SecurityConfig {
                         .failureHandler(failureHandler)
                         .permitAll()
                 )
+                .rememberMe(remember -> remember
+                        .key(rememberKey)
+                        .tokenValiditySeconds(2592000) // Durée 30 jours (en secondes)
+                        .rememberMeParameter("remember-me")
+                )
                 .logout(logout -> logout
                         .logoutSuccessUrl("/login?logout")
+                        .deleteCookies("JSESSIONID", "remember-me") // Suppression des cookies
                         .permitAll()
                 );
 

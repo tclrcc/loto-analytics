@@ -5,8 +5,8 @@ services:
     environment:
       POSTGRES_DB: lotodb
       POSTGRES_USER: loto
-      # On utilise la variable définie dans le fichier .env
       POSTGRES_PASSWORD: ${DB_PASSWORD}
+      TZ: Europe/Paris  # Heure BDD
     volumes:
       - pgdata:/var/lib/postgresql/data
     restart: always
@@ -21,14 +21,20 @@ services:
     depends_on:
       - db
     environment:
+      # Timezone
+      TZ: Europe/Paris
+
+      # Clé de sécurité (Référence au fichier .env)
+      LOTO_SECURITY_REMEMBER_KEY: ${REMEMBER_KEY}
+
       # Connexion BDD
       SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/lotodb
       SPRING_DATASOURCE_USERNAME: loto
-      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD} # La même variable
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
 
       # Email
       SPRING_MAIL_USERNAME: tonycoloricchio01@gmail.com
-      SPRING_MAIL_PASSWORD: ${MAIL_PASSWORD} # Variable secrète
+      SPRING_MAIL_PASSWORD: ${MAIL_PASSWORD}
       APP_BASE_URL: http://51.254.133.205
     restart: always
 
