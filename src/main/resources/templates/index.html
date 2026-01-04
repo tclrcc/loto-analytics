@@ -267,6 +267,75 @@
         </div>
 
         <div class="card-body p-0">
+            <div class="bg-light bg-opacity-50 border-bottom p-3">
+                <div class="row g-2 align-items-end">
+
+                    <div class="col-md-4">
+                        <label class="small fw-bold text-muted text-uppercase mb-1" style="font-size: 0.7rem;">
+                            <i class="bi bi-calendar3 me-1"></i>Période
+                        </label>
+                        <div class="input-group input-group-sm shadow-sm">
+                            <input type="text" id="filterDateMin" class="form-control bg-white border-end-0" placeholder="Du...">
+                            <span class="input-group-text bg-white border-start-0 border-end-0 text-muted">➜</span>
+                            <input type="text" id="filterDateMax" class="form-control bg-white border-start-0" placeholder="Au...">
+                        </div>
+                    </div>
+
+                    <div class="col-md-3">
+                        <label class="small fw-bold text-muted text-uppercase mb-1" style="font-size: 0.7rem;">
+                            <i class="bi bi-activity me-1"></i>Statuts (Multi)
+                        </label>
+                        <div class="dropdown">
+                            <button class="btn btn-sm btn-white bg-white border w-100 text-start d-flex justify-content-between align-items-center shadow-sm"
+                                    type="button" id="dropdownStatus" data-bs-toggle="dropdown" aria-expanded="false">
+                                <span id="selectedStatusText">Tous les statuts</span>
+                                <i class="bi bi-chevron-down small text-muted"></i>
+                            </button>
+                            <ul class="dropdown-menu w-100 p-2 shadow border-0" aria-labelledby="dropdownStatus">
+                                <li>
+                                    <div class="form-check">
+                                        <input class="form-check-input status-checkbox" type="checkbox" value="Gagné" id="chkGagne" checked>
+                                        <label class="form-check-label w-100 cursor-pointer" for="chkGagne"><i class="bi bi-trophy-fill text-success me-1"></i> Gagné</label>
+                                    </div>
+                                </li>
+                                <li>
+                                    <div class="form-check">
+                                        <input class="form-check-input status-checkbox" type="checkbox" value="En attente" id="chkAttente" checked>
+                                        <label class="form-check-label w-100 cursor-pointer" for="chkAttente"><i class="bi bi-hourglass-split text-warning me-1"></i> En attente</label>
+                                    </div>
+                                </li>
+                                <li>
+                                    <div class="form-check">
+                                        <input class="form-check-input status-checkbox" type="checkbox" value="Remboursé" id="chkRembourse" checked>
+                                        <label class="form-check-label w-100 cursor-pointer" for="chkRembourse"><i class="bi bi-arrow-repeat text-info me-1"></i> Remboursé</label>
+                                    </div>
+                                </li>
+                                <li>
+                                    <div class="form-check">
+                                        <input class="form-check-input status-checkbox" type="checkbox" value="Perdu" id="chkPerdu" checked>
+                                        <label class="form-check-label w-100 cursor-pointer" for="chkPerdu"><i class="bi bi-x-circle text-muted me-1"></i> Perdu</label>
+                                    </div>
+                                </li>
+                                <li><hr class="dropdown-divider my-1"></li>
+                                <li><button class="btn btn-xs btn-link text-decoration-none p-0 ps-1" onclick="$('.status-checkbox').prop('checked', true).trigger('change')">Tout cocher</button></li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div class="col-md-3">
+                        <label class="small fw-bold text-muted text-uppercase mb-1" style="font-size: 0.7rem;">
+                            <i class="bi bi-currency-euro me-1"></i>Gain Min.
+                        </label>
+                        <input type="number" id="filterGain" class="form-control form-control-sm shadow-sm border-0" placeholder="ex: 10" step="0.5">
+                    </div>
+
+                    <div class="col-md-2 d-grid">
+                        <button id="btnResetFilters" class="btn btn-sm btn-outline-secondary border-0 bg-white shadow-sm h-100">
+                            <i class="bi bi-arrow-counterclockwise me-1"></i>Effacer
+                        </button>
+                    </div>
+                </div>
+            </div>
             <div class="table-responsive">
                 <table id="betsTable" class="table table-hover align-middle mb-0" style="border-collapse: separate; border-spacing: 0;">
                     <thead class="bg-light small text-uppercase text-secondary">
@@ -712,21 +781,131 @@
 
 <script th:inline="none">
     $(document).ready(function() {
-        $('#betsTable').DataTable({
+        // 1. Initialisation de la table
+        var table = $('#betsTable').DataTable({
             "language": {
                 "url": "//cdn.datatables.net/plug-ins/1.13.6/i18n/fr-FR.json",
-                // On remplace les textes par des icônes Bootstrap
-                "paginate": {
-                    "previous": "<i class='bi bi-chevron-left'></i>",
-                    "next": "<i class='bi bi-chevron-right'></i>"
-                }
+                "paginate": { "previous": "<i class='bi bi-chevron-left'></i>", "next": "<i class='bi bi-chevron-right'></i>" },
+                "zeroRecords": "<div class='py-4 text-muted'><i class='bi bi-search display-6 mb-2'></i><br>Aucune grille ne correspond à ces filtres.</div>"
             },
             "order": [[ 0, "desc" ]],
             "pageLength": 5,
             "lengthChange": false,
-            "searching": false,
-            // Optionnel : DOM pour placer la pagination en bas centré proprement
+            "searching": true,
             "dom": 'rt<"d-flex flex-column align-items-center mt-3"ip>'
+        });
+
+        // 2. Initialisation Flatpickr
+        const filterConfig = {
+            locale: "fr", dateFormat: "Y-m-d", altInput: true, altFormat: "j F Y", allowInput: true,
+            onChange: function() { table.draw(); }
+        };
+        flatpickr("#filterDateMin", filterConfig);
+        flatpickr("#filterDateMax", filterConfig);
+
+        // 3. FONCTION DE FILTRAGE INTELLIGENTE
+        $.fn.dataTable.ext.search.push(
+            function(settings, data, dataIndex) {
+
+                // --- A. DATE ---
+                var min = $('#filterDateMin').val();
+                var max = $('#filterDateMax').val();
+                var dateRow = table.row(dataIndex).node().cells[0].getAttribute('data-order');
+
+                if (!((min === "" && max === "") || (min === "" && dateRow <= max) || (min <= dateRow && max === "") || (min <= dateRow && dateRow <= max))) {
+                    return false;
+                }
+
+                // --- B. STATUT (MULTI-SELECTION) ---
+                // On récupère la liste des valeurs cochées
+                var selectedStatuses = [];
+                $('.status-checkbox:checked').each(function() {
+                    selectedStatuses.push($(this).val());
+                });
+
+                var statusRowText = data[2]; // Colonne Statut
+
+                // Si aucun statut coché, on n'affiche rien (ou tout, selon la logique voulue, ici j'assume rien)
+                // Si la ligne ne contient AUCUN des statuts cochés, on masque
+                var matchStatus = false;
+                if (selectedStatuses.length > 0) {
+                    for (var i = 0; i < selectedStatuses.length; i++) {
+                        if (statusRowText.includes(selectedStatuses[i])) {
+                            matchStatus = true;
+                            break;
+                        }
+                    }
+                }
+
+                if (!matchStatus) return false;
+
+                // --- C. FILTRE GAIN MINIMUM (STRICT) ---
+                var gainInput = $('#filterGain').val();
+
+                if (gainInput !== "") {
+                    var gainMin = parseFloat(gainInput);
+                    var statusText = data[2]; // Colonne Statut (Index 2)
+
+                    // 1. SÉCURITÉ : Si on filtre par gain, on vire les Perdants et En attente
+                    // Même si le script lit "2.20" (mise barrée), on le force à masquer la ligne
+                    if (statusText.includes("Perdu") || statusText.includes("En attente")) {
+                        return false;
+                    }
+
+                    // 2. Nettoyage du montant pour les Gagnants / Remboursés
+                    var rawGain = data[3];
+
+                    // On nettoie : on garde chiffres, virgule, point et le signe moins
+                    // Ex: "+ 145,20 €" devient "145.20"
+                    var cleanGainString = rawGain.replace(/[^\d,-]/g, '').replace(',', '.');
+                    var gainRow = parseFloat(cleanGainString);
+
+                    // Si le parsing échoue ou si le montant est inférieur au filtre
+                    if (isNaN(gainRow) || gainRow < gainMin) {
+                        return false;
+                    }
+                }
+
+                return true;
+            }
+        );
+
+        // 4. Écouteurs d'événements
+
+        // Au changement d'une checkbox
+        $('.status-checkbox').on('change', function() {
+            // Mise à jour du texte du bouton (UX)
+            var checkedCount = $('.status-checkbox:checked').length;
+            var totalCount = $('.status-checkbox').length;
+
+            if(checkedCount === totalCount) {
+                $('#selectedStatusText').text('Tous les statuts');
+            } else if (checkedCount === 0) {
+                $('#selectedStatusText').text('Aucun sélectionné');
+            } else {
+                $('#selectedStatusText').text(checkedCount + ' filtres actifs');
+            }
+
+            table.draw();
+        });
+
+        $('#filterGain').on('keyup change', function() {
+            table.draw();
+        });
+
+        // 5. Reset
+        $('#btnResetFilters').on('click', function() {
+            $('#filterDateMin').val('').next().val('');
+            $('#filterDateMax').val('').next().val('');
+            $('#filterGain').val('');
+
+            // On recoche tout par défaut
+            $('.status-checkbox').prop('checked', true).trigger('change');
+
+            document.querySelector("#filterDateMin")._flatpickr.clear();
+            document.querySelector("#filterDateMax")._flatpickr.clear();
+
+            table.draw();
         });
     });
 </script>
