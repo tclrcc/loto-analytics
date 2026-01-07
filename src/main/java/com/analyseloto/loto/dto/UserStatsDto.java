@@ -3,6 +3,7 @@ package com.analyseloto.loto.dto;
 import lombok.Data;
 
 import java.util.List;
+import java.util.Map;
 
 @Data
 public class UserStatsDto {
@@ -21,10 +22,33 @@ public class UserStatsDto {
     private List<StatNumero> topChance; // Ses numéros chance préférés
     private List<Integer> numJamaisJoues; // Ce qu'il ne joue jamais
 
+    // Performances du joueur selon le jour
+    private Map<String, DayPerformance> performanceParJour;
+
     @Data
     public static class StatNumero {
         private int numero;
         private int count;
         public StatNumero(int n, int c) { this.numero = n; this.count = c; }
+    }
+
+    @Data
+    public static class DayPerformance {
+        private String jourNom; // "Lundi", "Mercredi"...
+        private int nbJeux;
+        private double depense;
+        private double gains;
+
+        public DayPerformance(String jourNom) {
+            this.jourNom = jourNom;
+            this.nbJeux = 0;
+            this.depense = 0.0;
+            this.gains = 0.0;
+        }
+
+        // Helper pour Thymeleaf
+        public double getSolde() {
+            return gains - depense;
+        }
     }
 }

@@ -29,7 +29,7 @@ public class FdjService {
     private final LotoService lotoService;
 
     // API officielle utilisée par le front FDJ
-    private static final String FDJ_API_URL = "https://www.fdj.fr/api/service-draws/v1/games/loto/draws?include=results,addons&range=0-1";
+    private static final String FDJ_API_URL = "https://www.fdj.fr/api/service-draws/v1/games/loto/draws?include=results,addons&range=0-0";
 
     /**
      * Méthode récupérant automatiquement le dernier tirage du Loto via API
@@ -41,8 +41,7 @@ public class FdjService {
             RestTemplate restTemplate = new RestTemplate();
             HttpHeaders headers = new HttpHeaders();
             // Permet de passer pour un navigateur
-            headers.set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36");
-
+            headers.set("User-Agent", "PostmanRuntime/7.32.0");
             // Appel API
             ResponseEntity<String> response = restTemplate.exchange(
                     FDJ_API_URL, HttpMethod.GET, new HttpEntity<>(headers), String.class

@@ -10,6 +10,7 @@ import java.util.List;
 public interface UserBetRepository extends JpaRepository<UserBet, Long> {
     // Récupérer les paris d'un utilisateur, du plus récent au plus vieux
     List<UserBet> findByUserOrderByDateJeuDesc(User user);
+    List<UserBet> findByUserAndDateJeu(User user, LocalDate dateJeu);
     List<UserBet> findByUserId(Long userId);
     List<UserBet> findByDateJeu(LocalDate dateJeu);
     List<UserBet> findByUser(User user);

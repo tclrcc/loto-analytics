@@ -31,11 +31,13 @@ public class LotoJob {
     // Repositories
     private final UserRepository userRepository;
     private final UserBetRepository betRepository;
+    // Email de l'utilisateur "ROBOT" qui stockera les pronostics de référence
+    private static final String EMAIL_IA_SYSTEM = "ai@loto.com";
 
     /**
-     * Récupération automatique du dernier tirage tous les soirs de tirage à 21h45
+     * Récupération automatique du dernier tirage tous les soirs de tirage à 22h
      */
-    @Scheduled(cron = "0 45 21 * * MON,WED,SAT", zone = "Europe/Paris")
+    @Scheduled(cron = "0 0 22 * * MON,WED,SAT", zone = "Europe/Paris")
     public void recupererResultatsFdj() {
         log.info("🤖 Job Auto : Vérification FDJ...");
 
@@ -44,6 +46,60 @@ public class LotoJob {
 
         if (newTirage) {
             log.info("✅ Base mise à jour avec le dernier tirage !");
+        }
+    }
+
+    @Scheduled(cron = "0 0 9 * * MON,WED,SAT")
+    public void genererPronosticsDuJour() {
+        log.info("🔮 Lancement du Job : Génération des pronostics de référence...");
+        JobLog jobLog = jobMonitorService.startJob("GEN_PRONOSTICS_IA");
+
+        LocalDate today = LocalDate.now();
+
+        try {
+            // 1. Récupérer l'utilisateur "IA"
+            User aiUser = userRepository.findByEmail(EMAIL_IA_SYSTEM)
+                    .orElseThrow(() -> new RuntimeException("Utilisateur IA (" + EMAIL_IA_SYSTEM + ") introuvable en base !"));
+
+            // 2. Vérifier si on n'a pas déjà généré pour aujourd'hui (pour éviter les doublons si restart)
+            List<UserBet> existants = betRepository.findByUser(aiUser).stream()
+                    .filter(b -> b.getDateJeu().isEqual(today))
+                    .toList();
+
+            if (!existants.isEmpty()) {
+                log.info("⚠️ Pronostics déjà générés pour aujourd'hui. Annulation.");
+                jobMonitorService.endJob(jobLog, "SKIPPED", "Déjà existant");
+                return;
+            }
+
+            // 3. Générer les 5 grilles via l'algorithme (Sans profil astro = Config par défaut)
+            List<PronosticResultDto> pronostics = lotoService.genererMultiplesPronostics(today, 5);
+
+            // 4. Sauvegarder en base
+            for (PronosticResultDto prono : pronostics) {
+                UserBet bet = new UserBet();
+                bet.setUser(aiUser);
+                bet.setDateJeu(today);
+                bet.setMise(2.20); // Prix théorique
+
+                // On trie les boules pour le stockage propre
+                List<Integer> sorted = prono.getBoules().stream().sorted().toList();
+                bet.setB1(sorted.get(0));
+                bet.setB2(sorted.get(1));
+                bet.setB3(sorted.get(2));
+                bet.setB4(sorted.get(3));
+                bet.setB5(sorted.get(4));
+                bet.setChance(prono.getNumeroChance());
+
+                betRepository.save(bet);
+            }
+
+            log.info("✅ 5 Pronostics de référence enregistrés pour le compte {}", aiUser.getEmail());
+            jobMonitorService.endJob(jobLog, "SUCCESS", "5 grilles générées");
+
+        } catch (Exception e) {
+            log.error("❌ Erreur génération pronostics IA", e);
+            jobMonitorService.endJob(jobLog, "FAILURE", e.getMessage());
         }
     }
 

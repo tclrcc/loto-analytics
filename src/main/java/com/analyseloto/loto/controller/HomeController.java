@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 
 import java.security.Principal;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -59,6 +60,15 @@ public class HomeController {
         // Récupération du dernier tirage
         lotoTirageRepository.findTopByOrderByDateTirageDesc().ifPresent(tirage -> {
             model.addAttribute("lastDraw", tirage);
+            // On cherche l'utilisateur IA
+            User aiUser = userRepository.findByEmail("ai@loto.com").orElse(null);
+            if (aiUser != null) {
+                // On récupère ses jeux pour la date du dernier tirage
+                List<UserBet> aiBets = betRepository.findByUserAndDateJeu(aiUser, tirage.getDateTirage());
+                model.addAttribute("aiBets", aiBets);
+            } else {
+                model.addAttribute("aiBets", new ArrayList<>());
+            }
         });
 
         // On transforme la liste en Map

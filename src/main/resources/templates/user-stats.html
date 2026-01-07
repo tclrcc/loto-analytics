@@ -24,6 +24,64 @@
 <div class="container pb-5">
 
     <div class="row g-3 mb-4 animate-up">
+        <div class="mb-4 animate-up delay-1">
+            <h5 class="fw-bold mb-3 text-secondary">
+                <i class="bi bi-calendar-week-fill me-2 text-primary"></i>Rentabilité par Jour
+            </h5>
+
+            <div class="row g-4">
+                <div class="col-md-4" th:each="entry : ${stats.performanceParJour}">
+
+                    <div class="card border-0 shadow-sm h-100 day-card position-relative overflow-hidden"
+                         style="transition: transform 0.2s;"
+                         onmouseover="this.style.transform='translateY(-5px)'"
+                         onmouseout="this.style.transform='translateY(0)'">
+
+                        <div class="position-absolute top-0 bottom-0 start-0" style="width: 4px;"
+                             th:classappend="${entry.value.solde >= 0} ? 'bg-success' : 'bg-danger'"></div>
+
+                        <div class="card-body ps-4">
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <div>
+                                    <h6 class="fw-bold mb-1 text-uppercase text-dark" th:text="${entry.value.jourNom}">LUNDI</h6>
+                                    <span class="badge bg-light text-muted border fw-normal">
+                                    <span th:text="${entry.value.nbJeux}">0</span> participations
+                                </span>
+                                </div>
+
+                                <div class="rounded-circle p-2 d-flex align-items-center justify-content-center"
+                                     style="width: 38px; height: 38px;"
+                                     th:classappend="${entry.value.solde >= 0} ? 'bg-success bg-opacity-10 text-success' : 'bg-danger bg-opacity-10 text-danger'">
+                                    <i class="bi" th:classappend="${entry.value.solde >= 0} ? 'bi-graph-up-arrow' : 'bi-graph-down-arrow'"></i>
+                                </div>
+                            </div>
+
+                            <div class="mb-3">
+                                <small class="text-muted text-uppercase fw-bold" style="font-size: 0.65rem;">Bilan Net</small>
+                                <h3 class="fw-bold mb-0"
+                                    th:classappend="${entry.value.solde >= 0} ? 'text-success' : 'text-danger'"
+                                    th:text="${(entry.value.solde > 0 ? '+' : '') + #numbers.formatDecimal(entry.value.solde, 1, 2) + ' €'}">
+                                    0.00 €
+                                </h3>
+                            </div>
+
+                            <hr class="my-2 border-light">
+
+                            <div class="row text-center small">
+                                <div class="col-6 border-end">
+                                    <span class="text-muted d-block" style="font-size: 0.65rem;">DÉPENSÉ</span>
+                                    <span class="fw-bold text-dark" th:text="${#numbers.formatDecimal(entry.value.depense, 1, 0) + '€'}">0€</span>
+                                </div>
+                                <div class="col-6">
+                                    <span class="text-muted d-block" style="font-size: 0.65rem;">GAGNÉ</span>
+                                    <span class="fw-bold text-dark" th:text="${#numbers.formatDecimal(entry.value.gains, 1, 0) + '€'}">0€</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
         <div class="col-md-3">
             <div class="card p-3 border-0 shadow-sm text-center">
                 <small class="text-muted text-uppercase fw-bold">Grilles Jouées</small>

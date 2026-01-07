@@ -12,6 +12,7 @@ import java.util.TimeZone;
 public class LotoApplication {
 
 	public static void main(String[] args) {
+        System.setProperty("javax.net.ssl.trustStoreType", "WINDOWS-ROOT");
 		SpringApplication.run(LotoApplication.class, args);
 	}
 

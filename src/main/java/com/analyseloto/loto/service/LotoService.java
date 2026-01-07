@@ -759,8 +759,8 @@ public class LotoService {
     }
 
     public UserStatsDto calculerStatistiquesJoueur(User user) {
-        List<UserBet> bets = betRepository.findByUser(user);
         UserStatsDto stats = new UserStatsDto();
+        List<UserBet> bets = betRepository.findByUserOrderByDateJeuDesc(user);
 
         stats.setTotalGrilles(bets.size());
         stats.setDepenseTotale(bets.stream().mapToDouble(UserBet::getMise).sum());
@@ -774,6 +774,12 @@ public class LotoService {
         long totalSomme = 0;
         int countPairs = 0;
         int totalNumerosJoues = bets.size() * 5;
+
+        // Initialisation de la map des performances
+        Map<String, UserStatsDto.DayPerformance> dayStats = new LinkedHashMap<>();
+        dayStats.put("MONDAY", new UserStatsDto.DayPerformance("Lundi"));
+        dayStats.put("WEDNESDAY", new UserStatsDto.DayPerformance("Mercredi"));
+        dayStats.put("SATURDAY", new UserStatsDto.DayPerformance("Samedi"));
 
         for (UserBet bet : bets) {
             List<Integer> gr = List.of(bet.getB1(), bet.getB2(), bet.getB3(), bet.getB4(), bet.getB5());
@@ -789,7 +795,24 @@ public class LotoService {
 
             // Chance
             freqChance.merge(bet.getChance(), 1, Integer::sum);
+
+            // Récupération du jour
+            String dayKey = bet.getDateJeu().getDayOfWeek().name();
+
+            // On ne traite que Lundi/Mercredi/Samedi (sécurité)
+            if (dayStats.containsKey(dayKey)) {
+                UserStatsDto.DayPerformance p = dayStats.get(dayKey);
+
+                p.setNbJeux(p.getNbJeux() + 1);
+                p.setDepense(p.getDepense() + bet.getMise());
+
+                if (bet.getGain() != null) {
+                    p.setGains(p.getGains() + bet.getGain());
+                }
+            }
         }
+
+        stats.setPerformanceParJour(dayStats);
 
         // 2. Calculs Moyennes
         stats.setMoyenneSomme(Math.round((double) totalSomme / bets.size()));

@@ -154,6 +154,73 @@
         </div>
     </div>
 
+    <div th:if="${!#lists.isEmpty(aiBets)}" class="card border-0 shadow-sm mb-4 animate-up delay-1">
+        <div class="card-header bg-white py-3 border-bottom-0 d-flex align-items-center justify-content-between">
+            <h5 class="mb-0 fw-bold text-primary">
+                <i class="bi bi-robot me-2"></i>Pronostics de l'IA
+                <small class="text-muted fw-normal ms-2" style="font-size: 0.8rem;">(Générés avant le tirage)</small>
+            </h5>
+            <span class="badge bg-primary bg-opacity-10 text-primary">
+                <span th:text="${aiBets.size()}">5</span> grilles jouées
+            </span>
+        </div>
+        <div class="card-body bg-light rounded-bottom-4">
+            <div class="row g-3">
+                <div class="col-md-6 col-lg-4" th:each="bet, iter : ${aiBets}">
+                    <div class="bg-white p-2 rounded shadow-sm border d-flex justify-content-between align-items-center">
+                        <span class="badge bg-light text-muted border me-2" th:text="'#' + ${iter.count}">#1</span>
+
+                        <div class="d-flex gap-1 align-items-center">
+                            <span class="ai-ball rounded-circle text-center fw-bold"
+                                  th:text="${bet.b1}"
+                                  th:classappend="${#lists.contains(lastDraw.boules, bet.b1)} ? 'bg-success text-white' : 'bg-light text-dark'">
+                            </span>
+                            <span class="ai-ball rounded-circle text-center fw-bold"
+                                  th:text="${bet.b2}"
+                                  th:classappend="${#lists.contains(lastDraw.boules, bet.b2)} ? 'bg-success text-white' : 'bg-light text-dark'">
+                            </span>
+                            <span class="ai-ball rounded-circle text-center fw-bold"
+                                  th:text="${bet.b3}"
+                                  th:classappend="${#lists.contains(lastDraw.boules, bet.b3)} ? 'bg-success text-white' : 'bg-light text-dark'">
+                            </span>
+                            <span class="ai-ball rounded-circle text-center fw-bold"
+                                  th:text="${bet.b4}"
+                                  th:classappend="${#lists.contains(lastDraw.boules, bet.b4)} ? 'bg-success text-white' : 'bg-light text-dark'">
+                            </span>
+                            <span class="ai-ball rounded-circle text-center fw-bold"
+                                  th:text="${bet.b5}"
+                                  th:classappend="${#lists.contains(lastDraw.boules, bet.b5)} ? 'bg-success text-white' : 'bg-light text-dark'">
+                            </span>
+
+                            <div style="width: 1px; height: 20px; background: #dee2e6;" class="mx-1"></div>
+
+                            <span class="ai-ball rounded-circle text-center fw-bold"
+                                  th:text="${bet.chance}"
+                                  th:classappend="${lastDraw.numeroChance == bet.chance} ? 'bg-danger text-white' : 'bg-light text-danger border border-danger border-opacity-25'">
+                            </span>
+                        </div>
+
+                        <i class="bi ms-2"
+                           th:with="matches=${ ( (#lists.contains(lastDraw.boules, bet.b1)?1:0) + (#lists.contains(lastDraw.boules, bet.b2)?1:0) + (#lists.contains(lastDraw.boules, bet.b3)?1:0) + (#lists.contains(lastDraw.boules, bet.b4)?1:0) + (#lists.contains(lastDraw.boules, bet.b5)?1:0) ) }"
+                           th:classappend="${matches >= 3 or (matches >= 2 and lastDraw.numeroChance == bet.chance)} ? 'bi-check-circle-fill text-success' : ( ${matches > 0} ? 'bi-check-circle text-warning' : 'bi-circle text-muted opacity-25' )"
+                           th:title="${matches} + ' bons numéros'">
+                        </i>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <style>
+            .ai-ball {
+                width: 28px;
+                height: 28px;
+                line-height: 28px;
+                font-size: 0.85rem;
+                display: inline-block;
+            }
+        </style>
+    </div>
+
     <div class="alert alert-light border d-flex align-items-center justify-content-center shadow-sm py-2 mb-4 small animate-up" role="alert" id="infoPeriode" style="display: none !important;">
         <i class="bi bi-calendar-range me-2 text-primary"></i>
         <span>Historique : <strong id="nbTirages">0</strong> tirages (<span class="text-primary" id="dateMin">-</span> au <span class="text-primary" id="dateMax">-</span>)</span>
