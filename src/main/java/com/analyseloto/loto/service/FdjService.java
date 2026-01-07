@@ -1,6 +1,7 @@
 package com.analyseloto.loto.service;
 
 import com.analyseloto.loto.dto.TirageManuelDto;
+import com.analyseloto.loto.entity.LotoTirage;
 import com.analyseloto.loto.repository.LotoTirageRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -9,6 +10,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
@@ -18,6 +20,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 
 @Service
 @Slf4j
@@ -35,7 +38,7 @@ public class FdjService {
      * Méthode récupérant automatiquement le dernier tirage du Loto via API
      * @return
      */
-    public boolean recupererDernierTirage() {
+    public Optional<LotoTirage> recupererDernierTirage() {
         log.info("🌍 Appel API FDJ...");
         try {
             RestTemplate restTemplate = new RestTemplate();
@@ -47,20 +50,31 @@ public class FdjService {
                     FDJ_API_URL, HttpMethod.GET, new HttpEntity<>(headers), String.class
             );
 
-            if (!response.getStatusCode().is2xxSuccessful()) return false;
+            if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null) {
+                log.warn("⚠️ API FDJ a répondu avec le statut : {}", response.getStatusCode());
+                return Optional.empty();
+            }
 
             ObjectMapper mapper = new ObjectMapper();
             JsonNode root = mapper.readTree(response.getBody());
 
             // Le JSON est un tableau, on prend le premier élément (le plus récent)
             if (root.isArray() && !root.isEmpty()) {
-                return traiterJsonTirage(root.get(0));
+                LotoTirage tirage = traiterJsonTirage(root.get(0));
+                return Optional.ofNullable(tirage);
+            } else {
+                log.warn("⚠️ Le JSON reçu est valide mais vide ou n'est pas un tableau.");
             }
 
+        } catch (RestClientException e) {
+            // Erreurs Réseau (Timeout, DNS, 404, 500...)
+            log.error("❌ Erreur de communication avec l'API FDJ : {}", e.getMessage());
         } catch (Exception e) {
-            log.error("❌ Erreur API FDJ", e);
+            // Autres erreurs imprévues
+            log.error("❌ Erreur inconnue lors de la récupération FDJ", e);
         }
-        return false;
+
+        return Optional.empty();
     }
 
     /**
@@ -68,7 +82,7 @@ public class FdjService {
      * @param drawNode
      * @return
      */
-    private boolean traiterJsonTirage(JsonNode drawNode) {
+    private LotoTirage traiterJsonTirage(JsonNode drawNode) {
         try {
             // 1. Récupération de la date (ex: ""2026-01-03T20:55:00+01:00"")
             String dateStr = drawNode.get("drawn_at").asText().substring(0, 10);
@@ -77,7 +91,7 @@ public class FdjService {
             // Vérification que le tirage n'existe pas dans la base
             if (tirageRepository.existsByDateTirage(dateTirage)) {
                 log.info("📅 Tirage du {} déjà en base.", dateTirage);
-                return false;
+                return null;
             }
 
             // 2. Extraction des boules et de la chance
@@ -111,7 +125,7 @@ public class FdjService {
             // Validation cohérence des boules
             if (boules.size() < 5 || numeroChance == -1) {
                 log.error("⚠️ Données incomplètes pour le tirage du {}", dateTirage);
-                return false;
+                return null;
             }
 
             // On trie les boules pour être propre (9, 29, 30...)
@@ -128,13 +142,13 @@ public class FdjService {
             dto.setNumeroChance(numeroChance);
 
             // 5. Sauvegarde du tirage
-            lotoService.ajouterTirageManuel(dto);
+            LotoTirage lotoTirage = lotoService.ajouterTirageManuel(dto);
             log.info("✨ SUCCESS ! Tirage importé : {}", dto);
-            return true;
 
+            return lotoTirage;
         } catch (Exception e) {
             log.error("❌ Erreur parsing JSON", e);
-            return false;
+            return null;
         }
     }
 }

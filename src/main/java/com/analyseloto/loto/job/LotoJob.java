@@ -3,8 +3,10 @@ package com.analyseloto.loto.job;
 import com.analyseloto.loto.dto.AstroProfileDto;
 import com.analyseloto.loto.dto.PronosticResultDto;
 import com.analyseloto.loto.entity.JobLog;
+import com.analyseloto.loto.entity.LotoTirage;
 import com.analyseloto.loto.entity.User;
 import com.analyseloto.loto.entity.UserBet;
+import com.analyseloto.loto.enums.JobExecutionStatus;
 import com.analyseloto.loto.repository.UserBetRepository;
 import com.analyseloto.loto.repository.UserRepository;
 import com.analyseloto.loto.service.*;
@@ -16,8 +18,7 @@ import org.springframework.stereotype.Component;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
-import java.util.Locale;
-import java.util.stream.Collectors;
+import java.util.Optional;
 
 @Slf4j
 @Component
@@ -41,11 +42,29 @@ public class LotoJob {
     public void recupererResultatsFdj() {
         log.info("🤖 Job Auto : Vérification FDJ...");
 
-        // Appel de la méthode de récupération
-        boolean newTirage = fdjService.recupererDernierTirage();
+        // Enregistrement début job
+        JobLog jobLog = jobMonitorService.startJob("RECUPERER_DERNIER_TIRAGE");
 
-        if (newTirage) {
+        // Appel de la méthode de récupération
+        Optional<LotoTirage> newTirage = fdjService.recupererDernierTirage();
+
+        if (newTirage.isPresent()) {
             log.info("✅ Base mise à jour avec le dernier tirage !");
+
+            // Récupération de tous les administrateurs
+            List<User> admins = userRepository.findByRole("ADMIN");
+
+            // Envoi email à tous les admins
+            for (User admin : admins) {
+                emailService.sendAdminNotification(admin.getEmail(), newTirage.get());
+                log.info("\uD83D\uDCE7 Notification envoyée à l'admin : {}", admin.getEmail());
+            }
+
+            // Enregistrement log
+            jobMonitorService.endJob(jobLog, JobExecutionStatus.SUCCESS.getCode(), "Récupération dernier tirage officiel terminé.");
+        } else {
+            // Enregistrement log
+            jobMonitorService.endJob(jobLog, JobExecutionStatus.FAILURE.getCode(), "Récupération impossible dernier tirage officiel.");
         }
     }
 
@@ -95,11 +114,11 @@ public class LotoJob {
             }
 
             log.info("✅ 5 Pronostics de référence enregistrés pour le compte {}", aiUser.getEmail());
-            jobMonitorService.endJob(jobLog, "SUCCESS", "5 grilles générées");
+            jobMonitorService.endJob(jobLog, JobExecutionStatus.SUCCESS.getCode(), "5 grilles générées");
 
         } catch (Exception e) {
             log.error("❌ Erreur génération pronostics IA", e);
-            jobMonitorService.endJob(jobLog, "FAILURE", e.getMessage());
+            jobMonitorService.endJob(jobLog, JobExecutionStatus.FAILURE.getCode(), e.getMessage());
         }
     }
 
@@ -125,7 +144,7 @@ public class LotoJob {
 
         // 2. Boucler sur chaque utilisateur
         for (User user : users) {
-            // On saute ceux qui ont désactivé les notifs (si vous avez géré ce champ)
+            // On saute ceux qui ont désactivé les notifs (si vous avez géré ce champ).
             if (!user.isSubscribeToEmails()) continue;
 
             if (user.getBirthDate() == null || user.getZodiacSign() == null || user.getZodiacSign().isEmpty()) {
@@ -154,14 +173,14 @@ public class LotoJob {
                 log.info("✅ Mail envoyé avec succès à : {}", user.getEmail());
 
             } catch (Exception e) {
-                // Le try-catch est dans la boucle pour qu'une erreur sur un user ne bloque pas les autres
-                log.error("❌ Erreur lors de l'envoi pour l'utilisateur " + user.getEmail(), e);
-                jobMonitorService.endJob(jobLog, "FAILURE", "Erreur : " + e.getMessage());
+                // Le try-catch est dans la boucle pour qu'une erreur d'un user ne bloque pas les autres
+                log.error("❌ Erreur lors de l'envoi pour l'utilisateur {}", user.getEmail(), e);
+                jobMonitorService.endJob(jobLog, JobExecutionStatus.FAILURE.getCode(), "Erreur : " + e.getMessage());
                 return;
             }
         }
         // Enregistrement log
-        jobMonitorService.endJob(jobLog, "SUCCESS", "Nettoyage terminé.");
+        jobMonitorService.endJob(jobLog, JobExecutionStatus.SUCCESS.getCode(), "Nettoyage terminé.");
         log.info("🏁 Fin du Job d'envoi massif.");
     }
 
@@ -175,7 +194,7 @@ public class LotoJob {
         LocalDate today = LocalDate.now();
         LocalDate oneWeekAgo = today.minusWeeks(1);
 
-        // Formatage de la période pour le mail (ex: "du 12/05 au 19/05")
+        // Formatage de la période pour le mail (ex : "du 12/05 au 19/05")
         DateTimeFormatter fmt = DateTimeFormatter.ofPattern("dd/MM");
         String periodeStr = "du " + oneWeekAgo.format(fmt) + " au " + today.format(fmt);
 
@@ -210,13 +229,13 @@ public class LotoJob {
                     log.info("📩 Alerte budget envoyée à {} ({} €)", user.getEmail(), totalDepense);
                 } catch (Exception e) {
                     log.error("Erreur envoi mail budget pour {}", user.getEmail(), e);
-                    jobMonitorService.endJob(jobLog, "FAILURE", "Erreur : " + e.getMessage());
+                    jobMonitorService.endJob(jobLog, JobExecutionStatus.FAILURE.getCode(), "Erreur : " + e.getMessage());
                     return;
                 }
             }
         }
         // Enregistrement log
-        jobMonitorService.endJob(jobLog, "SUCCESS", "Alerte budget hebdo terminé.");
+        jobMonitorService.endJob(jobLog, JobExecutionStatus.SUCCESS.getCode(), "Alerte budget hebdo terminé.");
         log.info("🏁 Fin du Coach Budgétaire. {} alertes envoyées.", countAlerts);
     }
 }

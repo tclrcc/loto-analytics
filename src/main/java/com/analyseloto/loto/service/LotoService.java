@@ -424,9 +424,9 @@ public class LotoService {
     }
 
     private String determinerBucketCible(List<Integer> selection, Map<String, List<Integer>> buckets) {
-        long nbHot = selection.stream().filter(n -> buckets.getOrDefault("HOT", List.of()).contains(n)).count();
-        if (nbHot < 2) return "HOT";
-        return "NEUTRAL";
+        long nbHot = selection.stream().filter(n -> buckets.getOrDefault(Constantes.BUCKET_HOT, List.of()).contains(n)).count();
+        if (nbHot < 2) return Constantes.BUCKET_HOT;
+        return Constantes.BUCKET_NEUTRAL;
     }
 
     // --- HELPERS EXISTANTS ---
@@ -449,31 +449,6 @@ public class LotoService {
             }
         }
         return matrix;
-    }
-
-    /**
-     * Méthode qui calcule les gains pour TOUS les joueurs sur ce tirage
-     * et envoie un mail aux gagnants.
-     */
-    public void verifierGainsEtNotifier(LotoTirage lotoTirage) {
-        log.info("📢 Vérification des gains pour le tirage du {}", lotoTirage.getDateTirage());
-
-        // 1. Trouver toutes les grilles jouées pour cette date
-        List<UserBet> parisDuJour = betRepository.findByDateJeu(lotoTirage.getDateTirage());
-
-        for (UserBet bet : parisDuJour) {
-            // 2. Calculer le gain
-            double gain = calculerGain(bet, lotoTirage);
-
-            // 3. Mettre à jour en base
-            bet.setGain(gain);
-            betRepository.save(bet);
-
-            // 4. Envoyer un mail (Seulement si gain > 0 ou si vous voulez notifier tout le monde)
-            if (gain > 0) {
-                envoyerMailGain(bet.getUser(), gain, lotoTirage.getDateTirage());
-            }
-        }
     }
 
     private double calculerGain(UserBet bet, LotoTirage t) {
@@ -521,11 +496,11 @@ public class LotoService {
         list.sort((e1, e2) -> e2.getValue().compareTo(e1.getValue()));
         Map<String, List<Integer>> buckets = new HashMap<>();
         if (list.size() >= 24) {
-            buckets.put("HOT", list.stream().limit(12).map(Map.Entry::getKey).toList());
-            buckets.put("COLD", list.stream().skip(list.size() - 12).map(Map.Entry::getKey).toList());
-            buckets.put("NEUTRAL", list.stream().skip(12).limit(list.size() - 24).map(Map.Entry::getKey).toList());
+            buckets.put(Constantes.BUCKET_HOT, list.stream().limit(12).map(Map.Entry::getKey).toList());
+            buckets.put(Constantes.BUCKET_COLD, list.stream().skip(list.size() - 12).map(Map.Entry::getKey).toList());
+            buckets.put(Constantes.BUCKET_NEUTRAL, list.stream().skip(12).limit(list.size() - 24).map(Map.Entry::getKey).toList());
         } else {
-            buckets.put("HOT", new ArrayList<>()); buckets.put("COLD", new ArrayList<>()); buckets.put("NEUTRAL", new ArrayList<>());
+            buckets.put(Constantes.BUCKET_HOT, new ArrayList<>()); buckets.put(Constantes.BUCKET_COLD, new ArrayList<>()); buckets.put(Constantes.BUCKET_NEUTRAL, new ArrayList<>());
         }
         return buckets;
     }
@@ -681,19 +656,43 @@ public class LotoService {
         group.setRatio(Math.round(ratio * 100.0) / 100.0);
     }
 
-    // --- IMPORT & AJOUT MANUEL (Inchangés) ---
+    /**
+     * Import du fichier CSV officiel de FDJ recensant tous les tirages
+     * @param file fichier
+     * @throws IOException
+     */
     public void importCsv(MultipartFile file) throws IOException {
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(file.getInputStream()))) {
+            // Récupération des lignes
             List<String> lines = reader.lines().toList();
+            // Déclaration des formats de dates
             DateTimeFormatter fmt1 = DateTimeFormatter.ofPattern(Constantes.FORMAT_DATE_STANDARD);
             DateTimeFormatter fmt2 = DateTimeFormatter.ofPattern(Constantes.FORMAT_DATE_STANDARD_INVERSE);
+
+            // On parcourt toutes les lignes du fichier
             for (String line : lines) {
                 if (line.trim().isEmpty() || line.startsWith("annee") || line.startsWith("Tirage")) continue;
                 try {
-                    String[] row; LocalDate date; int b1,b2,b3,b4,b5,c;
-                    if (line.contains(";")) {
-                        row = line.split(";"); if(row.length<10) continue;
-                        try{date=LocalDate.parse(row[2],fmt1);}catch(Exception e){continue;}
+                    String[] row;
+                    LocalDate date;
+                    int b1;
+                    int b2;
+                    int b3;
+                    int b4;
+                    int b5;
+                    int c;
+
+                    if (line.contains(Constantes.DELIMITEUR_POINT_VIRGULE)) {
+                        // Ligne actuelle
+                        row = line.split(Constantes.DELIMITEUR_POINT_VIRGULE);
+                        if(row.length<10) continue;
+
+                        try{
+                            date=LocalDate.parse(row[2],fmt1);
+                        } catch(Exception e) {
+                            continue;
+                        }
+                        // Récupération des boules et du numéro chance
                         b1=Integer.parseInt(row[4]); b2=Integer.parseInt(row[5]); b3=Integer.parseInt(row[6]);
                         b4=Integer.parseInt(row[7]); b5=Integer.parseInt(row[8]); c=Integer.parseInt(row[9]);
                     } else {
@@ -702,27 +701,49 @@ public class LotoService {
                         b1=Integer.parseInt(row[1]); b2=Integer.parseInt(row[2]); b3=Integer.parseInt(row[3]);
                         b4=Integer.parseInt(row[4]); b5=Integer.parseInt(row[5]); c=Integer.parseInt(row[7]);
                     }
+
+                    // Vérification non-existence avant insertion
                     if (!repository.existsByDateTirage(date)) {
-                        LotoTirage t = new LotoTirage(); t.setDateTirage(date); t.setBoule1(b1); t.setBoule2(b2); t.setBoule3(b3); t.setBoule4(b4); t.setBoule5(b5); t.setNumeroChance(c);
+                        // Création et sauvegarde du tirage
+                        LotoTirage t = new LotoTirage();
+                        t.setDateTirage(date);
+                        t.setBoule1(b1);
+                        t.setBoule2(b2);
+                        t.setBoule3(b3);
+                        t.setBoule4(b4);
+                        t.setBoule5(b5);
+                        t.setNumeroChance(c);
+
                         repository.save(t);
                     }
-                } catch(Exception e) { log.error("Erreur ligne: {}", line); }
+                } catch(Exception e) {
+                    log.error("Erreur ligne: {}", line);
+                }
             }
         }
     }
 
-    public void ajouterTirageManuel(TirageManuelDto dto) {
+    /**
+     * Ajout d'un tirage via un administrateur (mode manuel)
+     * @param dto
+     * @return
+     */
+    public LotoTirage ajouterTirageManuel(TirageManuelDto dto) {
         if (repository.existsByDateTirage(dto.getDateTirage())) throw new RuntimeException("Existe déjà");
         LotoTirage t = new LotoTirage(); t.setDateTirage(dto.getDateTirage());
         t.setBoule1(dto.getBoule1()); t.setBoule2(dto.getBoule2()); t.setBoule3(dto.getBoule3()); t.setBoule4(dto.getBoule4()); t.setBoule5(dto.getBoule5()); t.setNumeroChance(dto.getNumeroChance());
         repository.save(t);
 
-        // On lance la vérification des gains
-        // TODO : modifier méthode calcul des gains
-//        verifierGainsEtNotifier(t);
+        return t;
     }
 
-    @Data public static class StatPoint { private int numero; private int frequence; private int ecart; private boolean isChance; }
+    @Data public static class StatPoint {
+        private int numero;
+        private int frequence;
+        private int ecart;
+        private boolean isChance;
+    }
+
     public StatsReponse getStats(String jourFiltre) {
         List<LotoTirage> all = repository.findAll();
         if (jourFiltre != null && !jourFiltre.isEmpty()) {
@@ -829,13 +850,13 @@ public class LotoService {
                 .sorted((e1, e2) -> e2.getValue().compareTo(e1.getValue())) // Tri décroissant
                 .limit(5)
                 .map(e -> new UserStatsDto.StatNumero(e.getKey(), e.getValue()))
-                .collect(Collectors.toList()));
+                .toList());
 
         stats.setTopChance(freqChance.entrySet().stream()
                 .sorted((e1, e2) -> e2.getValue().compareTo(e1.getValue()))
                 .limit(3)
                 .map(e -> new UserStatsDto.StatNumero(e.getKey(), e.getValue()))
-                .collect(Collectors.toList()));
+                .toList());
 
         // 4. Numéros jamais joués (Optionnel mais sympa)
         List<Integer> jamais = new ArrayList<>();

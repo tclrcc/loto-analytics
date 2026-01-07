@@ -3,6 +3,7 @@ package com.analyseloto.loto.job;
 import com.analyseloto.loto.entity.ConfirmationToken;
 import com.analyseloto.loto.entity.JobLog;
 import com.analyseloto.loto.entity.User;
+import com.analyseloto.loto.enums.JobExecutionStatus;
 import com.analyseloto.loto.repository.ConfirmationTokenRepository;
 import com.analyseloto.loto.repository.PasswordResetTokenRepository;
 import com.analyseloto.loto.repository.UserRepository;
@@ -20,9 +21,11 @@ import java.util.List;
 @Component
 @RequiredArgsConstructor
 public class UserCleanupJob {
+    // Repositories
     private final ConfirmationTokenRepository tokenRepository;
     private final PasswordResetTokenRepository passwordResetTokenRepository;
     private final UserRepository userRepository;
+    // Services
     private final JobMonitorService jobMonitorService;
 
     /**
@@ -42,7 +45,7 @@ public class UserCleanupJob {
         if (tokensExpires.isEmpty()) {
             log.info("Aucun utilisateur à supprimer aujourd'hui");
             // Enregistrement log
-            jobMonitorService.endJob(jobLog, "SUCCESS", "Suppression comptes inactifs terminé.");
+            jobMonitorService.endJob(jobLog, JobExecutionStatus.SUCCESS.getCode(), "Suppression comptes inactifs terminé.");
             return;
         }
 
@@ -62,7 +65,7 @@ public class UserCleanupJob {
             }
         }
         // Enregistrement log
-        jobMonitorService.endJob(jobLog, "SUCCESS", "Suppression comptes inactifs terminé.");
+        jobMonitorService.endJob(jobLog, JobExecutionStatus.SUCCESS.getCode(), "Suppression comptes inactifs terminé.");
         log.info("✅ Nettoyage terminé. {} comptes supprimés.", count);
     }
 
@@ -82,7 +85,7 @@ public class UserCleanupJob {
         log.info("Fin du nettoyage des tokens de renouvellement de mot de passe expirés.");
 
         // Enregistrement log
-        jobMonitorService.endJob(jobLog, "SUCCESS", "Nettoyage BDD terminé.");
+        jobMonitorService.endJob(jobLog, JobExecutionStatus.SUCCESS.getCode(), "Nettoyage BDD terminé.");
 
         log.info("🧹 Base de données nettoyée.");
     }

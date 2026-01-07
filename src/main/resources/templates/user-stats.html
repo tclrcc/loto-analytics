@@ -70,11 +70,11 @@
                             <div class="row text-center small">
                                 <div class="col-6 border-end">
                                     <span class="text-muted d-block" style="font-size: 0.65rem;">DÉPENSÉ</span>
-                                    <span class="fw-bold text-dark" th:text="${#numbers.formatDecimal(entry.value.depense, 1, 0) + '€'}">0€</span>
+                                    <span class="fw-bold text-dark" th:text="${#numbers.formatDecimal(entry.value.depense, 1, 2) + '€'}">0€</span>
                                 </div>
                                 <div class="col-6">
                                     <span class="text-muted d-block" style="font-size: 0.65rem;">GAGNÉ</span>
-                                    <span class="fw-bold text-dark" th:text="${#numbers.formatDecimal(entry.value.gains, 1, 0) + '€'}">0€</span>
+                                    <span class="fw-bold text-dark" th:text="${#numbers.formatDecimal(entry.value.gains, 1, 2) + '€'}">0€</span>
                                 </div>
                             </div>
                         </div>

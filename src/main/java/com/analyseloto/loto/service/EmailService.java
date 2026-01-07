@@ -1,6 +1,7 @@
 package com.analyseloto.loto.service;
 
 import com.analyseloto.loto.dto.PronosticResultDto;
+import com.analyseloto.loto.entity.LotoTirage;
 import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeMessage;
 import lombok.RequiredArgsConstructor;
@@ -265,5 +266,36 @@ public class EmailService {
 
         // Envoi mail
         sendHtmlEmail(to, subject, html.toString());
+    }
+
+    /**
+     * Envoi notifications aux admins après récupération du dernier tirage
+     * @param to destinataire
+     * @param tirage dernier tirage
+     */
+    public void sendAdminNotification(String to, LotoTirage tirage) {
+        // Objet du mail
+        String subject = "🤖 [JOB] Tirage récupéré : " + tirage.getDateTirage();
+
+        // Contenu du mail
+        String html = "<!DOCTYPE html><html><body style='font-family: monospace; background-color: #1e1e1e; color: #d4d4d4; padding: 20px;'>"
+
+                // Cadre "Terminal"
+                + "<div style='max-width: 600px; margin: 0 auto; border: 1px solid #333; border-radius: 5px; background-color: #252526; overflow: hidden;'>"
+
+                // Header
+                + "<div style='background-color: #333; padding: 10px; color: #fff; font-weight: bold;'>🖥️ Loto Master AI - System Report</div>"
+
+                // Corps Log
+                + "<div style='padding: 20px;'>" + "<p style='color: #4ec9b0;'>INFO: Job 'recupererResultatsFdj' executed successfully.</p>"
+                + "<p>Date du tirage : <span style='color: #ce9178;'>" + tirage.getDateTirage() + "</span></p>"
+
+                // Affichage des Boules
+                + "<p>Résultat : <br>" + "<span style='color: #569cd6; font-weight: bold;'>[" + tirage.getBoule1() + ", " + tirage.getBoule2() + ", "
+                + tirage.getBoule3() + ", " + tirage.getBoule4() + ", " + tirage.getBoule5() + "]</span>"
+                + " Chance: <span style='color: #d16969; font-weight: bold;'>[" + tirage.getNumeroChance() + "]</span>" + "</p>"
+                + "<p style='color: #6a9955;'>// Database updated successfully.</p>" + "</div>" + "</div></body></html>";
+
+        sendHtmlEmail(to, subject, html);
     }
 }

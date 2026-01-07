@@ -19,7 +19,7 @@ public class DataInitializer implements CommandLineRunner {
     private final PasswordEncoder passwordEncoder;
 
     @Override
-    public void run(String... args) throws Exception {
+    public void run(String... args) {
         log.info("🚀 Démarrage de l'initialisation des données...");
         creerUtilisateurIA();
         log.info("✅ Initialisation terminée.");
