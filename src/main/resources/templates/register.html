@@ -10,14 +10,38 @@
     <div class="card shadow p-4" style="width: 500px;">
         <h3 class="text-center text-success mb-4">📝 Créer un compte</h3>
 
-        <form action="/register" method="post">
+        <form action="/register" method="post" th:object="${userDto}">
             <div class="mb-3">
-                <label>Email</label>
-                <input type="email" name="email" class="form-control" required>
+                <label class="form-label fw-bold">Pseudo</label>
+                <div class="input-group has-validation"> <span class="input-group-text"><i class="bi bi-person-badge"></i></span>
+                    <input type="text" th:field="*{username}" id="usernameInput" class="form-control" required autocomplete="off">
+
+                    <div class="valid-feedback">
+                        Ce pseudo est disponible !
+                    </div>
+                    <div class="invalid-feedback" id="usernameError">
+                        Ce pseudo est déjà pris.
+                    </div>
+                </div>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label fw-bold">Email</label>
+                <div class="input-group has-validation">
+                    <span class="input-group-text"><i class="bi bi-envelope"></i></span>
+                    <input type="email" th:field="*{email}" id="emailInput" class="form-control" required autocomplete="off">
+
+                    <div class="valid-feedback">
+                        Email valide.
+                    </div>
+                    <div class="invalid-feedback" id="emailError">
+                        Cet email est déjà utilisé.
+                    </div>
+                </div>
             </div>
             <div class="mb-3">
                 <label>Mot de passe</label>
-                <input type="password" name="password" class="form-control" required>
+                <input type="password" th:field="*{password}" class="form-control" required>
             </div>
 
             <hr>
@@ -26,26 +50,26 @@
 
             <div class="mb-2">
                 <label class="small">Prénom</label>
-                <input type="text" name="firstName" class="form-control">
+                <input type="text" th:field="*{firstName}" class="form-control">
             </div>
             <div class="row g-2 mb-2">
                 <div class="col-6">
                     <label class="small">Date Naissance</label>
-                    <input type="date" name="birthDate" class="form-control">
+                    <input type="date" th:field="*{birthDate}" class="form-control">
                 </div>
                 <div class="col-6">
                     <label class="small">Heure</label>
-                    <input type="time" name="birthTime" class="form-control">
+                    <input type="time" th:field="*{birthTime}" class="form-control">
                 </div>
             </div>
             <div class="row g-2 mb-3">
                 <div class="col-6">
                     <label class="small">Ville</label>
-                    <input type="text" name="birthCity" class="form-control">
+                    <input type="text" th:field="*{birthCity}" class="form-control">
                 </div>
                 <div class="col-6">
                     <label class="small">Signe</label>
-                    <select name="zodiacSign" class="form-select">
+                    <select th:field="*{zodiacSign}" class="form-select">
                         <option value="LION">♌ Lion</option>
                         <option value="BELIER">♈ Bélier</option>
                         <option value="TAUREAU">♉ Taureau</option>
@@ -69,5 +93,9 @@
         </div>
     </div>
 </div>
+
+<!-- Import scripts JS -->
+<script th:src="@{/js/register-validation.js}"></script>
+
 </body>
 </html>

@@ -34,6 +34,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         // Pages publiques
                         .requestMatchers("/login", "/register", "/confirm", "/forgot-password", "/reset-password", "/css/**", "/js/**", "/images/**").permitAll()
+                        .requestMatchers("/api/validation/**").permitAll()
                         // Pages admin
                         .requestMatchers("/admin/**", "/api/loto/import", "/api/loto/add-result").hasRole("ADMIN")
                         .anyRequest().authenticated()
@@ -75,7 +76,7 @@ public class SecurityConfig {
      */
     @Bean
     public UserDetailsService userDetailsService(UserRepository userRepo) {
-        return email -> userRepo.findByEmail(email)
+        return input -> userRepo.findByEmailOrUsername(input, input)
                 .map(u -> org.springframework.security.core.userdetails.User.builder()
                         .username(u.getEmail())
                         .password(u.getPassword())

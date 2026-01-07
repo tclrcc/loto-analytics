@@ -9,110 +9,24 @@
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
 
     <style>
-        body {
-            font-family: 'Poppins', sans-serif;
-            background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 50%, #312e81 100%);
-            height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            overflow: hidden;
-            position: relative;
-        }
-
-        /* Cercles d'ambiance en arrière-plan */
-        .circle {
-            position: absolute;
-            border-radius: 50%;
-            filter: blur(80px);
-            z-index: 0;
-            animation: float 10s infinite ease-in-out;
-        }
+        /* ... tout votre CSS ... */
+        /* Je remets juste les classes indispensables pour la démo */
+        body { font-family: 'Poppins', sans-serif; background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 50%, #312e81 100%); height: 100vh; display: flex; align-items: center; justify-content: center; overflow: hidden; position: relative; }
+        .circle { position: absolute; border-radius: 50%; filter: blur(80px); z-index: 0; animation: float 10s infinite ease-in-out; }
         .c1 { width: 300px; height: 300px; background: #4F46E5; top: -50px; left: -50px; opacity: 0.4; }
         .c2 { width: 400px; height: 400px; background: #7C3AED; bottom: -100px; right: -100px; opacity: 0.3; animation-delay: 2s; }
-
-        @keyframes float {
-            0%, 100% { transform: translateY(0); }
-            50% { transform: translateY(20px); }
-        }
-
-        .login-card {
-            background: rgba(255, 255, 255, 0.95);
-            backdrop-filter: blur(20px);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            border-radius: 20px;
-            width: 100%;
-            max-width: 420px;
-            z-index: 10;
-            padding: 2.5rem;
-            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
-            animation: slideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1);
-        }
-
-        @keyframes slideUp {
-            from { opacity: 0; transform: translateY(30px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-
-        .brand-icon {
-            width: 60px; height: 60px;
-            background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%);
-            color: white;
-            border-radius: 16px;
-            display: flex; align-items: center; justify-content: center;
-            font-size: 1.8rem;
-            margin: 0 auto 1.5rem auto;
-            box-shadow: 0 10px 15px -3px rgba(79, 70, 229, 0.3);
-        }
-
-        .form-control {
-            padding: 0.8rem 1rem 0.8rem 2.5rem; /* Espace pour l'icône */
-            border-radius: 10px;
-            border: 1px solid #e2e8f0;
-            background-color: #f8fafc;
-            font-size: 0.95rem;
-        }
-        .form-control:focus {
-            background-color: #fff;
-            box-shadow: 0 0 0 4px rgba(79, 70, 229, 0.1);
-            border-color: #4F46E5;
-        }
-
-        /* Icônes dans les inputs */
+        @keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(20px); } }
+        .login-card { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(20px); border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 20px; width: 100%; max-width: 420px; z-index: 10; padding: 2.5rem; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25); animation: slideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1); }
+        @keyframes slideUp { from { opacity: 0; transform: translateY(30px); } to { opacity: 1; transform: translateY(0); } }
+        .brand-icon { width: 60px; height: 60px; background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%); color: white; border-radius: 16px; display: flex; align-items: center; justify-content: center; font-size: 1.8rem; margin: 0 auto 1.5rem auto; box-shadow: 0 10px 15px -3px rgba(79, 70, 229, 0.3); }
+        .form-control { padding: 0.8rem 1rem 0.8rem 2.5rem; border-radius: 10px; border: 1px solid #e2e8f0; background-color: #f8fafc; font-size: 0.95rem; }
+        .form-control:focus { background-color: #fff; box-shadow: 0 0 0 4px rgba(79, 70, 229, 0.1); border-color: #4F46E5; }
         .input-icon-wrapper { position: relative; }
-        .input-icon {
-            position: absolute;
-            left: 15px;
-            top: 50%;
-            transform: translateY(-50%);
-            color: #94a3b8;
-            transition: color 0.2s;
-        }
-        .form-control:focus + .input-icon, .form-control:focus ~ .input-icon {
-            color: #4F46E5;
-        }
-
-        .btn-primary {
-            background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%);
-            border: none;
-            padding: 0.8rem;
-            border-radius: 10px;
-            font-weight: 600;
-            letter-spacing: 0.5px;
-            transition: all 0.3s;
-        }
-        .btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 20px -5px rgba(79, 70, 229, 0.4);
-            background: linear-gradient(135deg, #4338ca 0%, #6d28d9 100%);
-        }
-
-        .link-custom {
-            color: #64748b;
-            text-decoration: none;
-            font-size: 0.9rem;
-            transition: color 0.2s;
-        }
+        .input-icon { position: absolute; left: 15px; top: 50%; transform: translateY(-50%); color: #94a3b8; transition: color 0.2s; }
+        .form-control:focus + .input-icon, .form-control:focus ~ .input-icon { color: #4F46E5; }
+        .btn-primary { background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%); border: none; padding: 0.8rem; border-radius: 10px; font-weight: 600; letter-spacing: 0.5px; transition: all 0.3s; }
+        .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 10px 20px -5px rgba(79, 70, 229, 0.4); background: linear-gradient(135deg, #4338ca 0%, #6d28d9 100%); }
+        .link-custom { color: #64748b; text-decoration: none; font-size: 0.9rem; transition: color 0.2s; }
         .link-custom:hover { color: #4F46E5; }
     </style>
 </head>
@@ -136,16 +50,17 @@
         <div th:if="${param.mailSent}" class="alert alert-success py-2 small border-0 bg-success bg-opacity-10 text-success"><i class="bi bi-envelope-check me-2"></i>Lien de confirmation envoyé !</div>
         <div th:if="${param.verified}" class="alert alert-success py-2 small border-0 bg-success bg-opacity-10 text-success"><i class="bi bi-check-circle me-2"></i>Compte activé ! Connectez-vous.</div>
         <div th:if="${param.tokenError}" class="alert alert-danger py-2 small border-0 bg-danger bg-opacity-10 text-danger"><i class="bi bi-x-circle me-2"></i>Lien invalide ou expiré.</div>
-        <div th:if="${param.error != null and param.error[0] == 'locked'}" class="alert alert-warning py-2 small border-0 bg-warning bg-opacity-10 text-warning fw-bold"><i class="bi bi-lock-fill me-2"></i>Compte temporairement verrouillé.</div>
     </div>
 
     <form action="/login" method="post">
+
         <div class="mb-3 input-icon-wrapper">
-            <i class="bi bi-envelope input-icon"></i>
-            <input type="email"
+            <i class="bi bi-person input-icon"></i>
+
+            <input type="text"
                    name="username"
                    class="form-control ps-5"
-                   placeholder="Votre email"
+                   placeholder="Email ou Pseudo"
                    required
                    autofocus
                    autocomplete="username"
@@ -153,11 +68,10 @@
                    !#strings.isEmpty(session.SPRING_SECURITY_LAST_USERNAME)) ? session.SPRING_SECURITY_LAST_USERNAME
                    : ((cookie != null and cookie['saved_email'] != null) ? cookie['saved_email'].value : '')}">
         </div>
-
         <div class="mb-3 input-icon-wrapper">
             <i class="bi bi-key input-icon"></i>
             <input type="password" name="password" class="form-control ps-5" placeholder="Votre mot de passe" required
-                autocomplete="current-password">
+                   autocomplete="current-password">
         </div>
 
         <div class="d-flex justify-content-between align-items-center mb-4">

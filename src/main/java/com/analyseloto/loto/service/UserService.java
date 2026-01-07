@@ -1,5 +1,6 @@
 package com.analyseloto.loto.service;
 
+import com.analyseloto.loto.dto.UserRegistrationDto;
 import com.analyseloto.loto.entity.ConfirmationToken;
 import com.analyseloto.loto.entity.User;
 import lombok.RequiredArgsConstructor;
@@ -20,35 +21,32 @@ public class UserService {
 
     /**
      * Création d'un nouvel utilisateur
-     * @param email email
-     * @param password mot de passe
-     * @param firstName prénom
-     * @param birthDate date de naissance
-     * @param birthTime heure de naissance
-     * @param birthCity lieu de naissance
-     * @param zodiacSign signe astrologique
+     * @param dto données du formulaire d'inscription
      * @return utilisateur
      */
-    public User createNewUser(String email, String password, String firstName, LocalDate birthDate,
-                              String birthTime, String birthCity, String zodiacSign) {
+    public User createNewUser(UserRegistrationDto dto) {
         User user = new User();
-        user.setEmail(email);
+        user.setUsername(dto.getUsername());
+        user.setEmail(dto.getEmail());
         // Cryptage du mot de passe
-        user.setPassword(passwordEncoder.encode(password));
+        user.setPassword(passwordEncoder.encode(dto.getPassword()));
         // Inactif par défaut
         user.setEnabled(false);
         // Rôle USER par défaut
         user.setRole("USER");
 
+        String firstName = dto.getFirstName();
         user.setFirstName((firstName != null && !firstName.isEmpty()) ? firstName : "Joueur");
+        LocalDate birthDate = dto.getBirthDate();
         if (birthDate != null) {
             user.setBirthDate(birthDate);
         }
+        String birthTime = dto.getBirthTime();
         if (birthTime != null && !birthTime.isEmpty()) {
             user.setBirthTime(birthTime);
         }
-        user.setBirthCity(birthCity);
-        user.setZodiacSign(zodiacSign);
+        user.setBirthCity(dto.getBirthCity());
+        user.setZodiacSign(dto.getZodiacSign());
 
         return user;
     }

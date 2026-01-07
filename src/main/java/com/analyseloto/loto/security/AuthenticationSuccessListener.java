@@ -1,6 +1,5 @@
 package com.analyseloto.loto.security;
 
-import com.analyseloto.loto.entity.User;
 import com.analyseloto.loto.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationListener;

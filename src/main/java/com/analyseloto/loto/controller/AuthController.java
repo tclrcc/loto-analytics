@@ -1,5 +1,6 @@
 package com.analyseloto.loto.controller;
 
+import com.analyseloto.loto.dto.UserRegistrationDto;
 import com.analyseloto.loto.entity.ConfirmationToken;
 import com.analyseloto.loto.entity.User;
 import com.analyseloto.loto.repository.ConfirmationTokenRepository;
@@ -10,7 +11,9 @@ import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Controller;
+import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 
@@ -45,34 +48,30 @@ public class AuthController {
      * @return
      */
     @GetMapping("/register")
-    public String registerPage() { return "register"; }
+    public String registerPage(Model model) {
+        model.addAttribute("userDto", new UserRegistrationDto());
+        return "register";
+    }
 
     /**
      * Action création nouvel utilisateur
-     * @param email email
-     * @param password mot de passe
-     * @param firstName prénom
-     * @param birthDate date de naissance
-     * @param birthTime heure de naissance
-     * @param birthCity ville de naissance
-     * @param zodiacSign signe astrologique
+     * @param dto données du formulaire
      * @return
      */
     @PostMapping("/register")
-    public String registerUser(@RequestParam String email,
-                               @RequestParam String password,
-                               @RequestParam(required = false) String firstName,
-                               @RequestParam(required = false) LocalDate birthDate,
-                               @RequestParam(required = false) String birthTime,
-                               @RequestParam(required = false) String birthCity,
-                               @RequestParam(required = false) String zodiacSign) {
+    public String registerUser(@ModelAttribute("userDto") UserRegistrationDto dto) {
         // On ne crée pas un compte à un email déjà existant
-        if (userRepository.findByEmail(email).isPresent()) {
+        if (userRepository.findByEmail(dto.getEmail()).isPresent()) {
             return "redirect:/register?error";
         }
 
+        // Le pseudo doit être unique
+        if (userRepository.existsByUsername(dto.getUsername())) {
+            return "redirect:/register?errorUsername";
+        }
+
         // Création utilisateur
-        User user = userService.createNewUser(email, password, firstName, birthDate, birthTime, birthCity, zodiacSign);
+        User user = userService.createNewUser(dto);
         // Enregistrement de l'utilisateur
         userRepository.save(user);
 
@@ -83,7 +82,7 @@ public class AuthController {
 
         // Envoi Email avec le token
         String link = baseUrl + "/confirm?token=" + confirmationToken.getToken();
-        emailService.sendConfirmationEmail(email, firstName, link);
+        emailService.sendConfirmationEmail(user.getEmail(), user.getFirstName(), link);
 
         // Redirection vers login avec message spécial
         return "redirect:/login?mailSent";
