@@ -9,7 +9,8 @@ WORKDIR /app
 
 RUN apt-get update \
  && apt-get install -y ca-certificates openssl \
- && update-ca-certificates
+ && update-ca-certificates \
+ && chmod 644 $JAVA_HOME/lib/security/cacerts
 
 COPY --from=build /app/target/*.jar app.jar
 
