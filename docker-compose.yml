@@ -1,41 +1,52 @@
 services:
-  db:
+  loto_db: # Nom du service cohérent avec le conteneur
     image: postgres:15
     container_name: loto_db
     environment:
       POSTGRES_DB: lotodb
       POSTGRES_USER: loto
       POSTGRES_PASSWORD: ${DB_PASSWORD}
-      TZ: Europe/Paris  # Heure BDD
+      TZ: Europe/Paris
     volumes:
       - pgdata:/var/lib/postgresql/data
     restart: always
     ports:
+      # Garde 5433 en externe pour DBeaver (évite le conflit avec le Postgres local du VPS)
       - "127.0.0.1:5433:5432"
 
-  app:
+  loto_app:
     build: .
     container_name: loto_app
     ports:
-      - "8081:8080"
+      - "8081:8080" # Ton site sera sur http://51.254.133.205:8081
     depends_on:
-      - db
+      - loto_db
     environment:
-      # Timezone
+      # Timezone pour que les tirages et les logs soient à l'heure française
       TZ: Europe/Paris
 
-      # Clé de sécurité (Référence au fichier .env)
-      LOTO_SECURITY_REMEMBER_KEY: ${REMEMBER_KEY}
-
-      # Connexion BDD
-      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/lotodb
+      # Configuration Spring Boot (écrase le application.properties)
+      # On utilise 'loto_db' (le nom du service défini plus haut)
+      SPRING_DATASOURCE_URL: jdbc:postgresql://loto_db:5432/lotodb
       SPRING_DATASOURCE_USERNAME: loto
       SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
 
-      # Email
+      # Forcer le port interne de l'app à 8080 (pour matcher le mappage ports)
+      PORT: 8080
+
+      # Sécurité et Emails
+      LOTO_SECURITY_REMEMBER_KEY: ${REMEMBER_KEY}
       SPRING_MAIL_USERNAME: tonycoloricchio01@gmail.com
       SPRING_MAIL_PASSWORD: ${MAIL_PASSWORD}
-      APP_BASE_URL: http://51.254.133.205
+
+      # URL pour les liens dans les emails
+      APP_BASE_URL: http://51.254.133.205:8081
+
+      # Indiquer à l'IA quel est le destinataire par défaut
+      APP_LOTO_RECIPIENT: tonycoloricchio01@gmail.com
+
+      # Configuration FDJ
+      FDJ_API_URL: https://www.fdj.fr/api/service-draws/v1/games/loto/draws
     restart: always
 
 volumes:
