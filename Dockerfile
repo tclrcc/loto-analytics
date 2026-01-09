@@ -4,14 +4,14 @@ COPY pom.xml .
 COPY src ./src
 RUN mvn clean package -DskipTests
 
-FROM eclipse-temurin:17-jre-jammy
+FROM eclipse-temurin:17-jdk-jammy
 WORKDIR /app
 
 RUN apt-get update \
- && apt-get install -y ca-certificates ca-certificates-java openssl \
+ && apt-get install -y ca-certificates openssl \
  && update-ca-certificates
 
 COPY --from=build /app/target/*.jar app.jar
-EXPOSE 8080
 
-ENTRYPOINT ["java","-Djavax.net.ssl.trustStore=/etc/ssl/certs/java/cacerts","-Djavax.net.ssl.trustStorePassword=changeit","-jar","app.jar"]
+EXPOSE 8080
+ENTRYPOINT ["java","-jar","app.jar"]
