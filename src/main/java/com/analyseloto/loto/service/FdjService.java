@@ -44,6 +44,11 @@ public class FdjService {
      * @return
      */
     public Optional<LotoTirage> recupererDernierTirage(boolean manuel) {
+        log.info("🔍 DEBUG OS: {}, Arch: {}, Java: {}",
+                System.getProperty("os.name"),
+                System.getProperty("os.arch"),
+                System.getProperty("java.version"));
+
         log.info("🌍 Appel API FDJ...");
         try {
             RestTemplate restTemplate = new RestTemplate();
