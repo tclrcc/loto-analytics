@@ -16,4 +16,12 @@ RUN apt-get update && \
 
 COPY --from=build /app/target/*.jar app.jar
 EXPOSE 8080
-ENTRYPOINT ["java", "-Djava.security.egd=file:/dev/./urandom", "-jar", "app.jar"]
+ENTRYPOINT [
+  "java",
+  "-Djava.security.egd=file:/dev/./urandom",
+  "-Djavax.net.ssl.trustStore=/etc/ssl/certs/java/cacerts",
+  "-Djavax.net.ssl.trustStorePassword=changeit",
+  "-jar",
+  "app.jar"
+]
+
