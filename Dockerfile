@@ -7,12 +7,11 @@ RUN mvn clean package -DskipTests
 FROM eclipse-temurin:17-jre-jammy
 WORKDIR /app
 
-RUN apt-get update && \
-    apt-get install -y ca-certificates ca-certificates-java && \
-    update-ca-certificates && \
-    rm -rf /var/lib/apt/lists/*
+RUN apt-get update \
+ && apt-get install -y ca-certificates ca-certificates-java openssl \
+ && update-ca-certificates
 
 COPY --from=build /app/target/*.jar app.jar
 EXPOSE 8080
 
-ENTRYPOINT ["java","-Djava.security.egd=file:/dev/./urandom","-jar","app.jar"]
+ENTRYPOINT ["java","-Djavax.net.ssl.trustStore=/etc/ssl/certs/java/cacerts","-Djavax.net.ssl.trustStorePassword=changeit","-jar","app.jar"]
