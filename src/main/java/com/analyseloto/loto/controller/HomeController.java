@@ -69,6 +69,30 @@ public class HomeController {
                 // On récupère ses jeux (pronostics) pour la date du dernier tirage
                 List<UserBet> aiBets = betRepository.findByUserAndDateJeu(aiUser, tirage.getDateTirage());
                 model.addAttribute("aiBets", aiBets);
+
+                // Récupération de toutes les grilles de l'IA pour faire le bilan complet
+                List<UserBet> allAiBets = betRepository.findByUser(aiUser);
+                double aiTotalDepense = allAiBets.stream().mapToDouble(UserBet::getMise).sum();
+                double aiTotalGains = allAiBets.stream()
+                        .filter(b -> b.getGain() != null) // On ne compte que les tirages passés
+                        .mapToDouble(UserBet::getGain)
+                        .sum();
+                double aiSolde = aiTotalGains - aiTotalDepense;
+
+                // Nombre de grilles gagnantes (gain > 0)
+                long aiNbGagnants = allAiBets.stream()
+                        .filter(b -> b.getGain() != null && b.getGain() > 0)
+                        .count();
+
+                // ROI (Retour sur investissement) en %
+                double aiRoi = (aiTotalDepense > 0) ? ((aiTotalGains - aiTotalDepense) / aiTotalDepense) * 100 : 0.0;
+
+                // Injection dans le modèle
+                model.addAttribute("aiTotalGrids", allAiBets.size());
+                model.addAttribute("aiNbGagnants", aiNbGagnants);
+                model.addAttribute("aiTotalGains", aiTotalGains);
+                model.addAttribute("aiSolde", aiSolde);
+                model.addAttribute("aiRoi", aiRoi);
             } else {
                 model.addAttribute("aiBets", new ArrayList<>());
             }

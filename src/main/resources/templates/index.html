@@ -158,11 +158,15 @@
         <div class="card-header bg-white py-3 border-bottom-0 d-flex align-items-center justify-content-between">
             <h5 class="mb-0 fw-bold text-primary">
                 <i class="bi bi-robot me-2"></i>Pronostics de l'IA
-                <small class="text-muted fw-normal ms-2" style="font-size: 0.8rem;">(Générés avant le tirage)</small>
+
+                <small class="text-muted fw-normal ms-2" style="font-size: 0.75rem;">
+                    pour le <span class="fw-bold text-dark" th:text="${#temporals.format(lastDraw.dateTirage, 'EEEE d MMMM')}">Lundi 12 Janvier</span>
+                </small>
+
             </h5>
             <span class="badge bg-primary bg-opacity-10 text-primary">
-            <span th:text="${aiBets.size()}">5</span> grilles jouées
-        </span>
+        <span th:text="${aiBets.size()}">5</span> grilles jouées
+    </span>
         </div>
         <div class="card-body bg-light rounded-bottom-4">
             <div class="row g-3">
@@ -233,6 +237,57 @@
                 display: inline-block;
             }
         </style>
+    </div>
+
+    <div th:if="${aiTotalGrids != null && aiTotalGrids > 0}" class="card border-0 shadow mb-4 animate-up delay-2 overflow-hidden text-white"
+         style="background: linear-gradient(135deg, #3b82f6 0%, #6366f1 100%);">
+
+        <div class="card-body p-4 position-relative"> <div class="d-flex align-items-start justify-content-between mb-4">
+            <div>
+                <h5 class="fw-bold mb-1 text-white"><i class="bi bi-robot me-2"></i>Performance Historique IA</h5>
+                <small class="text-white-50" style="font-size: 0.85rem;">Bilan consolidé de tous les pronostics générés</small>
+            </div>
+
+            <div class="text-end">
+                <span class="badge bg-white shadow-sm px-3 py-2 rounded-pill fw-bold"
+                      style="font-size: 0.9rem;"
+                      th:classappend="${aiSolde >= 0} ? 'text-success' : 'text-danger'">
+                    ROI : <span th:text="${#numbers.formatDecimal(aiRoi, 1, 1)}">15.5</span> %
+                </span>
+            </div>
+        </div>
+
+            <div class="row g-4 text-center position-relative z-1"> <div class="col-4 border-end border-white border-opacity-25">
+                <div class="text-white-50 text-uppercase small fw-bold mb-1" style="font-size: 0.7rem;">Grilles Totales</div>
+                <div class="h3 fw-bold mb-0 text-white" th:text="${aiTotalGrids}">150</div>
+                <div class="small text-white-50 mt-1">
+                    <i class="bi bi-bullseye me-1 text-white"></i>
+                    <span class="text-white fw-bold" th:text="${aiNbGagnants}">12</span> gagnantes
+                </div>
+            </div>
+
+                <div class="col-4 border-end border-white border-opacity-25">
+                    <div class="text-white-50 text-uppercase small fw-bold mb-1" style="font-size: 0.7rem;">Gains Cumulés</div>
+                    <div class="h3 fw-bold mb-0" style="color: #fde047;">
+                        <span th:text="${#numbers.formatDecimal(aiTotalGains, 1, 2)}">1250.00</span> €
+                    </div>
+                    <div class="small text-white-50 mt-1"><i class="bi bi-cash-stack me-1"></i>Revenus bruts</div>
+                </div>
+
+                <div class="col-4">
+                    <div class="text-white-50 text-uppercase small fw-bold mb-1" style="font-size: 0.7rem;">Bilan Net</div>
+                    <div class="h3 fw-bold mb-0"
+                         th:classappend="${aiSolde >= 0} ? 'text-white' : 'text-danger bg-white bg-opacity-75 px-2 rounded'">
+                        <span th:if="${aiSolde > 0}">+</span><span th:text="${#numbers.formatDecimal(aiSolde, 1, 2)}">-50.00</span> €
+                    </div>
+                    <div class="small text-white-50 mt-1">
+                        <i class="bi" th:classappend="${aiSolde >= 0} ? 'bi-graph-up-arrow text-white' : 'bi-graph-down-arrow text-danger'"></i>
+                        <span th:text="${aiSolde >= 0 ? 'Bénéficiaire' : 'Déficitaire'}">Situation</span>
+                    </div>
+                </div>
+
+            </div>
+        </div>
     </div>
 
     <div class="alert alert-light border d-flex align-items-center justify-content-center shadow-sm py-2 mb-4 small animate-up" role="alert" id="infoPeriode" style="display: none !important;">
