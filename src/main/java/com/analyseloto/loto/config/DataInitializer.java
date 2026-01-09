@@ -40,6 +40,7 @@ public class DataInitializer implements CommandLineRunner {
         User aiUser = new User();
         aiUser.setFirstName("Loto Master");
         aiUser.setEmail(emailIA);
+        aiUser.setUsername("aiLoto");
 
         // Gestion du mot de passe
          aiUser.setPassword(passwordEncoder.encode("admin"));
