@@ -13,7 +13,7 @@ services:
     ports:
       # 5433 en externe pour ton DBeaver (évite les conflits VPS)
       # 5432 reste le port interne pour Docker
-      - "127.0.0.1:5433:5432"
+      - "5433:5432"
 
   loto_app:
     build: .
