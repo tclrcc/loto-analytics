@@ -6,6 +6,7 @@ import com.analyseloto.loto.entity.LotoTirageRank;
 import com.analyseloto.loto.repository.LotoTirageRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -13,6 +14,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.web.util.UriComponentsBuilder;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
@@ -31,9 +33,10 @@ public class FdjService {
     private final LotoTirageRepository tirageRepository;
     // Services
     private final LotoService lotoService;
+    // Constantes
+    @Value("${fdj.api.url}")
+    private String fdjApiUrl;
 
-    // API officielle utilisée par le front FDJ
-    // On ajoute bien 'ranks' dans le include
     private static final String FDJ_API_URL = "https://www.fdj.fr/api/service-draws/v1/games/loto/draws?include=results,ranks&range=0-0";
     /**
      * Méthode récupérant automatiquement le dernier tirage du Loto via API
@@ -46,9 +49,14 @@ public class FdjService {
             HttpHeaders headers = new HttpHeaders();
             // Permet de passer pour un navigateur
             headers.set("User-Agent", "PostmanRuntime/7.32.0");
+            // Construction URL avec paramètres
+            String urlComplete = UriComponentsBuilder.fromUriString(fdjApiUrl)
+                    .queryParam("include", "results,ranks")
+                    .queryParam("range", "0-0")
+                    .toUriString();
             // Appel API
             ResponseEntity<String> response = restTemplate.exchange(
-                    FDJ_API_URL, HttpMethod.GET, new HttpEntity<>(headers), String.class
+                    urlComplete, HttpMethod.GET, new HttpEntity<>(headers), String.class
             );
 
             if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null) {
