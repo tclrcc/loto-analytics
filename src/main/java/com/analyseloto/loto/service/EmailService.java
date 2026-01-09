@@ -2,6 +2,8 @@ package com.analyseloto.loto.service;
 
 import com.analyseloto.loto.dto.PronosticResultDto;
 import com.analyseloto.loto.entity.LotoTirage;
+import com.analyseloto.loto.entity.User;
+import com.analyseloto.loto.entity.UserBet;
 import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeMessage;
 import lombok.RequiredArgsConstructor;
@@ -47,6 +49,147 @@ public class EmailService {
             log.error("Impossible d'envoyer l'email", e);
             throw new RuntimeException("Erreur envoi mail");
         }
+    }
+
+    /**
+     * Envoi du récapitulatif des résultats d'un tirage spécifique
+     * @param user L'utilisateur
+     * @param tirage Le tirage officiel
+     * @param bets La liste des paris de l'utilisateur pour ce tirage
+     */
+    public void sendDrawResultNotification(User user, LotoTirage tirage, List<UserBet> bets) {
+        if (bets.isEmpty()) return;
+
+        // 1. Calculs des totaux
+        double totalMise = bets.stream().mapToDouble(UserBet::getMise).sum();
+        double totalGain = bets.stream()
+                .filter(b -> b.getGain() != null)
+                .mapToDouble(UserBet::getGain)
+                .sum();
+        double benefice = totalGain - totalMise;
+
+        // 2. Formatage Date
+        String dateJolie = tirage.getDateTirage().format(DateTimeFormatter.ofPattern("EEEE d MMMM yyyy", Locale.FRANCE));
+        dateJolie = dateJolie.substring(0, 1).toUpperCase() + dateJolie.substring(1);
+
+        // 3. Définition du ton (Positif ou Neutre)
+        boolean isGagnant = totalGain > 0;
+        String subject = isGagnant
+                ? "🏆 Bravo ! Vous avez gagné au Loto du " + dateJolie
+                : "🎱 Résultats du Loto du " + dateJolie;
+
+        String colorHeader = isGagnant ? "#059669" : "#4F46E5"; // Vert si gagné, Bleu sinon
+        String emoji = isGagnant ? "🎉" : "📊";
+
+        // --- CONSTRUCTION HTML ---
+        StringBuilder html = new StringBuilder();
+        html.append("<!DOCTYPE html><html><body style='font-family: \"Segoe UI\", Helvetica, Arial, sans-serif; background-color: #f3f4f6; color: #333; margin:0; padding:0;'>");
+
+        // Container
+        html.append("<div style='width: 100%; padding: 40px 0; background-color: #f3f4f6;'>");
+        html.append("<div style='max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05);'>");
+
+        // Header
+        html.append("<div style='background-color: ").append(colorHeader).append("; padding: 25px; text-align: center;'>");
+        html.append("<h1 style='color: #ffffff; margin: 0; font-size: 22px;'>").append(emoji).append(" Résultats du Tirage</h1>");
+        html.append("<p style='color: rgba(255,255,255,0.8); margin: 5px 0 0 0;'>").append(dateJolie).append("</p>");
+        html.append("</div>");
+
+        // Body
+        html.append("<div style='padding: 30px;'>");
+        html.append("<p>Bonjour <strong>").append(user.getFirstName()).append("</strong>,</p>");
+        html.append("<p>Le tirage a eu lieu. Voici le verdict pour vos <strong>").append(bets.size()).append(" grilles</strong> jouées.</p>");
+
+        // --- SECTION 1 : RÉSULTAT OFFICIEL ---
+        html.append("<div style='background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 15px; text-align: center; margin-bottom: 25px;'>");
+        html.append("<p style='margin: 0 0 10px 0; font-size: 12px; text-transform: uppercase; color: #64748b; font-weight: bold;'>Combinaison Gagnante</p>");
+
+        // Boules Officielles
+        html.append("<div style='display: inline-block;'>");
+        String bouleStyle = "display:inline-block; width:30px; height:30px; line-height:30px; background-color:#334155; color:white; border-radius:50%; margin:0 3px; font-weight:bold; text-align:center;";
+        String chanceStyle = "display:inline-block; width:30px; height:30px; line-height:30px; background-color:#ef4444; color:white; border-radius:50%; margin:0 3px; font-weight:bold; text-align:center;";
+
+        html.append("<span style='").append(bouleStyle).append("'>").append(tirage.getBoule1()).append("</span>");
+        html.append("<span style='").append(bouleStyle).append("'>").append(tirage.getBoule2()).append("</span>");
+        html.append("<span style='").append(bouleStyle).append("'>").append(tirage.getBoule3()).append("</span>");
+        html.append("<span style='").append(bouleStyle).append("'>").append(tirage.getBoule4()).append("</span>");
+        html.append("<span style='").append(bouleStyle).append("'>").append(tirage.getBoule5()).append("</span>");
+        html.append("<span style='").append(chanceStyle).append("'>").append(tirage.getNumeroChance()).append("</span>");
+        html.append("</div>");
+        html.append("</div>");
+
+        // --- SECTION 2 : BILAN FINANCIER ---
+        html.append("<div style='display: flex; justify-content: space-between; margin-bottom: 25px; gap: 10px;'>");
+
+        // Carte Dépenses
+        html.append("<div style='flex: 1; background: #fff1f2; border: 1px solid #fecdd3; border-radius: 8px; padding: 15px; text-align: center;'>");
+        html.append("<span style='display:block; font-size:12px; color:#9f1239; margin-bottom:5px;'>MISES</span>");
+        html.append("<strong style='font-size:18px; color:#be123c;'>-").append(String.format("%.2f", totalMise)).append("€</strong>");
+        html.append("</div>");
+
+        // Carte Gains
+        String bgGain = totalGain > 0 ? "#ecfdf5" : "#f3f4f6";
+        String borderGain = totalGain > 0 ? "#a7f3d0" : "#e5e7eb";
+        String textGainColor = totalGain > 0 ? "#047857" : "#6b7280";
+
+        html.append("<div style='flex: 1; background: ").append(bgGain).append("; border: 1px solid ").append(borderGain).append("; border-radius: 8px; padding: 15px; text-align: center;'>");
+        html.append("<span style='display:block; font-size:12px; color:").append(textGainColor).append("; margin-bottom:5px;'>GAINS</span>");
+        html.append("<strong style='font-size:18px; color:").append(textGainColor).append(";'>+").append(String.format("%.2f", totalGain)).append("€</strong>");
+        html.append("</div>");
+        html.append("</div>");
+
+        // --- SECTION 3 : LISTE DES GRILLES ---
+        html.append("<table style='width: 100%; border-collapse: collapse; font-size: 14px;'>");
+        html.append("<tr style='background-color: #f8fafc; text-align: left;'><th style='padding: 10px; border-bottom: 1px solid #e2e8f0;'>Vos Numéros</th><th style='padding: 10px; border-bottom: 1px solid #e2e8f0; text-align:right;'>Résultat</th></tr>");
+
+        for (UserBet bet : bets) {
+            boolean gridWin = bet.getGain() != null && bet.getGain() > 0;
+            String rowBg = gridWin ? "background-color: #f0fdf4;" : ""; // Vert très clair si gagnant
+
+            html.append("<tr style='border-bottom: 1px solid #f1f5f9; ").append(rowBg).append("'>");
+
+            // Colonne Numéros
+            html.append("<td style='padding: 12px 10px;'>");
+            html.append("<span style='color: #475569;'>")
+                    .append(bet.getB1()).append(" - ")
+                    .append(bet.getB2()).append(" - ")
+                    .append(bet.getB3()).append(" - ")
+                    .append(bet.getB4()).append(" - ")
+                    .append(bet.getB5())
+                    .append("</span>");
+            html.append(" <strong style='color: #dc2626; margin-left:5px;'>C").append(bet.getChance()).append("</strong>");
+            html.append("</td>");
+
+            // Colonne Gain
+            html.append("<td style='padding: 12px 10px; text-align: right;'>");
+            if (gridWin) {
+                html.append("<strong style='color: #059669;'>+").append(String.format("%.2f", bet.getGain())).append("€</strong>");
+            } else {
+                html.append("<span style='color: #94a3b8; font-size: 12px;'>Perdu</span>");
+            }
+            html.append("</td>");
+
+            html.append("</tr>");
+        }
+        html.append("</table>");
+
+        // Message de fin
+        html.append("<div style='text-align: center; margin-top: 30px;'>");
+        if (benefice > 0) {
+            html.append("<p style='color: #059669; font-weight: bold;'>✨ Quelle chance ! Vous avez fait un bénéfice net de ").append(String.format("%.2f", benefice)).append("€ !</p>");
+        } else if (totalGain > 0) {
+            html.append("<p style='color: #334155;'>Vous avez gagné un peu, mais pas encore le jackpot. Persévérez !</p>");
+        } else {
+            html.append("<p style='color: #64748b;'>Le hasard n'était pas de votre côté ce soir. La prochaine fois sera la bonne ! 🍀</p>");
+        }
+
+        html.append("<a href='").append(baseUrl).append("/profile/stats' style='display: inline-block; background-color: #334155; color: #ffffff; padding: 12px 25px; text-decoration: none; border-radius: 50px; font-weight: bold; font-size: 14px; margin-top: 10px;'>Voir mes stats complètes</a>");
+        html.append("</div>");
+
+        // Footer standard
+        html.append("</div></div></div></body></html>");
+
+        sendHtmlEmail(user.getEmail(), subject, html.toString());
     }
 
     /**

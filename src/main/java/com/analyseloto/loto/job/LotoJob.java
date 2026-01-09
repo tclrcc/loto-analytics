@@ -2,16 +2,15 @@ package com.analyseloto.loto.job;
 
 import com.analyseloto.loto.dto.AstroProfileDto;
 import com.analyseloto.loto.dto.PronosticResultDto;
-import com.analyseloto.loto.entity.JobLog;
-import com.analyseloto.loto.entity.LotoTirage;
-import com.analyseloto.loto.entity.User;
-import com.analyseloto.loto.entity.UserBet;
+import com.analyseloto.loto.entity.*;
 import com.analyseloto.loto.enums.JobExecutionStatus;
+import com.analyseloto.loto.event.NouveauTirageEvent;
 import com.analyseloto.loto.repository.UserBetRepository;
 import com.analyseloto.loto.repository.UserRepository;
 import com.analyseloto.loto.service.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -32,39 +31,73 @@ public class LotoJob {
     // Repositories
     private final UserRepository userRepository;
     private final UserBetRepository betRepository;
+    // Event
+    private final ApplicationEventPublisher eventPublisher;
     // Email de l'utilisateur "ROBOT" qui stockera les pronostics de référence
     private static final String EMAIL_IA_SYSTEM = "ai@loto.com";
 
     /**
-     * Récupération automatique du dernier tirage tous les soirs de tirage à 22h
+     * POINT D'ENTRÉE AUTOMATIQUE (CRON)
+     * Cette méthode est appelée par Spring. Elle n'a pas d'argument.
+     * Elle appelle la logique métier avec "false".
      */
     @Scheduled(cron = "0 0 22 * * MON,WED,SAT", zone = "Europe/Paris")
-    public void recupererResultatsFdj() {
-        log.info("🤖 Job Auto : Vérification FDJ...");
+    public void scheduledJobFdj() {
+        // On appelle la méthode logique avec "false" car c'est automatique
+        executerRecuperationFdj(false);
+    }
+
+    /**
+     * POINT D'ENTRÉE MANUEL (Via API Admin)
+     * Appelé par votre AdminController.
+     * Elle appelle la logique métier avec "true".
+     */
+    public void triggerRecupererResultatsFdj() {
+        // On appelle la méthode logique avec "true" car c'est manuel
+        executerRecuperationFdj(true);
+    }
+
+    /**
+     * Contient tout le code. Elle prend le paramètre mais n'est PAS @Scheduled.
+     */
+    private void executerRecuperationFdj(boolean manuel) {
+        String mode = manuel ? "MANUEL" : "AUTO";
+        log.info("🤖 Job {} : Vérification FDJ...", mode);
 
         // Enregistrement début job
-        JobLog jobLog = jobMonitorService.startJob("RECUPERER_DERNIER_TIRAGE");
+        // On peut préciser dans le nom du job si c'est manuel ou non pour les logs
+        JobLog jobLog = jobMonitorService.startJob("RECUPERER_DERNIER_TIRAGE_" + mode);
 
-        // Appel de la méthode de récupération
-        Optional<LotoTirage> newTirage = fdjService.recupererDernierTirage();
+        // Appel de la méthode de récupération en passant le paramètre
+        Optional<LotoTirage> newTirage = fdjService.recupererDernierTirage(manuel);
 
         if (newTirage.isPresent()) {
             log.info("✅ Base mise à jour avec le dernier tirage !");
 
-            // Récupération de tous les administrateurs
-            List<User> admins = userRepository.findByRole("ADMIN");
+            LotoTirage tirage = newTirage.get();
+            Optional<LotoTirageRank> jackpot = tirage.getRanks().stream()
+                    .filter(r -> r.getRankNumber() == 1)
+                    .findFirst();
 
-            // Envoi email à tous les admins
+            if (jackpot.isPresent() && jackpot.get().getWinners() > 0) {
+                log.info("💰 WOW ! Le JACKPOT a été remporté par {} personne(s) !", jackpot.get().getWinners());
+            } else {
+                log.info("📉 Pas de gagnant du jackpot ce soir.");
+            }
+
+            // Déclenchement de l'événement pour calculer les gains
+            eventPublisher.publishEvent(new NouveauTirageEvent(this, tirage));
+
+            // Notification aux admins
+            List<User> admins = userRepository.findByRole("ADMIN");
             for (User admin : admins) {
-                emailService.sendAdminNotification(admin.getEmail(), newTirage.get());
+                emailService.sendAdminNotification(admin.getEmail(), tirage);
                 log.info("\uD83D\uDCE7 Notification envoyée à l'admin : {}", admin.getEmail());
             }
 
-            // Enregistrement log
-            jobMonitorService.endJob(jobLog, JobExecutionStatus.SUCCESS.getCode(), "Récupération dernier tirage officiel terminé.");
+            jobMonitorService.endJob(jobLog, JobExecutionStatus.SUCCESS.getCode(), "Récupération terminée (" + mode + ").");
         } else {
-            // Enregistrement log
-            jobMonitorService.endJob(jobLog, JobExecutionStatus.FAILURE.getCode(), "Récupération impossible dernier tirage officiel.");
+            jobMonitorService.endJob(jobLog, JobExecutionStatus.FAILURE.getCode(), "Récupération impossible (" + mode + ").");
         }
     }
 

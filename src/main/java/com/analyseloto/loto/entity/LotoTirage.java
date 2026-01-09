@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import lombok.Data;
 
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 
 @Entity
@@ -27,8 +28,17 @@ public class LotoTirage {
     private int boule5;
     private int numeroChance;
 
+    // CascadeType.ALL signifie : Si je sauvegarde le Tirage, ça sauvegarde aussi les Ranks automatiquement
+    @OneToMany(mappedBy = "lotoTirage", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<LotoTirageRank> ranks = new ArrayList<>();
+
     // Helper pour récupérer les boules sous forme de liste
     public List<Integer> getBoules() {
         return List.of(boule1, boule2, boule3, boule4, boule5);
+    }
+
+    public void addRank(LotoTirageRank rank) {
+        ranks.add(rank);
+        rank.setLotoTirage(this);
     }
 }

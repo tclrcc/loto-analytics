@@ -2,6 +2,7 @@ package com.analyseloto.loto.service;
 
 import com.analyseloto.loto.dto.TirageManuelDto;
 import com.analyseloto.loto.entity.LotoTirage;
+import com.analyseloto.loto.entity.LotoTirageRank;
 import com.analyseloto.loto.repository.LotoTirageRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -32,13 +33,13 @@ public class FdjService {
     private final LotoService lotoService;
 
     // API officielle utilisée par le front FDJ
-    private static final String FDJ_API_URL = "https://www.fdj.fr/api/service-draws/v1/games/loto/draws?include=results,addons&range=0-0";
-
+    // On ajoute bien 'ranks' dans le include
+    private static final String FDJ_API_URL = "https://www.fdj.fr/api/service-draws/v1/games/loto/draws?include=results,ranks&range=0-0";
     /**
      * Méthode récupérant automatiquement le dernier tirage du Loto via API
      * @return
      */
-    public Optional<LotoTirage> recupererDernierTirage() {
+    public Optional<LotoTirage> recupererDernierTirage(boolean manuel) {
         log.info("🌍 Appel API FDJ...");
         try {
             RestTemplate restTemplate = new RestTemplate();
@@ -60,7 +61,19 @@ public class FdjService {
 
             // Le JSON est un tableau, on prend le premier élément (le plus récent)
             if (root.isArray() && !root.isEmpty()) {
-                LotoTirage tirage = traiterJsonTirage(root.get(0));
+                JsonNode dernierTirageJson = root.get(0);
+                LotoTirage tirage = traiterJsonTirage(dernierTirageJson);
+
+                // On vérifie que la réponse envoyée est bien le résultat d'aujourd'hui
+                if (!manuel && tirage != null) {
+                    LocalDate dateTirage = tirage.getDateTirage();
+                    LocalDate aujourdhui = LocalDate.now();
+                    if (!dateTirage.equals(aujourdhui)) {
+                        log.warn("⚠️ Attention : Le dernier tirage disponible date du {}, ce n'est pas celui d'aujourd'hui !", dateTirage);
+                        return Optional.empty();
+                    }
+                }
+
                 return Optional.ofNullable(tirage);
             } else {
                 log.warn("⚠️ Le JSON reçu est valide mais vide ou n'est pas un tableau.");
@@ -84,54 +97,41 @@ public class FdjService {
      */
     private LotoTirage traiterJsonTirage(JsonNode drawNode) {
         try {
-            // 1. Récupération de la date (ex: ""2026-01-03T20:55:00+01:00"")
+            // 1. DATE ET VÉRIFICATION (Inchangé)
             String dateStr = drawNode.get("drawn_at").asText().substring(0, 10);
             LocalDate dateTirage = LocalDate.parse(dateStr, DateTimeFormatter.ofPattern("yyyy-MM-dd"));
 
-            // Vérification que le tirage n'existe pas dans la base
             if (tirageRepository.existsByDateTirage(dateTirage)) {
                 log.info("📅 Tirage du {} déjà en base.", dateTirage);
                 return null;
             }
 
-            // 2. Extraction des boules et de la chance
+            // 2. EXTRACTION BOULES (Inchangé)
             List<Integer> boules = new ArrayList<>();
             int numeroChance = -1;
 
             JsonNode results = drawNode.get("results");
             if (results.isArray()) {
                 for (JsonNode result : results) {
-                    // draw_index = 1 => tirage principal
-                    // draw_index = 2 => second tirage
-                    int drawIndex = result.get("draw_index").asInt();
-                    // type = "number" => numéro tiré
-                    // type = "special" => numéro chance
-                    String type = result.get("type").asText();
-                    String valueStr = result.get("value").asText();
+                    int drawIndex = result.path("draw_index").asInt();
+                    String type = result.path("type").asText();
+                    String valueStr = result.path("value").asText();
 
-                    // On ne s'intéresse qu'au tirage principal (LOTO)
-                    if (drawIndex != 1 || (!type.equals("number") && !type.equals("special"))) continue;
+                    if (drawIndex != 1 || (!"number".equals(type) && !"special".equals(type))) continue;
 
                     int value = Integer.parseInt(valueStr);
-
-                    if ("number".equals(type)) {
-                        boules.add(value); // Cas Boule Classique
-                    } else {
-                        numeroChance = value; // Cas Numéro Chance
-                    }
+                    if ("number".equals(type)) boules.add(value);
+                    else numeroChance = value;
                 }
             }
 
-            // Validation cohérence des boules
             if (boules.size() < 5 || numeroChance == -1) {
                 log.error("⚠️ Données incomplètes pour le tirage du {}", dateTirage);
                 return null;
             }
-
-            // On trie les boules pour être propre (9, 29, 30...)
             Collections.sort(boules);
 
-            // 4. Création DTO
+            // 3. SAUVEGARDE TIRAGE (Inchangé)
             TirageManuelDto dto = new TirageManuelDto();
             dto.setDateTirage(dateTirage);
             dto.setBoule1(boules.get(0));
@@ -141,11 +141,55 @@ public class FdjService {
             dto.setBoule5(boules.get(4));
             dto.setNumeroChance(numeroChance);
 
-            // 5. Sauvegarde du tirage
             LotoTirage lotoTirage = lotoService.ajouterTirageManuel(dto);
-            log.info("✨ SUCCESS ! Tirage importé : {}", dto);
+            log.info("✨ Tirage principal importé : {}", dto);
+
+            // --- 4. TRAITEMENT DES RANGS (CORRIGÉ SELON TON JSON) ---
+            JsonNode ranksNode = drawNode.get("ranks");
+            if (ranksNode != null && ranksNode.isArray()) {
+                boolean ranksAdded = false;
+
+                for (JsonNode r : ranksNode) {
+                    // 1. Vérifier qu'on est sur le tirage principal (index 1)
+                    // Le JSON montre aussi les rangs du "Second Tirage" (index 2) qu'on veut ignorer
+                    int drawIndex = r.path("draw_index").asInt(0);
+                    if (drawIndex != 1) continue;
+
+                    // 2. Récupérer le numéro du rang (c'est "position" dans ton JSON)
+                    int rankNum = r.path("position").asInt(0);
+
+                    // 3. Récupérer le gain ("amount" est en centimes ! Ex: 300000000 -> 3M€)
+                    double amountCentimes = r.path("amount").asDouble(0.0);
+                    double prize = amountCentimes / 100.0; // Conversion en Euros
+
+                    // 4. Récupérer les gagnants (C'est dans un tableau "winners")
+                    int winners = 0;
+                    JsonNode winnersArray = r.path("winners");
+                    if (winnersArray.isArray() && !winnersArray.isEmpty()) {
+                        // On prend le premier élément du tableau winners
+                        winners = winnersArray.get(0).path("count").asInt(0);
+                    }
+
+                    // 5. On ne garde que les rangs "normal" (Pas le rang "raffle" codes loto)
+                    String typeRank = r.path("type").asText();
+
+                    if (rankNum > 0 && "normal".equals(typeRank)) {
+                        LotoTirageRank rankObj = new LotoTirageRank(rankNum, winners, prize);
+                        lotoTirage.addRank(rankObj);
+                        ranksAdded = true;
+                    }
+                }
+
+                if (ranksAdded) {
+                    tirageRepository.save(lotoTirage);
+                    log.info("📊 Rangs ajoutés avec succès pour le tirage du {}", dateTirage);
+                } else {
+                    log.warn("⚠️ Aucun rang pertinent trouvé pour ce tirage.");
+                }
+            }
 
             return lotoTirage;
+
         } catch (Exception e) {
             log.error("❌ Erreur parsing JSON", e);
             return null;

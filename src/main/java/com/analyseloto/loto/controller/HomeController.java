@@ -6,6 +6,7 @@ import com.analyseloto.loto.entity.UserBet;
 import com.analyseloto.loto.repository.LotoTirageRepository;
 import com.analyseloto.loto.repository.UserBetRepository;
 import com.analyseloto.loto.repository.UserRepository;
+import com.analyseloto.loto.service.LotoService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -27,6 +28,8 @@ public class HomeController {
     private final UserRepository userRepository;
     private final UserBetRepository betRepository;
     private final LotoTirageRepository lotoTirageRepository;
+    // Services
+    private final LotoService lotoService;
 
     /**
      * Affichage de la page d'accueil
@@ -45,7 +48,7 @@ public class HomeController {
         model.addAttribute("lastLogin", user.getLastLogin());
         model.addAttribute("astroSigne", user.getZodiacSign());
 
-        // Récupération des grilles
+        // Récupération des grilles du joueur
         List<UserBet> bets = betRepository.findByUserOrderByDateJeuDesc(user);
         model.addAttribute("bets", bets);
 
@@ -63,7 +66,7 @@ public class HomeController {
             // On cherche l'utilisateur IA
             User aiUser = userRepository.findByEmail("ai@loto.com").orElse(null);
             if (aiUser != null) {
-                // On récupère ses jeux pour la date du dernier tirage
+                // On récupère ses jeux (pronostics) pour la date du dernier tirage
                 List<UserBet> aiBets = betRepository.findByUserAndDateJeu(aiUser, tirage.getDateTirage());
                 model.addAttribute("aiBets", aiBets);
             } else {

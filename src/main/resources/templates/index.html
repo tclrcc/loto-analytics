@@ -161,50 +161,64 @@
                 <small class="text-muted fw-normal ms-2" style="font-size: 0.8rem;">(Générés avant le tirage)</small>
             </h5>
             <span class="badge bg-primary bg-opacity-10 text-primary">
-                <span th:text="${aiBets.size()}">5</span> grilles jouées
-            </span>
+            <span th:text="${aiBets.size()}">5</span> grilles jouées
+        </span>
         </div>
         <div class="card-body bg-light rounded-bottom-4">
             <div class="row g-3">
                 <div class="col-md-6 col-lg-4" th:each="bet, iter : ${aiBets}">
-                    <div class="bg-white p-2 rounded shadow-sm border d-flex justify-content-between align-items-center">
-                        <span class="badge bg-light text-muted border me-2" th:text="'#' + ${iter.count}">#1</span>
 
-                        <div class="d-flex gap-1 align-items-center">
+                    <div class="bg-white p-2 rounded shadow-sm border d-flex justify-content-between align-items-center position-relative overflow-hidden"
+                         th:classappend="${bet.gain != null && bet.gain > 0} ? 'border-start border-4 border-success ps-1' : ''">
+
+                        <div class="d-flex align-items-center">
+                            <span class="badge bg-light text-muted border me-2" th:text="'#' + ${iter.count}">#1</span>
+
+                            <div class="d-flex gap-1 align-items-center">
                             <span class="ai-ball rounded-circle text-center fw-bold"
                                   th:text="${bet.b1}"
                                   th:classappend="${#lists.contains(lastDraw.boules, bet.b1)} ? 'bg-success text-white' : 'bg-light text-dark'">
                             </span>
-                            <span class="ai-ball rounded-circle text-center fw-bold"
-                                  th:text="${bet.b2}"
-                                  th:classappend="${#lists.contains(lastDraw.boules, bet.b2)} ? 'bg-success text-white' : 'bg-light text-dark'">
+                                <span class="ai-ball rounded-circle text-center fw-bold"
+                                      th:text="${bet.b2}"
+                                      th:classappend="${#lists.contains(lastDraw.boules, bet.b2)} ? 'bg-success text-white' : 'bg-light text-dark'">
                             </span>
-                            <span class="ai-ball rounded-circle text-center fw-bold"
-                                  th:text="${bet.b3}"
-                                  th:classappend="${#lists.contains(lastDraw.boules, bet.b3)} ? 'bg-success text-white' : 'bg-light text-dark'">
+                                <span class="ai-ball rounded-circle text-center fw-bold"
+                                      th:text="${bet.b3}"
+                                      th:classappend="${#lists.contains(lastDraw.boules, bet.b3)} ? 'bg-success text-white' : 'bg-light text-dark'">
                             </span>
-                            <span class="ai-ball rounded-circle text-center fw-bold"
-                                  th:text="${bet.b4}"
-                                  th:classappend="${#lists.contains(lastDraw.boules, bet.b4)} ? 'bg-success text-white' : 'bg-light text-dark'">
+                                <span class="ai-ball rounded-circle text-center fw-bold"
+                                      th:text="${bet.b4}"
+                                      th:classappend="${#lists.contains(lastDraw.boules, bet.b4)} ? 'bg-success text-white' : 'bg-light text-dark'">
                             </span>
-                            <span class="ai-ball rounded-circle text-center fw-bold"
-                                  th:text="${bet.b5}"
-                                  th:classappend="${#lists.contains(lastDraw.boules, bet.b5)} ? 'bg-success text-white' : 'bg-light text-dark'">
+                                <span class="ai-ball rounded-circle text-center fw-bold"
+                                      th:text="${bet.b5}"
+                                      th:classappend="${#lists.contains(lastDraw.boules, bet.b5)} ? 'bg-success text-white' : 'bg-light text-dark'">
                             </span>
 
-                            <div style="width: 1px; height: 20px; background: #dee2e6;" class="mx-1"></div>
+                                <div style="width: 1px; height: 20px; background: #dee2e6;" class="mx-1"></div>
 
-                            <span class="ai-ball rounded-circle text-center fw-bold"
-                                  th:text="${bet.chance}"
-                                  th:classappend="${lastDraw.numeroChance == bet.chance} ? 'bg-danger text-white' : 'bg-light text-danger border border-danger border-opacity-25'">
+                                <span class="ai-ball rounded-circle text-center fw-bold"
+                                      th:text="${bet.chance}"
+                                      th:classappend="${lastDraw.numeroChance == bet.chance} ? 'bg-danger text-white' : 'bg-light text-danger border border-danger border-opacity-25'">
                             </span>
+                            </div>
                         </div>
 
-                        <i class="bi ms-2"
-                           th:with="matches=${ ( (#lists.contains(lastDraw.boules, bet.b1)?1:0) + (#lists.contains(lastDraw.boules, bet.b2)?1:0) + (#lists.contains(lastDraw.boules, bet.b3)?1:0) + (#lists.contains(lastDraw.boules, bet.b4)?1:0) + (#lists.contains(lastDraw.boules, bet.b5)?1:0) ) }"
-                           th:classappend="${matches >= 3 or (matches >= 2 and lastDraw.numeroChance == bet.chance)} ? 'bi-check-circle-fill text-success' : ( ${matches > 0} ? 'bi-check-circle text-warning' : 'bi-circle text-muted opacity-25' )"
-                           th:title="${matches} + ' bons numéros'">
-                        </i>
+                        <div class="d-flex align-items-center gap-2">
+
+                        <span th:if="${bet.gain != null && bet.gain > 0}"
+                              class="badge bg-success bg-opacity-10 text-success border border-success fw-bold animate-up">
+                            + <span th:text="${#numbers.formatDecimal(bet.gain, 1, 2)}">0.00</span> €
+                        </span>
+
+                            <i class="bi"
+                               th:with="matches=${ ( (#lists.contains(lastDraw.boules, bet.b1)?1:0) + (#lists.contains(lastDraw.boules, bet.b2)?1:0) + (#lists.contains(lastDraw.boules, bet.b3)?1:0) + (#lists.contains(lastDraw.boules, bet.b4)?1:0) + (#lists.contains(lastDraw.boules, bet.b5)?1:0) ) }"
+                               th:classappend="${bet.gain != null && bet.gain > 0} ? 'bi-trophy-fill text-success' : ( ${matches > 0} ? 'bi-check-circle text-warning' : 'bi-circle text-muted opacity-25' )"
+                               th:title="${bet.gain != null && bet.gain > 0} ? 'Gagnant !' : (${matches} + ' bons numéros')">
+                            </i>
+                        </div>
+
                     </div>
                 </div>
             </div>
