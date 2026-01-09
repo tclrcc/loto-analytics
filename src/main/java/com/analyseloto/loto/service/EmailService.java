@@ -12,6 +12,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
+import java.util.Properties;
+import org.springframework.mail.javamail.JavaMailSenderImpl;
 
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
@@ -36,6 +38,19 @@ public class EmailService {
      */
     public void sendHtmlEmail(String to, String subject, String htmlBody) {
         try {
+            // --- CORRECTIF SSL BUG "WINDOWS-ROOT" ---
+            // On s'assure que le mailSender est bien l'implémentation standard
+            if (mailSender instanceof JavaMailSenderImpl impl) {
+                Properties props = impl.getJavaMailProperties();
+                // On dit à Jakarta Mail de faire confiance à tous les certificats (*)
+                // Cela évite d'aller lire le "trust store" système qui plante
+                props.put("mail.smtp.ssl.trust", "*");
+                props.put("mail.smtp.ssl.checkserveridentity", "false");
+                // On force l'utilisation d'un protocole standard
+                props.put("mail.smtp.ssl.protocols", "TLSv1.2");
+            }
+            // ----------------------------------------
+
             MimeMessage message = mailSender.createMimeMessage();
             MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
 
@@ -45,9 +60,10 @@ public class EmailService {
             helper.setText(htmlBody, true);
 
             mailSender.send(message);
+            log.info("✅ Email envoyé avec succès à {}", to);
         } catch (MessagingException e) {
-            log.error("Impossible d'envoyer l'email", e);
-            throw new RuntimeException("Erreur envoi mail");
+            log.error("❌ Impossible d'envoyer l'email : {}", e.getMessage());
+            throw new RuntimeException("Erreur envoi mail", e);
         }
     }
 

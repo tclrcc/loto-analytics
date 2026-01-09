@@ -7,6 +7,7 @@ services:
       POSTGRES_USER: loto
       POSTGRES_PASSWORD: ${DB_PASSWORD}
       TZ: Europe/Paris
+      JAVA_TOOL_OPTIONS: "-Djavax.net.ssl.trustStoreType=JKS"
     volumes:
       - pgdata:/var/lib/postgresql/data
     restart: always
