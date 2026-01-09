@@ -37,7 +37,8 @@ public class FdjService {
     @Value("${fdj.api.url}")
     private String fdjApiUrl;
 
-    private static final String FDJ_API_URL = "https://www.fdj.fr/api/service-draws/v1/games/loto/draws?include=results,ranks&range=0-0";
+    private final RestTemplate restTemplate;
+
     /**
      * Méthode récupérant automatiquement le dernier tirage du Loto via API
      * @return
