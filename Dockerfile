@@ -15,16 +15,23 @@ RUN mvn clean package -DskipTests
 FROM eclipse-temurin:17-jdk-jammy
 WORKDIR /app
 
-# Certificats système (utile pour curl / openssl, pas obligatoire pour Java mais OK)
+# Installer les certificats système
 RUN apt-get update \
  && apt-get install -y ca-certificates openssl libnss3 \
  && update-ca-certificates \
+ && mkdir -p /etc/ssl/certs/java \
+ && keytool -importkeystore \
+      -srckeystore $(dirname $(readlink -f $(which java)))/../lib/security/cacerts \
+      -destkeystore /etc/ssl/certs/java/cacerts \
+      -storepass changeit \
+      -noprompt \
+ || true \
  && rm -rf /var/lib/apt/lists/*
 
-# Jar Spring Boot
+# Copier le jar
 COPY --from=build /app/target/*.jar app.jar
 
 EXPOSE 8080
 
-# 🚨 NE PAS FORCER LE TRUSTSTORE (Java 17 = PKCS12 automatique)
-ENTRYPOINT ["java","-Djava.security.egd=file:/dev/./urandom","-jar","app.jar"]
+# Forcer Java à utiliser ce truststore
+ENTRYPOINT ["java", "-Djavax.net.ssl.trustStore=/etc/ssl/certs/java/cacerts", "-Djavax.net.ssl.trustStorePassword=changeit", "-Djava.security.egd=file:/dev/./urandom", "-jar", "app.jar"]
