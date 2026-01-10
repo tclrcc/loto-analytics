@@ -11,8 +11,8 @@ services:
       - pgdata:/var/lib/postgresql/data
     restart: always
     ports:
-      # 5433 en externe pour ton DBeaver (évite les conflits VPS)
-      # 5432 reste le port interne pour Docker
+      # Mappage : Port Extérieur 5433 -> Port Interne 5432
+      # Permet d'accéder à la BDD via 51.254.133.205:5433
       - "5433:5432"
 
   loto_app:
@@ -25,18 +25,26 @@ services:
     environment:
       TZ: Europe/Paris
 
-      # CONNEXION BDD : On utilise 'loto_db' (le nom du service) au lieu de localhost
+      # --- CONNEXION BDD (INTERNE DOCKER) ---
+      # L'app parle au conteneur "loto_db" sur le port interne 5432
       SPRING_DATASOURCE_URL: jdbc:postgresql://loto_db:5432/lotodb
       SPRING_DATASOURCE_USERNAME: loto
       SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
 
-      # CONFIGURATION GENERALE
+      # --- CONFIGURATION APP ---
       PORT: 8080
+      APP_BASE_URL: http://51.254.133.205:8081
+
+      # --- SECURITE & MAIL ---
       LOTO_SECURITY_REMEMBER_KEY: ${REMEMBER_KEY}
       SPRING_MAIL_USERNAME: tonycoloricchio01@gmail.com
       SPRING_MAIL_PASSWORD: ${MAIL_PASSWORD}
-      APP_BASE_URL: http://51.254.133.205:8081
       APP_LOTO_RECIPIENT: tonycoloricchio01@gmail.com
+
+      # --- OPTIONNEL : FIX SSL ---
+      # Force Java à utiliser un truststore vide pour éviter le bug "WINDOWS-ROOT"
+      JAVA_TOOL_OPTIONS: "-Djavax.net.ssl.trustStoreType=JKS -Djavax.net.ssl.trustStore=/dev/null -Djavax.net.ssl.trustStorePassword=changeit"
+
     restart: always
 
 volumes:
