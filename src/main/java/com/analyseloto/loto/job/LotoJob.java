@@ -101,7 +101,7 @@ public class LotoJob {
         }
     }
 
-    @Scheduled(cron = "0 0 9 * * MON,WED,SAT")
+    @Scheduled(cron = "0 0 16 * * MON,WED,SAT")
     public void genererPronosticsDuJour() {
         log.info("🔮 Lancement du Job : Génération des pronostics de référence...");
         JobLog jobLog = jobMonitorService.startJob("GEN_PRONOSTICS_IA");
