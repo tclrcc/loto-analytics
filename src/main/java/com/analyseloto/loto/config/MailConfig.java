@@ -10,6 +10,7 @@ import java.util.Properties;
 
 @Configuration
 public class MailConfig {
+
     @Value("${spring.mail.username}")
     private String username;
 
@@ -18,6 +19,10 @@ public class MailConfig {
 
     @Bean
     public JavaMailSender javaMailSender() {
+        // 1. CORRECTIF SYSTEME : On force Java à utiliser le format Linux (JKS)
+        // Cela empêche l'erreur "WINDOWS-ROOT not available" à la racine
+        System.setProperty("javax.net.ssl.trustStoreType", "JKS");
+
         JavaMailSenderImpl mailSender = new JavaMailSenderImpl();
         mailSender.setHost("smtp.gmail.com");
         mailSender.setPort(587);
@@ -31,16 +36,20 @@ public class MailConfig {
         props.put("mail.smtp.starttls.enable", "true");
         props.put("mail.debug", "true");
 
-        // --- CORRECTIF 587 (STARTTLS) ---
-        props.put("mail.smtp.ssl.trust", "*");
-        props.put("mail.smtp.ssl.checkserveridentity", "false");
+        // 2. CORRECTIF SOCKET FACTORY (Version STARTTLS)
+        // On interdit à Angus Mail d'utiliser sa propre factory (MailSSLSocketFactory) qui plante.
+        // On force celle de Java standard.
+        props.put("mail.smtp.ssl.socketFactory.class", "javax.net.ssl.SSLSocketFactory");
+        // On désactive le fallback pour être sûr qu'il ne retente pas sa méthode buggée
+        props.put("mail.smtp.ssl.socketFactory.fallback", "false");
 
-        // Pour le port 587, on ne change PAS la socketFactory de base,
-        // mais on force la factory SSL utilisée lors de la conversion sécurisée.
-        // Cela suffit généralement à contourner le bug Angus Mail.
+        // Sécurité TLS
         props.put("mail.smtp.ssl.protocols", "TLSv1.2");
+
+        // Note : En utilisant la factory standard, on ne peut plus utiliser "ssl.trust = *".
+        // Mais comme tu as installé les certificats dans le Dockerfile (ca-certificates-java),
+        // Gmail sera reconnu officiellement.
 
         return mailSender;
     }
-
 }
