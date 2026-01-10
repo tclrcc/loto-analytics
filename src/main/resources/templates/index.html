@@ -484,17 +484,6 @@
                     </tr>
                     </thead>
                     <tbody>
-                    <tr th:if="${#lists.isEmpty(bets)}">
-                        <td colspan="5" class="text-center py-5">
-                            <div class="text-muted d-flex flex-column align-items-center">
-                                <i class="bi bi-ticket-perforated display-4 mb-3 opacity-25"></i>
-                                <p class="mb-0">Aucune grille enregistrée.</p>
-                                <button class="btn btn-sm btn-outline-primary mt-2" data-bs-toggle="modal" data-bs-target="#modalAddBet">
-                                    Ajouter ma première grille
-                                </button>
-                            </div>
-                        </td>
-                    </tr>
 
                     <tr th:each="bet : ${bets}"
                         th:classappend="${bet.dateJeu.isEqual(#temporals.createToday())} ? 'table-warning border-start border-4 border-warning' : ''">
@@ -922,7 +911,19 @@
             "language": {
                 "url": "//cdn.datatables.net/plug-ins/1.13.6/i18n/fr-FR.json",
                 "paginate": { "previous": "<i class='bi bi-chevron-left'></i>", "next": "<i class='bi bi-chevron-right'></i>" },
-                "zeroRecords": "<div class='py-4 text-muted'><i class='bi bi-search display-6 mb-2'></i><br>Aucune grille ne correspond à ces filtres.</div>"
+                // Message quand on cherche quelque chose qui n'existe pas
+                "zeroRecords": "<div class='py-4 text-muted'><i class='bi bi-search display-6 mb-2'></i><br>Aucune grille ne correspond à ces filtres.</div>",
+
+                // --- AJOUT : Message quand le tableau est vide au démarrage ---
+                "emptyTable": `
+            <div class='py-5 text-muted d-flex flex-column align-items-center'>
+                <i class='bi bi-ticket-perforated display-4 mb-3 opacity-25'></i>
+                <p class='mb-0'>Aucune grille enregistrée.</p>
+                <button class='btn btn-sm btn-outline-primary mt-2' data-bs-toggle='modal' data-bs-target='#modalAddBet'>
+                    Ajouter ma première grille
+                </button>
+            </div>
+        `
             },
             "order": [[ 0, "desc" ]],
             "pageLength": 5,
