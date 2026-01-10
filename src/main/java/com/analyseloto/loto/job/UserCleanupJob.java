@@ -31,7 +31,7 @@ public class UserCleanupJob {
     /**
      * Job tous les matins à 4h, permettant de supprimer les tokens et user non activés
      */
-    @Scheduled(cron = "0 0 4 * * *")
+    @Scheduled(cron = "${loto.jobs.cron.user-cleanup}", zone = "Europe/Paris")
     @Transactional
     public void supprimerComptesNonActives() {
         log.info("🧹 Lancement du nettoyage des comptes non activés...");
@@ -72,7 +72,7 @@ public class UserCleanupJob {
     /**
      * Job de nettoyage de la base de données tous les dimanches à 3h du matin
      */
-    @Scheduled(cron = "0 0 3 * * SUN")
+    @Scheduled(cron = "${loto.jobs.cron.db-cleanup}", zone = "Europe/Paris")
     public void systemCleanup() {
         log.info("🧹 Lancement du nettoyage de la base de données...");
 

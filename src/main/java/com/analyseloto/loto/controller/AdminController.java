@@ -26,6 +26,10 @@ public class AdminController {
     public String adminPage(Model model) {
         // On récupère l'historique des jobs
         model.addAttribute("jobLogs", jobMonitorService.getHistory50Jobs());
+
+        // On récupère les futurs jobs planifiés
+        model.addAttribute("upcomingJobs", jobMonitorService.getUpcomingJobs());
+
         return "admin";
     }
 }

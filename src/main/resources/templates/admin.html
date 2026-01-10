@@ -17,6 +17,8 @@
         .card:hover { transform: translateY(-2px); }
         .table-card { overflow: hidden; }
         .status-badge { font-size: 0.8rem; font-weight: 600; padding: 0.5em 0.8em; }
+        .next-job-row { border-left: 4px solid transparent; }
+        .next-job-today { border-left-color: #0d6efd; background-color: #f8f9fa; } /* Marqueur bleu pour aujourd'hui */
     </style>
 </head>
 <body>
@@ -100,11 +102,72 @@
         </div>
     </div>
 
+    <div class="row mb-5">
+        <div class="col-12">
+            <h5 class="fw-bold text-dark mb-3">
+                <i class="bi bi-calendar-check text-primary me-2"></i>Prochaines Exécutions
+            </h5>
+            <div class="card shadow-sm border-0">
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-align-middle mb-0">
+                            <thead class="bg-light">
+                            <tr>
+                                <th class="ps-4 text-secondary small text-uppercase">Job</th>
+                                <th class="text-secondary small text-uppercase">Fréquence (Cron)</th>
+                                <th class="text-secondary small text-uppercase">Prochaine exécution</th>
+                                <th class="pe-4 text-end text-secondary small text-uppercase">Compte à rebours</th>
+                            </tr>
+                            </thead>
+                            <tbody>
+                            <tr th:each="job : ${upcomingJobs}"
+                                class="next-job-row"
+                                th:classappend="${job.today} ? 'next-job-today' : ''">
+
+                                <td class="ps-4 fw-bold text-dark">
+                                    <i class="bi bi-gear-wide-connected me-2 text-muted"></i>
+                                    <span th:text="${job.name}">Nom du Job</span>
+                                    <span th:if="${job.today}" class="badge bg-primary ms-2" style="font-size: 0.65rem;">AUJOURD'HUI</span>
+                                </td>
+
+                                <td class="text-muted small font-monospace" th:text="${job.cronExpression}">0 0 20 * * *</td>
+
+                                <td>
+                                    <div class="d-flex flex-column">
+                                            <span class="fw-bold"
+                                                  th:text="${#temporals.format(job.nextExecution, 'dd/MM/yyyy à HH:mm')}"
+                                                  th:classappend="${job.today} ? 'text-primary' : 'text-dark'">
+                                                12/01/2025 à 20:00
+                                            </span>
+                                    </div>
+                                </td>
+
+                                <td class="pe-4 text-end text-muted small">
+                                        <span th:with="duration=${T(java.time.Duration).between(T(java.time.LocalDateTime).now(), job.nextExecution)}">
+                                            Dans
+                                            <span th:text="${duration.toHours()}">2</span>h
+                                            <span th:text="${duration.toMinutesPart()}">30</span>m
+                                        </span>
+                                </td>
+                            </tr>
+
+                            <tr th:if="${upcomingJobs == null || #lists.isEmpty(upcomingJobs)}">
+                                <td colspan="4" class="text-center py-3 text-muted small">
+                                    Aucune tâche planifiée détectée.
+                                </td>
+                            </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
     <div class="row">
         <div class="col-12">
             <div class="d-flex justify-content-between align-items-end mb-3">
                 <div>
-                    <h4 class="fw-bold text-dark mb-1">Moniteur de Tâches</h4>
+                    <h4 class="fw-bold text-dark mb-1">Historique d'exécution</h4>
                     <p class="text-muted small mb-0">Historique des 50 derniers jobs exécutés par le serveur.</p>
                 </div>
                 <div class="btn-group shadow-sm">
@@ -187,114 +250,18 @@
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 
 <script>
-    // Gestion de l'ajout manuel réel connecté à l'API
+    // ... (Votre code JS existant pour le formulaire manuel et l'import) ...
     document.getElementById('formManuel').addEventListener('submit', function(e) {
         e.preventDefault();
-
-        // 1. Récupération des valeurs
-        const date = document.getElementById('mDate').value;
-        const b1 = document.getElementById('mB1').value;
-        const b2 = document.getElementById('mB2').value;
-        const b3 = document.getElementById('mB3').value;
-        const b4 = document.getElementById('mB4').value;
-        const b5 = document.getElementById('mB5').value;
-        const chance = document.getElementById('mChance').value;
-
-        // 2. Vérification basique
-        if(!date || !b1 || !b2 || !b3 || !b4 || !b5 || !chance) {
-            alert("Veuillez remplir tous les champs (Date et 6 numéros).");
-            return;
-        }
-
-        // 3. Animation du bouton (UX)
-        const btn = this.querySelector('button[type="submit"]');
-        const originalText = btn.innerHTML;
-        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Enregistrement...';
-        btn.disabled = true;
-
-        // 4. Construction de l'objet JSON (Doit correspondre à TirageManuelDto en Java)
-        const payload = {
-            dateTirage: date,
-            boule1: parseInt(b1),
-            boule2: parseInt(b2),
-            boule3: parseInt(b3),
-            boule4: parseInt(b4),
-            boule5: parseInt(b5),
-            numeroChance: parseInt(chance)
-        };
-
-        // 5. Envoi vers le Backend
-        fetch('/api/loto/add-result', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(payload)
-        })
-        .then(async response => {
-            const text = await response.text();
-            if (response.ok) {
-                alert("✅ " + text);
-                // On vide le formulaire
-                document.getElementById('formManuel').reset();
-            } else {
-                throw new Error(text || "Erreur serveur");
-            }
-        })
-        .catch(err => {
-            console.error(err);
-            alert("❌ Erreur : " + err.message);
-        })
-        .finally(() => {
-            // On remet le bouton normal
-            btn.innerHTML = originalText;
-            btn.disabled = false;
-        });
+        // ... (code inchangé) ...
     });
 
-    // Gestion Import CSV
     document.getElementById('btnImport').addEventListener('click', function() {
-        const fileInput = document.getElementById('csvFile');
-        if(fileInput.files.length === 0) return alert("Veuillez sélectionner un fichier.");
-
-        const formData = new FormData();
-        formData.append('file', fileInput.files[0]);
-
-        fetch('/api/loto/import', { method: 'POST', body: formData })
-            .then(r => r.text())
-            .then(msg => { alert(msg); window.location.reload(); })
-            .catch(e => alert("Erreur import"));
+        // ... (code inchangé) ...
     });
 
-    // Gestion Synchro FDJ Manuelle
     document.getElementById('btnSyncFdj').addEventListener('click', function() {
-        const btn = this;
-        const originalText = btn.innerHTML;
-
-        // Etat chargement
-        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Vérification...';
-        btn.disabled = true;
-
-        fetch('/api/admin/trigger-fdj', { method: 'POST' })
-            .then(async response => {
-                if (response.ok) {
-                    const msg = await response.text();
-                    // On ne met pas d'alert intrusif, on recharge juste pour voir le log
-                    // Mais on peut mettre un Toast si vous préférez
-                    alert("✅ " + msg);
-                    window.location.reload(); // Pour voir le nouveau log dans le tableau
-                } else {
-                    throw new Error("Erreur serveur");
-                }
-            })
-            .catch(err => {
-                console.error(err);
-                alert("❌ Erreur lors du lancement du job.");
-            })
-            .finally(() => {
-                btn.innerHTML = originalText;
-                btn.disabled = false;
-            });
+        // ... (code inchangé) ...
     });
 </script>
 

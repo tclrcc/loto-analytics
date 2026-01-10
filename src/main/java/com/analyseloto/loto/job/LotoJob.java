@@ -41,7 +41,7 @@ public class LotoJob {
      * Cette méthode est appelée par Spring. Elle n'a pas d'argument.
      * Elle appelle la logique métier avec "false".
      */
-    @Scheduled(cron = "0 0 22 * * MON,WED,SAT", zone = "Europe/Paris")
+    @Scheduled(cron = "${loto.jobs.cron.fdj-recovery}", zone = "Europe/Paris")
     public void scheduledJobFdj() {
         // On appelle la méthode logique avec "false" car c'est automatique
         executerRecuperationFdj(false);
@@ -101,7 +101,7 @@ public class LotoJob {
         }
     }
 
-    @Scheduled(cron = "0 0 16 * * MON,WED,SAT")
+    @Scheduled(cron = "${loto.jobs.cron.gen-pronos}", zone = "Europe/Paris")
     public void genererPronosticsDuJour() {
         log.info("🔮 Lancement du Job : Génération des pronostics de référence...");
         JobLog jobLog = jobMonitorService.startJob("GEN_PRONOSTICS_IA");
@@ -124,8 +124,8 @@ public class LotoJob {
                 return;
             }
 
-            // 3. Générer les 5 grilles via l'algorithme (Sans profil astro = Config par défaut)
-            List<PronosticResultDto> pronostics = lotoService.genererMultiplesPronostics(today, 5);
+            // 3. Générer les 10 grilles via l'algorithme (Sans profil astro = Config par défaut)
+            List<PronosticResultDto> pronostics = lotoService.genererMultiplesPronostics(today, 10);
 
             // 4. Sauvegarder en base
             for (PronosticResultDto prono : pronostics) {
@@ -158,7 +158,7 @@ public class LotoJob {
     /**
      * Envoi mail pronostics à chaque utilisateur, à 8h les jours de tirage
      */
-    @Scheduled(cron = "0 0 8 * * MON,WED,SAT")
+    @Scheduled(cron = "${loto.jobs.cron.send-emails}", zone = "Europe/Paris")
     public void envoyerPronosticsPersonnalises() {
         log.info("📢 Lancement du Job Pronostics Personnalisés...");
 
@@ -217,7 +217,7 @@ public class LotoJob {
         log.info("🏁 Fin du Job d'envoi massif.");
     }
 
-    @Scheduled(cron = "0 0 9 * * MON")
+    @Scheduled(cron = "${loto.jobs.cron.budget-alert}", zone = "Europe/Paris")
     public void alerteBudgetHebdo() {
         log.info("💰 Lancement du Job Coach Budgétaire...");
 
