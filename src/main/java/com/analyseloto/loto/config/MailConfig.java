@@ -31,15 +31,14 @@ public class MailConfig {
         props.put("mail.smtp.starttls.enable", "true");
         props.put("mail.debug", "true");
 
-        // --- LE CORRECTIF EST ICI ---
-        // 1. On fait confiance à tout le monde (Gmail)
+        // --- CORRECTIF 587 (STARTTLS) ---
         props.put("mail.smtp.ssl.trust", "*");
-        // 2. On désactive la vérification d'identité serveur
         props.put("mail.smtp.ssl.checkserveridentity", "false");
-        // 3. LA CLEF DU PROBLEME : On force l'utilisation de la SocketFactory standard de Java
-        // Cela empêche Angus Mail d'utiliser sa propre factory qui cherche "WINDOWS-ROOT"
-        props.put("mail.smtp.socketFactory.class", "javax.net.ssl.SSLSocketFactory");
-        props.put("mail.smtp.socketFactory.fallback", "false");
+
+        // Pour le port 587, on ne change PAS la socketFactory de base,
+        // mais on force la factory SSL utilisée lors de la conversion sécurisée.
+        // Cela suffit généralement à contourner le bug Angus Mail.
+        props.put("mail.smtp.ssl.protocols", "TLSv1.2");
 
         return mailSender;
     }

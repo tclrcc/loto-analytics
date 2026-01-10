@@ -12,16 +12,14 @@ COPY src ./src
 RUN mvn clean package -DskipTests
 
 # =====================
-# ÉTAPE 2 : RUN
+# RUN
 # =====================
 FROM eclipse-temurin:17-jre-jammy
 WORKDIR /app
 
-# Installation des certificats racines pour éviter les erreurs SSL avec la FDJ/Gmail
+# Installation des certificats racines (Sécurité)
 RUN apt-get update && apt-get install -y \
     ca-certificates-java \
-    openssl \
-    libnss3 \
     && update-ca-certificates -f \
     && rm -rf /var/lib/apt/lists/*
 
@@ -29,9 +27,6 @@ COPY --from=build /app/target/*.jar app.jar
 
 EXPOSE 8080
 
-# Lancement avec paramétrage SSL forcé et source d'entropie rapide (/dev/urandom)
-ENTRYPOINT ["java", \
-            "-Djavax.net.ssl.trustStore=/etc/ssl/certs/java/cacerts", \
-            "-Djavax.net.ssl.trustStorePassword=changeit", \
-            "-Djava.security.egd=file:/dev/./urandom", \
-            "-jar", "app.jar"]
+# ON SIMPLIFIE L'ENTRYPOINT : Plus de configuration manuelle des certificats !
+# On garde juste l'option pour l'aléatoire (/dev/urandom) pour la rapidité
+ENTRYPOINT ["java", "-Djava.security.egd=file:/dev/./urandom", "-jar", "app.jar"]
