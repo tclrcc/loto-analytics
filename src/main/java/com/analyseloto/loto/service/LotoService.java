@@ -800,12 +800,29 @@ public class LotoService {
         log.info("💰 Gains mis à jour pour l'utilisateur {} sur le tirage du {}", user.getEmail(), tirage.getDateTirage());
     }
 
+    // Dans LotoService.java
+
     public double calculerGainSimule(UserBet bet, LotoTirage tirage) {
         if (tirage == null || bet == null) return 0.0;
 
-        // 1. Compter les bons numéros
+        // --- CAS 1 : C'est un CODE LOTO ---
+        if (bet.getCodeLoto() != null && !bet.getCodeLoto().isEmpty()) {
+            // Nettoyage du code utilisateur (au cas où il y a des espaces)
+            String userCode = bet.getCodeLoto().replaceAll("\\s", "").toUpperCase();
+
+            // Récupération des codes gagnants du tirage
+            List<String> winningCodes = tirage.getWinningCodes();
+
+            if (winningCodes != null && winningCodes.contains(userCode)) {
+                return 20000.0; // Gain fixe code loto
+            }
+            return 0.0; // Perdu
+        }
+
+        // --- CAS 2 : C'est une GRILLE CLASSIQUE ---
         List<Integer> tirageBoules = tirage.getBoules();
         if (tirageBoules == null || tirageBoules.isEmpty()) {
+            // Fallback si la liste n'est pas hydratée (lazy loading ou autre)
             tirageBoules = List.of(tirage.getBoule1(), tirage.getBoule2(), tirage.getBoule3(), tirage.getBoule4(), tirage.getBoule5());
         }
 
@@ -818,7 +835,6 @@ public class LotoService {
 
         boolean chanceMatch = (bet.getChance() == tirage.getNumeroChance());
 
-        // 2. Déterminer le rang (Rank 1 à 9)
         int rankPosition = 0;
         if (matches == 5 && chanceMatch) rankPosition = 1;
         else if (matches == 5) rankPosition = 2;
@@ -828,13 +844,12 @@ public class LotoService {
         else if (matches == 3) rankPosition = 6;
         else if (matches == 2 && chanceMatch) rankPosition = 7;
         else if (matches == 2) rankPosition = 8;
-        else if (matches == 0 && chanceMatch) rankPosition = 9; // 0 ou 1 numéro + chance = rang 9
+        else if (matches == 0 && chanceMatch) rankPosition = 9;
 
-        // 3. Récupérer le montant associé dans le tirage officiel
         if (rankPosition > 0) {
             int finalRankPos = rankPosition;
             return tirage.getRanks().stream()
-                    .filter(r -> r.getRankNumber() == finalRankPos) // ou .getPosition() selon votre entité
+                    .filter(r -> r.getRankNumber() == finalRankPos)
                     .findFirst()
                     .map(LotoTirageRank::getPrize)
                     .orElse(rankPosition == 9 ? 2.20 : 0.0);
@@ -849,19 +864,22 @@ public class LotoService {
      * @return
      */
     public LotoTirage ajouterTirageManuel(TirageManuelDto dto) {
-        if (repository.existsByDateTirage(dto.getDateTirage())) throw new RuntimeException("Existe déjà");
-        LotoTirage t = new LotoTirage(); t.setDateTirage(dto.getDateTirage());
-        t.setBoule1(dto.getBoule1()); t.setBoule2(dto.getBoule2()); t.setBoule3(dto.getBoule3()); t.setBoule4(dto.getBoule4()); t.setBoule5(dto.getBoule5()); t.setNumeroChance(dto.getNumeroChance());
+        // On vérifie que le tirage n'existe pas déjà en base
+        if (repository.existsByDateTirage(dto.getDateTirage())) throw new RuntimeException("Ce tirage existe déjà");
+
+        // Création et enregistrement du tirage
+        LotoTirage t = new LotoTirage();
+        t.setDateTirage(dto.getDateTirage());
+        t.setBoule1(dto.getBoule1());
+        t.setBoule2(dto.getBoule2());
+        t.setBoule3(dto.getBoule3());
+        t.setBoule4(dto.getBoule4());
+        t.setBoule5(dto.getBoule5());
+        t.setNumeroChance(dto.getNumeroChance());
+
         repository.save(t);
 
         return t;
-    }
-
-    @Data public static class StatPoint {
-        private int numero;
-        private int frequence;
-        private int ecart;
-        private boolean isChance;
     }
 
     public StatsReponse getStats(String jourFiltre) {

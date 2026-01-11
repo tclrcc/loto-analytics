@@ -32,6 +32,11 @@ public class LotoTirage {
     @OneToMany(mappedBy = "lotoTirage", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<LotoTirageRank> ranks = new ArrayList<>();
 
+    @ElementCollection
+    @CollectionTable(name = "loto_tirage_codes", joinColumns = @JoinColumn(name = "tirage_id"))
+    @Column(name = "code")
+    private List<String> winningCodes = new ArrayList<>();
+
     // Helper pour récupérer les boules sous forme de liste
     public List<Integer> getBoules() {
         return List.of(boule1, boule2, boule3, boule4, boule5);

@@ -4,21 +4,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Loto Master AI</title>
+    <title>Dashboard - Loto Master AI</title>
 
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
-
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/themes/airbnb.css">
-
-    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
-    <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/fr.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
 
-    <link th:href="@{/css/style.css}" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css">
 
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link th:href="@{/css/style.css}" rel="stylesheet">
 </head>
 <body>
 
@@ -47,7 +43,6 @@
         </button>
 
         <div class="collapse navbar-collapse" id="navbarContent">
-
             <ul class="navbar-nav mx-auto mb-2 mb-lg-0">
                 <li class="nav-item">
                     <a class="nav-link" href="#" data-bs-toggle="modal" data-bs-target="#modalAstro">
@@ -85,32 +80,19 @@
                                 <i class="bi bi-clock-history me-1"></i>
                                 Vu le <span th:text="${#temporals.format(lastLogin, 'dd/MM/yyyy à HH:mm')}"></span>
                             </div>
-                            <div class="px-3 pb-2 text-muted" style="font-size: 0.7rem;" th:if="${lastLogin == null}">
-                                <i class="bi bi-stars me-1"></i> Première connexion !
-                            </div>
                         </li>
                         <li><hr class="dropdown-divider m-0 mb-2"></li>
-
-                        <li>
-                            <a class="dropdown-item" th:href="@{/profile}">
-                                <i class="bi bi-person-circle me-2 text-primary"></i>Mon Profil
-                            </a>
-                        </li>
-                        <li>
-                            <a class="dropdown-item" th:href="@{/profile/stats}"> <i class="bi bi-bar-chart-fill me-2 text-info"></i>Mes Stats</a>
-                        </li>
+                        <li><a class="dropdown-item" th:href="@{/profile}"><i class="bi bi-person-circle me-2 text-primary"></i>Mon Profil</a></li>
+                        <li><a class="dropdown-item" th:href="@{/stats}"> <i class="bi bi-bar-chart-fill me-2 text-info"></i>Centre d'analyse</a></li>
                         <li><hr class="dropdown-divider"></li>
                         <li>
                             <form th:action="@{/logout}" method="post" class="m-0">
-                                <button type="submit" class="dropdown-item text-danger fw-bold">
-                                    <i class="bi bi-box-arrow-right me-2"></i>Se déconnecter
-                                </button>
+                                <button type="submit" class="dropdown-item text-danger fw-bold"><i class="bi bi-box-arrow-right me-2"></i>Se déconnecter</button>
                             </form>
                         </li>
                     </ul>
                 </div>
             </div>
-
         </div>
     </div>
 </nav>
@@ -119,16 +101,13 @@
 
     <div th:if="${lastDraw != null}" class="card border-0 shadow mb-4 animate-up overflow-hidden text-white"
          style="background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%);">
-
         <div class="position-absolute end-0 top-50 translate-middle-y opacity-10 pe-3 d-none d-md-block">
             <i class="bi bi-trophy-fill" style="font-size: 8rem;"></i>
         </div>
-
         <div class="card-body p-4 position-relative">
             <div class="row align-items-center">
                 <div class="col-lg-4 text-center text-lg-start mb-3 mb-lg-0">
-                    <div class="badge bg-white bg-opacity-25 mb-2 px-3 py-1 rounded-pill text-uppercase"
-                         style="font-size: 0.7rem; letter-spacing: 1px;">
+                    <div class="badge bg-white bg-opacity-25 mb-2 px-3 py-1 rounded-pill text-uppercase" style="font-size: 0.7rem; letter-spacing: 1px;">
                         <i class="bi bi-megaphone-fill me-1"></i> Résultat Officiel
                     </div>
                     <h2 class="fw-bold mb-0 text-white">
@@ -136,7 +115,6 @@
                     </h2>
                     <small class="text-white-50">Tirage FDJ</small>
                 </div>
-
                 <div class="col-lg-8">
                     <div class="d-flex justify-content-center align-items-center gap-2 gap-md-3 flex-wrap">
                         <span class="ball-display shadow" th:text="${lastDraw.boule1}">1</span>
@@ -144,9 +122,7 @@
                         <span class="ball-display shadow" th:text="${lastDraw.boule3}">3</span>
                         <span class="ball-display shadow" th:text="${lastDraw.boule4}">4</span>
                         <span class="ball-display shadow" th:text="${lastDraw.boule5}">5</span>
-
                         <div style="width: 1px; height: 40px; background: rgba(255,255,255,0.3);" class="mx-2 d-none d-md-block"></div>
-
                         <span class="ball-display ball-chance shadow pulse-animation" th:text="${lastDraw.numeroChance}">C</span>
                     </div>
                 </div>
@@ -158,177 +134,111 @@
         <div class="card-header bg-white py-3 border-bottom-0 d-flex align-items-center justify-content-between">
             <h5 class="mb-0 fw-bold text-primary">
                 <i class="bi bi-robot me-2"></i>Pronostics de l'IA
-
                 <small class="text-muted fw-normal ms-2" style="font-size: 0.75rem;">
                     pour le <span class="fw-bold text-dark" th:text="${#temporals.format(lastDraw.dateTirage, 'EEEE d MMMM')}">Lundi 12 Janvier</span>
                 </small>
-
             </h5>
-            <span class="badge bg-primary bg-opacity-10 text-primary">
-        <span th:text="${aiBets.size()}">5</span> grilles jouées
-    </span>
+            <span class="badge bg-primary bg-opacity-10 text-primary"><span th:text="${aiBets.size()}">5</span> grilles jouées</span>
         </div>
         <div class="card-body bg-light rounded-bottom-4">
             <div class="row g-3">
                 <div class="col-md-6 col-lg-4" th:each="bet, iter : ${aiBets}">
-
                     <div class="bg-white p-2 rounded shadow-sm border d-flex justify-content-between align-items-center position-relative overflow-hidden"
                          th:classappend="${bet.gain != null && bet.gain > 0} ? 'border-start border-4 border-success ps-1' : ''">
-
                         <div class="d-flex align-items-center">
                             <span class="badge bg-light text-muted border me-2" th:text="'#' + ${iter.count}">#1</span>
-
                             <div class="d-flex gap-1 align-items-center">
-                            <span class="ai-ball rounded-circle text-center fw-bold"
-                                  th:text="${bet.b1}"
-                                  th:classappend="${#lists.contains(lastDraw.boules, bet.b1)} ? 'bg-success text-white' : 'bg-light text-dark'">
-                            </span>
-                                <span class="ai-ball rounded-circle text-center fw-bold"
-                                      th:text="${bet.b2}"
-                                      th:classappend="${#lists.contains(lastDraw.boules, bet.b2)} ? 'bg-success text-white' : 'bg-light text-dark'">
-                            </span>
-                                <span class="ai-ball rounded-circle text-center fw-bold"
-                                      th:text="${bet.b3}"
-                                      th:classappend="${#lists.contains(lastDraw.boules, bet.b3)} ? 'bg-success text-white' : 'bg-light text-dark'">
-                            </span>
-                                <span class="ai-ball rounded-circle text-center fw-bold"
-                                      th:text="${bet.b4}"
-                                      th:classappend="${#lists.contains(lastDraw.boules, bet.b4)} ? 'bg-success text-white' : 'bg-light text-dark'">
-                            </span>
-                                <span class="ai-ball rounded-circle text-center fw-bold"
-                                      th:text="${bet.b5}"
-                                      th:classappend="${#lists.contains(lastDraw.boules, bet.b5)} ? 'bg-success text-white' : 'bg-light text-dark'">
-                            </span>
-
+                                <span class="ai-ball rounded-circle text-center fw-bold" th:text="${bet.b1}" th:classappend="${#lists.contains(lastDraw.boules, bet.b1)} ? 'bg-success text-white' : 'bg-light text-dark'"></span>
+                                <span class="ai-ball rounded-circle text-center fw-bold" th:text="${bet.b2}" th:classappend="${#lists.contains(lastDraw.boules, bet.b2)} ? 'bg-success text-white' : 'bg-light text-dark'"></span>
+                                <span class="ai-ball rounded-circle text-center fw-bold" th:text="${bet.b3}" th:classappend="${#lists.contains(lastDraw.boules, bet.b3)} ? 'bg-success text-white' : 'bg-light text-dark'"></span>
+                                <span class="ai-ball rounded-circle text-center fw-bold" th:text="${bet.b4}" th:classappend="${#lists.contains(lastDraw.boules, bet.b4)} ? 'bg-success text-white' : 'bg-light text-dark'"></span>
+                                <span class="ai-ball rounded-circle text-center fw-bold" th:text="${bet.b5}" th:classappend="${#lists.contains(lastDraw.boules, bet.b5)} ? 'bg-success text-white' : 'bg-light text-dark'"></span>
                                 <div style="width: 1px; height: 20px; background: #dee2e6;" class="mx-1"></div>
-
-                                <span class="ai-ball rounded-circle text-center fw-bold"
-                                      th:text="${bet.chance}"
-                                      th:classappend="${lastDraw.numeroChance == bet.chance} ? 'bg-danger text-white' : 'bg-light text-danger border border-danger border-opacity-25'">
-                            </span>
+                                <span class="ai-ball rounded-circle text-center fw-bold" th:text="${bet.chance}" th:classappend="${lastDraw.numeroChance == bet.chance} ? 'bg-danger text-white' : 'bg-light text-danger border border-danger border-opacity-25'"></span>
                             </div>
                         </div>
-
                         <div class="d-flex align-items-center gap-2">
-
-                        <span th:if="${bet.gain != null && bet.gain > 0}"
-                              class="badge bg-success bg-opacity-10 text-success border border-success fw-bold animate-up">
-                            + <span th:text="${#numbers.formatDecimal(bet.gain, 1, 2)}">0.00</span> €
-                        </span>
-
-                            <i class="bi"
-                               th:with="matches=${ ( (#lists.contains(lastDraw.boules, bet.b1)?1:0) + (#lists.contains(lastDraw.boules, bet.b2)?1:0) + (#lists.contains(lastDraw.boules, bet.b3)?1:0) + (#lists.contains(lastDraw.boules, bet.b4)?1:0) + (#lists.contains(lastDraw.boules, bet.b5)?1:0) ) }"
-                               th:classappend="${bet.gain != null && bet.gain > 0} ? 'bi-trophy-fill text-success' : ( ${matches > 0} ? 'bi-check-circle text-warning' : 'bi-circle text-muted opacity-25' )"
-                               th:title="${bet.gain != null && bet.gain > 0} ? 'Gagnant !' : (${matches} + ' bons numéros')">
-                            </i>
+                            <span th:if="${bet.gain != null && bet.gain > 0}" class="badge bg-success bg-opacity-10 text-success border border-success fw-bold animate-up">
+                                + <span th:text="${#numbers.formatDecimal(bet.gain, 1, 2)}">0.00</span> €
+                            </span>
                         </div>
-
                     </div>
                 </div>
             </div>
         </div>
-
-        <style>
-            .ai-ball {
-                width: 28px;
-                height: 28px;
-                line-height: 28px;
-                font-size: 0.85rem;
-                display: inline-block;
-            }
-        </style>
     </div>
 
     <div th:if="${aiTotalGrids != null && aiTotalGrids > 0}" class="card border-0 shadow mb-4 animate-up delay-2 overflow-hidden text-white"
          style="background: linear-gradient(135deg, #3b82f6 0%, #6366f1 100%);">
-
-        <div class="card-body p-4 position-relative"> <div class="d-flex align-items-start justify-content-between mb-4">
-            <div>
-                <h5 class="fw-bold mb-1 text-white"><i class="bi bi-robot me-2"></i>Performance Historique IA</h5>
-                <small class="text-white-50" style="font-size: 0.85rem;">Bilan consolidé de tous les pronostics générés</small>
-            </div>
-
-            <div class="text-end">
-                <span class="badge bg-white shadow-sm px-3 py-2 rounded-pill fw-bold"
-                      style="font-size: 0.9rem;"
-                      th:classappend="${aiSolde >= 0} ? 'text-success' : 'text-danger'">
-                    ROI : <span th:text="${#numbers.formatDecimal(aiRoi, 1, 1)}">15.5</span> %
-                </span>
-            </div>
-        </div>
-
-            <div class="row g-4 text-center position-relative z-1"> <div class="col-4 border-end border-white border-opacity-25">
-                <div class="text-white-50 text-uppercase small fw-bold mb-1" style="font-size: 0.7rem;">Grilles Totales</div>
-                <div class="h3 fw-bold mb-0 text-white" th:text="${aiTotalGrids}">150</div>
-                <div class="small text-white-50 mt-1">
-                    <i class="bi bi-bullseye me-1 text-white"></i>
-                    <span class="text-white fw-bold" th:text="${aiNbGagnants}">12</span> gagnantes
+        <div class="card-body p-4 position-relative">
+            <div class="d-flex align-items-start justify-content-between mb-4">
+                <div>
+                    <h5 class="fw-bold mb-1 text-white"><i class="bi bi-robot me-2"></i>Performance Historique IA</h5>
+                    <small class="text-white-50" style="font-size: 0.85rem;">Bilan consolidé de tous les pronostics générés</small>
+                </div>
+                <div class="text-end">
+                    <span class="badge bg-white shadow-sm px-3 py-2 rounded-pill fw-bold" style="font-size: 0.9rem;" th:classappend="${aiSolde >= 0} ? 'text-success' : 'text-danger'">
+                        ROI : <span th:text="${#numbers.formatDecimal(aiRoi, 1, 1)}">15.5</span> %
+                    </span>
                 </div>
             </div>
-
+            <div class="row g-4 text-center position-relative z-1">
+                <div class="col-4 border-end border-white border-opacity-25">
+                    <div class="text-white-50 text-uppercase small fw-bold mb-1" style="font-size: 0.7rem;">Grilles Totales</div>
+                    <div class="h3 fw-bold mb-0 text-white" th:text="${aiTotalGrids}">150</div>
+                    <div class="small text-white-50 mt-1"><i class="bi bi-bullseye me-1 text-white"></i><span class="text-white fw-bold" th:text="${aiNbGagnants}">12</span> gagnantes</div>
+                </div>
                 <div class="col-4 border-end border-white border-opacity-25">
                     <div class="text-white-50 text-uppercase small fw-bold mb-1" style="font-size: 0.7rem;">Gains Cumulés</div>
-                    <div class="h3 fw-bold mb-0" style="color: #fde047;">
-                        <span th:text="${#numbers.formatDecimal(aiTotalGains, 1, 2)}">1250.00</span> €
-                    </div>
-                    <div class="small text-white-50 mt-1"><i class="bi bi-cash-stack me-1"></i>Revenus bruts</div>
+                    <div class="h3 fw-bold mb-0" style="color: #fde047;"><span th:text="${#numbers.formatDecimal(aiTotalGains, 1, 2)}">1250.00</span> €</div>
                 </div>
-
                 <div class="col-4">
                     <div class="text-white-50 text-uppercase small fw-bold mb-1" style="font-size: 0.7rem;">Bilan Net</div>
-                    <div class="h3 fw-bold mb-0"
-                         th:classappend="${aiSolde >= 0} ? 'text-white' : 'text-danger bg-white bg-opacity-75 px-2 rounded'">
+                    <div class="h3 fw-bold mb-0" th:classappend="${aiSolde >= 0} ? 'text-white' : 'text-danger bg-white bg-opacity-75 px-2 rounded'">
                         <span th:if="${aiSolde > 0}">+</span><span th:text="${#numbers.formatDecimal(aiSolde, 1, 2)}">-50.00</span> €
                     </div>
-                    <div class="small text-white-50 mt-1">
-                        <i class="bi" th:classappend="${aiSolde >= 0} ? 'bi-graph-up-arrow text-white' : 'bi-graph-down-arrow text-danger'"></i>
-                        <span th:text="${aiSolde >= 0 ? 'Bénéficiaire' : 'Déficitaire'}">Situation</span>
-                    </div>
                 </div>
-
             </div>
         </div>
-    </div>
-
-    <div class="alert alert-light border d-flex align-items-center justify-content-center shadow-sm py-2 mb-4 small animate-up" role="alert" id="infoPeriode" style="display: none !important;">
-        <i class="bi bi-calendar-range me-2 text-primary"></i>
-        <span>Historique : <strong id="nbTirages">0</strong> tirages (<span class="text-primary" id="dateMin">-</span> au <span class="text-primary" id="dateMax">-</span>)</span>
     </div>
 
     <div class="row g-3 mb-4 animate-up delay-1">
         <div class="col-md-4">
             <div class="card p-3 shadow-sm h-100 border-0 bg-white d-flex flex-row align-items-center justify-content-between">
-                <div>
-                    <small class="text-muted text-uppercase fw-bold" style="font-size: 0.7rem;">Dépenses</small>
-                    <h4 class="fw-bold text-danger mb-0">- <span th:text="${#numbers.formatDecimal(totalDepense, 1, 2)}">0.00</span> €</h4>
-                </div>
-                <div class="bg-danger bg-opacity-10 text-danger rounded-circle p-2">
-                    <i class="bi bi-arrow-down-right fs-4"></i>
-                </div>
+                <div><small class="text-muted text-uppercase fw-bold" style="font-size: 0.7rem;">Dépenses</small><h4 class="fw-bold text-danger mb-0">- <span th:text="${#numbers.formatDecimal(totalDepense, 1, 2)}">0.00</span> €</h4></div>
+                <div class="bg-danger bg-opacity-10 text-danger rounded-circle p-2"><i class="bi bi-arrow-down-right fs-4"></i></div>
             </div>
         </div>
         <div class="col-md-4">
             <div class="card p-3 shadow-sm h-100 border-0 bg-white d-flex flex-row align-items-center justify-content-between">
-                <div>
-                    <small class="text-muted text-uppercase fw-bold" style="font-size: 0.7rem;">Gains</small>
-                    <h4 class="fw-bold text-success mb-0">+ <span th:text="${#numbers.formatDecimal(totalGains, 1, 2)}">0.00</span> €</h4>
-                </div>
-                <div class="bg-success bg-opacity-10 text-success rounded-circle p-2">
-                    <i class="bi bi-trophy fs-4"></i>
-                </div>
+                <div><small class="text-muted text-uppercase fw-bold" style="font-size: 0.7rem;">Gains</small><h4 class="fw-bold text-success mb-0">+ <span th:text="${#numbers.formatDecimal(totalGains, 1, 2)}">0.00</span> €</h4></div>
+                <div class="bg-success bg-opacity-10 text-success rounded-circle p-2"><i class="bi bi-trophy fs-4"></i></div>
             </div>
         </div>
         <div class="col-md-4">
-            <div class="card p-3 shadow-sm h-100 border-0 d-flex flex-row align-items-center justify-content-between"
-                 th:classappend="${solde >= 0} ? 'balance-positive' : 'balance-negative'">
-                <div>
-                    <small class="text-uppercase fw-bold opacity-75" style="font-size: 0.7rem;">Bilan Net</small>
-                    <h4 class="fw-bold mb-0">
-                        <span th:if="${solde > 0}">+</span><span th:text="${#numbers.formatDecimal(solde, 1, 2)}">0.00</span> €
-                    </h4>
-                </div>
-                <div class="bg-white bg-opacity-50 rounded-circle p-2">
-                    <i class="bi bi-wallet2 fs-4"></i>
+            <div class="card p-3 shadow-sm h-100 border-0 d-flex flex-row align-items-center justify-content-between" th:classappend="${solde >= 0} ? 'balance-positive' : 'balance-negative'">
+                <div><small class="text-uppercase fw-bold opacity-75" style="font-size: 0.7rem;">Bilan Net</small><h4 class="fw-bold mb-0"><span th:if="${solde > 0}">+</span><span th:text="${#numbers.formatDecimal(solde, 1, 2)}">0.00</span> €</h4></div>
+                <div class="bg-white bg-opacity-50 rounded-circle p-2"><i class="bi bi-wallet2 fs-4"></i></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4 mb-4 animate-up delay-3">
+        <div class="col-12">
+            <div class="card h-100 border-0 shadow-sm hover-scale overflow-hidden">
+                <div class="card-body position-relative p-4 d-flex align-items-center justify-content-between flex-wrap gap-3">
+                    <div class="d-flex align-items-center">
+                        <div class="bg-primary bg-opacity-10 text-primary rounded-3 p-3 me-3">
+                            <i class="bi bi-bar-chart-fill fs-4"></i>
+                        </div>
+                        <div>
+                            <h5 class="fw-bold mb-1">Centre d'Analyse</h5>
+                            <small class="text-muted">Accédez aux graphiques de tension, heatmaps et écarts détaillés.</small>
+                        </div>
+                    </div>
+                    <a th:href="@{/stats}" class="btn btn-outline-primary fw-bold px-4">
+                        Voir les Statistiques <i class="bi bi-arrow-right ms-2"></i>
+                    </a>
                 </div>
             </div>
         </div>
@@ -390,26 +300,29 @@
         <div class="card-header bg-white py-3 border-bottom-0 d-flex justify-content-between align-items-center">
             <div>
                 <h5 class="mb-0 fw-bold text-secondary"><i class="bi bi-ticket-detailed me-2"></i>Mes Grilles</h5>
-                <small class="text-muted" th:if="${!bets.empty}">
-                    <span th:text="${bets.size()}"></span> grilles jouées au total
-                </small>
+                <small class="text-muted" th:if="${!bets.empty}"><span th:text="${bets.size()}"></span> jeux enregistrés</small>
             </div>
-            <a th:href="@{/bets/export/pdf}" class="btn btn-sm btn-outline-danger shadow-sm" target="_blank" title="Imprimer mes grilles">
-                <i class="bi bi-file-earmark-pdf-fill me-1"></i>PDF
-            </a>
-            <button class="btn btn-sm btn-dark shadow-sm" data-bs-toggle="modal" data-bs-target="#modalAddBet">
-                <i class="bi bi-plus-lg me-1"></i>Ajouter
-            </button>
+
+            <div class="d-flex gap-2">
+                <a th:href="@{/bets/export/pdf}" class="btn btn-sm btn-outline-danger shadow-sm" target="_blank" title="Imprimer">
+                    <i class="bi bi-file-earmark-pdf-fill"></i>
+                </a>
+                <div class="btn-group shadow-sm">
+                    <button class="btn btn-sm btn-dark" data-bs-toggle="modal" data-bs-target="#modalAddBet">
+                        <i class="bi bi-grid-3x3 me-1"></i>Grille
+                    </button>
+                    <button class="btn btn-sm btn-outline-dark" data-bs-toggle="modal" data-bs-target="#modalAddCode">
+                        <i class="bi bi-qr-code me-1"></i>Code Loto
+                    </button>
+                </div>
+            </div>
         </div>
 
         <div class="card-body p-0">
             <div class="bg-light bg-opacity-50 border-bottom p-3">
                 <div class="row g-2 align-items-end">
-
-                    <div class="col-md-4">
-                        <label class="small fw-bold text-muted text-uppercase mb-1" style="font-size: 0.7rem;">
-                            <i class="bi bi-calendar3 me-1"></i>Période
-                        </label>
+                    <div class="col-md-3">
+                        <label class="small fw-bold text-muted text-uppercase mb-1" style="font-size: 0.7rem;">Période</label>
                         <div class="input-group input-group-sm shadow-sm">
                             <input type="text" id="filterDateMin" class="form-control bg-white border-end-0" placeholder="Du...">
                             <span class="input-group-text bg-white border-start-0 border-end-0 text-muted">➜</span>
@@ -417,173 +330,88 @@
                         </div>
                     </div>
 
+                    <div class="col-md-2">
+                        <label class="small fw-bold text-muted text-uppercase mb-1" style="font-size: 0.7rem;">Type</label>
+                        <select id="filterType" class="form-select form-select-sm shadow-sm border-0">
+                            <option value="all" selected>Tout</option>
+                            <option value="grid">Grilles</option>
+                            <option value="code">Codes</option>
+                        </select>
+                    </div>
+
                     <div class="col-md-3">
-                        <label class="small fw-bold text-muted text-uppercase mb-1" style="font-size: 0.7rem;">
-                            <i class="bi bi-activity me-1"></i>Statuts (Multi)
-                        </label>
+                        <label class="small fw-bold text-muted text-uppercase mb-1" style="font-size: 0.7rem;">Statuts</label>
                         <div class="dropdown">
-                            <button class="btn btn-sm btn-white bg-white border w-100 text-start d-flex justify-content-between align-items-center shadow-sm"
-                                    type="button" id="dropdownStatus" data-bs-toggle="dropdown" aria-expanded="false">
-                                <span id="selectedStatusText">Tous les statuts</span>
-                                <i class="bi bi-chevron-down small text-muted"></i>
+                            <button class="btn btn-sm btn-white bg-white border w-100 text-start d-flex justify-content-between align-items-center shadow-sm" type="button" id="dropdownStatus" data-bs-toggle="dropdown" aria-expanded="false">
+                                <span id="selectedStatusText">Tous les statuts</span> <i class="bi bi-chevron-down small text-muted"></i>
                             </button>
                             <ul class="dropdown-menu w-100 p-2 shadow border-0" aria-labelledby="dropdownStatus">
-                                <li>
-                                    <div class="form-check">
-                                        <input class="form-check-input status-checkbox" type="checkbox" value="Gagné" id="chkGagne" checked>
-                                        <label class="form-check-label w-100 cursor-pointer" for="chkGagne"><i class="bi bi-trophy-fill text-success me-1"></i> Gagné</label>
-                                    </div>
-                                </li>
-                                <li>
-                                    <div class="form-check">
-                                        <input class="form-check-input status-checkbox" type="checkbox" value="En attente" id="chkAttente" checked>
-                                        <label class="form-check-label w-100 cursor-pointer" for="chkAttente"><i class="bi bi-hourglass-split text-warning me-1"></i> En attente</label>
-                                    </div>
-                                </li>
-                                <li>
-                                    <div class="form-check">
-                                        <input class="form-check-input status-checkbox" type="checkbox" value="Remboursé" id="chkRembourse" checked>
-                                        <label class="form-check-label w-100 cursor-pointer" for="chkRembourse"><i class="bi bi-arrow-repeat text-info me-1"></i> Remboursé</label>
-                                    </div>
-                                </li>
-                                <li>
-                                    <div class="form-check">
-                                        <input class="form-check-input status-checkbox" type="checkbox" value="Perdu" id="chkPerdu" checked>
-                                        <label class="form-check-label w-100 cursor-pointer" for="chkPerdu"><i class="bi bi-x-circle text-muted me-1"></i> Perdu</label>
-                                    </div>
-                                </li>
+                                <li><div class="form-check"><input class="form-check-input status-checkbox" type="checkbox" value="Gagné" id="chkGagne" checked><label class="form-check-label w-100 cursor-pointer" for="chkGagne">Gagné</label></div></li>
+                                <li><div class="form-check"><input class="form-check-input status-checkbox" type="checkbox" value="En attente" id="chkAttente" checked><label class="form-check-label w-100 cursor-pointer" for="chkAttente">En attente</label></div></li>
+                                <li><div class="form-check"><input class="form-check-input status-checkbox" type="checkbox" value="Remboursé" id="chkRembourse" checked><label class="form-check-label w-100 cursor-pointer" for="chkRembourse">Remboursé</label></div></li>
+                                <li><div class="form-check"><input class="form-check-input status-checkbox" type="checkbox" value="Perdu" id="chkPerdu" checked><label class="form-check-label w-100 cursor-pointer" for="chkPerdu">Perdu</label></div></li>
                                 <li><hr class="dropdown-divider my-1"></li>
                                 <li><button class="btn btn-xs btn-link text-decoration-none p-0 ps-1" onclick="$('.status-checkbox').prop('checked', true).trigger('change')">Tout cocher</button></li>
                             </ul>
                         </div>
                     </div>
 
-                    <div class="col-md-3">
-                        <label class="small fw-bold text-muted text-uppercase mb-1" style="font-size: 0.7rem;">
-                            <i class="bi bi-currency-euro me-1"></i>Gain Min.
-                        </label>
+                    <div class="col-md-2">
+                        <label class="small fw-bold text-muted text-uppercase mb-1" style="font-size: 0.7rem;">Gain Min.</label>
                         <input type="number" id="filterGain" class="form-control form-control-sm shadow-sm border-0" placeholder="ex: 10" step="0.5">
                     </div>
 
                     <div class="col-md-2 d-grid">
-                        <button id="btnResetFilters" class="btn btn-sm btn-outline-secondary border-0 bg-white shadow-sm h-100">
-                            <i class="bi bi-arrow-counterclockwise me-1"></i>Effacer
-                        </button>
+                        <button id="btnResetFilters" class="btn btn-sm btn-outline-secondary border-0 bg-white shadow-sm h-100"><i class="bi bi-arrow-counterclockwise me-1"></i>Effacer</button>
                     </div>
                 </div>
             </div>
+
             <div class="table-responsive">
-                <table id="betsTable" class="table table-hover align-middle mb-0" style="border-collapse: separate; border-spacing: 0;">
+                <table id="betsTable" class="table table-hover align-middle mb-0">
                     <thead class="bg-light small text-uppercase text-secondary">
-                    <tr>
-                        <th class="ps-4 py-3 border-0">Date</th>
-                        <th class="text-center border-0">Combinaison</th>
-                        <th class="text-center border-0">Statut</th>
-                        <th class="text-end border-0">Gain</th>
-                        <th class="text-end pe-4 border-0">Actions</th>
-                    </tr>
+                    <tr><th class="ps-4 py-3 border-0">Date</th><th class="text-center border-0">Combinaison</th><th class="text-center border-0">Statut</th><th class="text-end border-0">Gain</th><th class="text-end pe-4 border-0">Actions</th></tr>
                     </thead>
                     <tbody>
-
-                    <tr th:each="bet : ${bets}"
-                        th:classappend="${bet.dateJeu.isEqual(#temporals.createToday())} ? 'table-warning border-start border-4 border-warning' : ''">
-
+                    <tr th:each="bet : ${bets}" th:classappend="${bet.dateJeu.isEqual(#temporals.createToday())} ? 'table-warning border-start border-4 border-warning' : ''">
                         <td class="ps-4" th:data-order="${bet.dateJeu}">
-                            <div class="d-flex flex-column">
-                                <span class="fw-bold text-dark" th:text="${#temporals.format(bet.dateJeu, 'dd MMM yyyy')}">Date</span>
-                                <small class="text-muted text-capitalize" th:text="${#temporals.dayOfWeekName(bet.dateJeu)}">Jour</small>
+                            <div class="d-flex flex-column"><span class="fw-bold text-dark" th:text="${#temporals.format(bet.dateJeu, 'dd MMM yyyy')}">Date</span><small class="text-muted text-capitalize" th:text="${#temporals.dayOfWeekName(bet.dateJeu)}">Jour</small></div>
+                        </td>
+
+                        <td class="text-center">
+                            <div th:if="${bet.codeLoto == null || bet.codeLoto == ''}" class="d-inline-flex align-items-center gap-1" th:with="lotoTirage=${draws != null ? draws.get(bet.dateJeu) : null}">
+                                <span class="badge rounded-circle shadow-sm loto-badge" th:text="${bet.b1}" th:classappend="${lotoTirage == null} ? 'bg-white border text-dark' : (${#lists.contains(lotoTirage.boules, bet.b1)} ? 'bg-success text-white' : 'bg-light text-muted')"></span>
+                                <span class="badge rounded-circle shadow-sm loto-badge" th:text="${bet.b2}" th:classappend="${lotoTirage == null} ? 'bg-white border text-dark' : (${#lists.contains(lotoTirage.boules, bet.b2)} ? 'bg-success text-white' : 'bg-light text-muted')"></span>
+                                <span class="badge rounded-circle shadow-sm loto-badge" th:text="${bet.b3}" th:classappend="${lotoTirage == null} ? 'bg-white border text-dark' : (${#lists.contains(lotoTirage.boules, bet.b3)} ? 'bg-success text-white' : 'bg-light text-muted')"></span>
+                                <span class="badge rounded-circle shadow-sm loto-badge" th:text="${bet.b4}" th:classappend="${lotoTirage == null} ? 'bg-white border text-dark' : (${#lists.contains(lotoTirage.boules, bet.b4)} ? 'bg-success text-white' : 'bg-light text-muted')"></span>
+                                <span class="badge rounded-circle shadow-sm loto-badge" th:text="${bet.b5}" th:classappend="${lotoTirage == null} ? 'bg-white border text-dark' : (${#lists.contains(lotoTirage.boules, bet.b5)} ? 'bg-success text-white' : 'bg-light text-muted')"></span>
+                                <span class="badge rounded-circle shadow-sm loto-badge ms-2" th:text="${bet.chance}" th:classappend="${lotoTirage == null} ? 'bg-danger text-white' : (${lotoTirage.numeroChance == bet.chance} ? 'bg-danger border-danger text-white glowing-border' : 'bg-light text-danger')"></span>
+                            </div>
+
+                            <div th:if="${bet.codeLoto != null && bet.codeLoto != ''}" class="d-inline-flex align-items-center bg-light border rounded px-3 py-1">
+                                <span class="badge bg-secondary me-2" style="font-size: 0.65rem;">CODE</span>
+                                <span class="font-monospace fw-bold text-dark letter-spacing-1" th:text="${bet.codeLoto}">A 1234 5678</span>
                             </div>
                         </td>
 
                         <td class="text-center">
-                            <div class="d-inline-flex align-items-center gap-1"
-                                 th:with="lotoTirage=${draws != null ? draws.get(bet.dateJeu) : null}">
-
-        <span class="badge rounded-circle shadow-sm loto-badge"
-              th:text="${bet.b1}"
-              th:classappend="${lotoTirage == null} ? 'bg-white border border-secondary text-dark' :
-                              (${#lists.contains(lotoTirage.boules, bet.b1)} ? 'bg-success border-success text-white' : 'bg-light border-light text-muted opacity-50')">
-        </span>
-
-                                <span class="badge rounded-circle shadow-sm loto-badge"
-                                      th:text="${bet.b2}"
-                                      th:classappend="${lotoTirage == null} ? 'bg-white border border-secondary text-dark' :
-                              (${#lists.contains(lotoTirage.boules, bet.b2)} ? 'bg-success border-success text-white' : 'bg-light border-light text-muted opacity-50')">
-        </span>
-
-                                <span class="badge rounded-circle shadow-sm loto-badge"
-                                      th:text="${bet.b3}"
-                                      th:classappend="${lotoTirage == null} ? 'bg-white border border-secondary text-dark' :
-                              (${#lists.contains(lotoTirage.boules, bet.b3)} ? 'bg-success border-success text-white' : 'bg-light border-light text-muted opacity-50')">
-        </span>
-
-                                <span class="badge rounded-circle shadow-sm loto-badge"
-                                      th:text="${bet.b4}"
-                                      th:classappend="${lotoTirage == null} ? 'bg-white border border-secondary text-dark' :
-                              (${#lists.contains(lotoTirage.boules, bet.b4)} ? 'bg-success border-success text-white' : 'bg-light border-light text-muted opacity-50')">
-        </span>
-
-                                <span class="badge rounded-circle shadow-sm loto-badge"
-                                      th:text="${bet.b5}"
-                                      th:classappend="${lotoTirage == null} ? 'bg-white border border-secondary text-dark' :
-                              (${#lists.contains(lotoTirage.boules, bet.b5)} ? 'bg-success border-success text-white' : 'bg-light border-light text-muted opacity-50')">
-        </span>
-
-                                <span class="badge rounded-circle shadow-sm loto-badge ms-2"
-                                      th:text="${bet.chance}"
-                                      th:classappend="${lotoTirage == null} ? 'bg-danger text-white' :
-                              (${lotoTirage.numeroChance == bet.chance} ? 'bg-danger border-danger text-white glowing-border' : 'bg-light border-light text-danger opacity-50')">
-        </span>
-
-                                <i th:if="${lotoTirage != null}" class="bi bi-info-circle-fill text-muted ms-1 small"
-                                   data-bs-toggle="tooltip"
-                                   th:title="'Tirage : ' + ${lotoTirage.boules} + ' [C' + ${lotoTirage.numeroChance} + ']'"></i>
-                            </div>
+                            <span th:if="${bet.gain == null}" class="badge bg-warning bg-opacity-10 text-warning border border-warning">En attente</span>
+                            <span th:if="${bet.gain != null && bet.gain > bet.mise}" class="badge bg-success bg-opacity-10 text-success border border-success">Gagné</span>
+                            <span th:if="${bet.gain != null && bet.gain == bet.mise}" class="badge bg-info bg-opacity-10 text-info border border-info">Remboursé</span>
+                            <span th:if="${bet.gain != null && bet.gain < bet.mise}" class="badge bg-light text-muted border">Perdu</span>
                         </td>
-
-                        <td class="text-center">
-                    <span th:if="${bet.gain == null}" class="badge bg-warning bg-opacity-10 text-warning border border-warning">
-                        <i class="bi bi-hourglass-split me-1"></i>En attente
-                    </span>
-                            <span th:if="${bet.gain != null && bet.gain > bet.mise}" class="badge bg-success bg-opacity-10 text-success border border-success">
-                        <i class="bi bi-trophy-fill me-1"></i>Gagné
-                    </span>
-                            <span th:if="${bet.gain != null && bet.gain == bet.mise}" class="badge bg-info bg-opacity-10 text-info border border-info">
-                        <i class="bi bi-arrow-repeat me-1"></i>Remboursé
-                    </span>
-                            <span th:if="${bet.gain != null && bet.gain < bet.mise}" class="badge bg-light text-muted border">
-                        <i class="bi bi-x-circle me-1"></i>Perdu
-                    </span>
-                        </td>
-
                         <td class="text-end fw-bold">
-                            <span th:if="${bet.gain == null}" class="text-muted">-</span>
                             <span th:if="${bet.gain != null && bet.gain > 0}" class="text-success" th:text="'+ ' + ${#numbers.formatDecimal(bet.gain, 1, 2)} + ' €'"></span>
                             <span th:if="${bet.gain != null && bet.gain == 0}" class="text-muted small text-decoration-line-through" th:text="${bet.mise} + ' €'"></span>
+                            <span th:if="${bet.gain == null}" class="text-muted">-</span>
                         </td>
-
                         <td class="text-end pe-4">
                             <div class="dropdown">
-                                <button class="btn btn-sm btn-light rounded-circle" type="button" data-bs-toggle="dropdown">
-                                    <i class="bi bi-three-dots-vertical"></i>
-                                </button>
+                                <button class="btn btn-sm btn-light rounded-circle" type="button" data-bs-toggle="dropdown"><i class="bi bi-three-dots-vertical"></i></button>
                                 <ul class="dropdown-menu dropdown-menu-end shadow border-0">
-                                    <li>
-                                        <button class="dropdown-item small"
-                                                data-bs-toggle="modal" data-bs-target="#modalUpdateGain"
-                                                th:onclick="'setBetId(' + ${bet.id} + ')'">
-                                            <i class="bi bi-pencil me-2 text-primary"></i>Saisir Résultat
-                                        </button>
-                                    </li>
+                                    <li><button class="dropdown-item small" data-bs-toggle="modal" data-bs-target="#modalUpdateGain" th:onclick="'setBetId(' + ${bet.id} + ')'"><i class="bi bi-pencil me-2"></i>Saisir Résultat</button></li>
                                     <li><hr class="dropdown-divider"></li>
-                                    <li>
-                                        <form th:action="@{/bets/delete}" method="post" onsubmit="return confirm('Supprimer cette grille ?');">
-                                            <input type="hidden" name="betId" th:value="${bet.id}">
-                                            <button type="submit" class="dropdown-item small text-danger">
-                                                <i class="bi bi-trash me-2"></i>Supprimer
-                                            </button>
-                                        </form>
-                                    </li>
+                                    <li><form th:action="@{/bets/delete}" method="post" onsubmit="return confirm('Supprimer ?');"><input type="hidden" name="betId" th:value="${bet.id}"><button type="submit" class="dropdown-item small text-danger"><i class="bi bi-trash me-2"></i>Supprimer</button></form></li>
                                 </ul>
                             </div>
                         </td>
@@ -592,228 +420,22 @@
                 </table>
             </div>
         </div>
-
-        <style>
-            .loto-badge {
-                width: 28px; height: 28px;
-                line-height: 24px;
-                font-size: 0.85rem;
-                display: inline-block;
-                padding: 0;
-                text-align: center;
-            }
-        </style>
-    </div>
-
-    <div class="accordion mb-4 animate-up delay-4" id="statsAccordion">
-        <div class="accordion-item border-0 shadow-sm rounded-3 overflow-hidden">
-            <h2 class="accordion-header" id="headingStats">
-                <button class="accordion-button collapsed fw-bold text-secondary bg-white" type="button" data-bs-toggle="collapse" data-bs-target="#collapseStats">
-                    <i class="bi bi-bar-chart-fill me-2 text-primary"></i> Voir les Statistiques Détaillées
-                </button>
-            </h2>
-            <div id="collapseStats" class="accordion-collapse collapse" data-bs-parent="#statsAccordion">
-                <div class="accordion-body bg-white">
-                    <div class="row mb-3">
-                        <div class="col-md-12 text-center">
-                            <div class="btn-group shadow-sm" role="group">
-                                <button type="button" class="btn btn-outline-primary btn-filter active px-4" data-jour="">Tous</button>
-                                <button type="button" class="btn btn-outline-primary btn-filter px-3" data-jour="MONDAY">Lundi</button>
-                                <button type="button" class="btn btn-outline-primary btn-filter px-3" data-jour="WEDNESDAY">Mercredi</button>
-                                <button type="button" class="btn btn-outline-primary btn-filter px-3" data-jour="SATURDAY">Samedi</button>
-                            </div>
-                        </div>
-                    </div>
-
-                    <ul class="nav nav-pills justify-content-center bg-light p-2 rounded-3 mb-3 shadow-sm" id="graphTabs" role="tablist" style="max-width: fit-content; margin: 0 auto;">
-                        <li class="nav-item">
-                            <button class="nav-link active rounded-3 px-4 fw-bold" id="tab-main" data-bs-toggle="pill" data-target="main">🔵 Boules</button>
-                        </li>
-                        <li class="nav-item">
-                            <button class="nav-link rounded-3 px-4 fw-bold text-danger" id="tab-chance" data-bs-toggle="pill" data-target="chance">🔴 Chance</button>
-                        </li>
-                        <li class="nav-item">
-                            <button class="nav-link rounded-3 px-4 fw-bold text-success" id="tab-heat" data-bs-toggle="pill" data-target="heat">🌡️ Heatmap</button>
-                        </li>
-                    </ul>
-
-                    <div class="mt-3">
-                        <div id="searchContainerMain" class="mb-3 search-container mx-auto" style="max-width: 500px;">
-                            <div class="input-group shadow-sm">
-                                <span class="input-group-text bg-white border-end-0"><i class="bi bi-search text-muted"></i></span>
-                                <input type="text" class="form-control border-start-0" id="searchNum" placeholder="Filtrer...">
-                                <button class="btn btn-outline-secondary btn-reset" type="button">✖</button>
-                            </div>
-                        </div>
-                        <div id="searchContainerChance" class="mb-3 search-container d-none mx-auto" style="max-width: 500px;">
-                            <div class="input-group shadow-sm">
-                                <span class="input-group-text bg-white border-end-0 text-danger"><i class="bi bi-search"></i></span>
-                                <input type="text" class="form-control border-start-0" id="searchChance" placeholder="Filtrer Chance...">
-                                <button class="btn btn-outline-secondary btn-reset" type="button">✖</button>
-                            </div>
-                        </div>
-
-                        <div class="position-relative" style="min-height: 300px;">
-                            <canvas id="scatterChart"></canvas>
-                        </div>
-                        <div id="heatmapContainer" class="d-none mt-4 fade-in">
-                            <div class="d-flex justify-content-center flex-wrap gap-2" id="heatmapGrid" style="max-width: 700px; margin: 0 auto;"></div>
-                        </div>
-                    </div>
-
-                    <div class="row g-4 mt-2">
-                        <div class="col-lg-6">
-                            <div class="card h-100 shadow-sm border-primary border-opacity-25">
-                                <div class="card-header bg-primary bg-opacity-10 text-primary border-bottom-0 py-2"><h6 class="mb-0 fw-bold">Top Boules</h6></div>
-                                <div class="card-body"><div class="row g-3"><div class="col-6"><ul class="list-group list-group-flush small-list" id="mainTopFreq"></ul></div><div class="col-6"><ul class="list-group list-group-flush small-list" id="mainTopGap"></ul></div></div></div>
-                            </div>
-                        </div>
-                        <div class="col-lg-6">
-                            <div class="card h-100 shadow-sm border-danger border-opacity-25">
-                                <div class="card-header bg-danger bg-opacity-10 text-danger border-bottom-0 py-2"><h6 class="mb-0 fw-bold">Top Chance</h6></div>
-                                <div class="card-body"><div class="row g-3"><div class="col-6"><ul class="list-group list-group-flush small-list" id="chanceTopFreq"></ul></div><div class="col-6"><ul class="list-group list-group-flush small-list" id="chanceTopGap"></ul></div></div></div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div class="card border-0 shadow-sm mt-4">
-            <div class="card-header bg-white fw-bold d-flex justify-content-between align-items-center">
-                <span><i class="bi bi-radar me-2 text-primary"></i>Profil Statistique</span>
-
-                <button type="button" class="btn btn-sm btn-outline-primary rounded-circle"
-                        style="width: 24px; height: 24px; padding: 0; line-height: 0;"
-                        data-bs-toggle="popover"
-                        data-bs-html="true"
-                        data-bs-trigger="focus"
-                        title="🧠 Comment lire ce graphique ?"
-                        data-bs-content="
-                <div class='small text-start'>
-                    <p class='mb-2'>Ce radar compare la réalité (Bleu) à la théorie (Gris).</p>
-                    <ul class='ps-3 mb-0'>
-                        <li><b>Pairs :</b> Numéros 2, 4, 6...</li>
-                        <li><b>Impairs :</b> Numéros 1, 3, 5...</li>
-                        <li><b>Grands :</b> Supérieurs à 25.</li>
-                        <li><b>Petits :</b> De 1 à 25.</li>
-                        <li><b>Finales Basses :</b> Finissant par 0, 1, 2, 3 ou 4 (ex: 12, 40).</li>
-                    </ul>
-                    <hr class='my-2'>
-                    <i>Astuce : Si le bleu dépasse le gris sur une pointe, c'est une tendance forte !</i>
-                </div>">
-                    <i class="bi bi-question"></i>
-                </button>
-            </div>
-            <div class="card-body">
-                <div style="height: 400px; position: relative; width: 100%;">
-                    <canvas id="radarChart"></canvas>
-                </div>
-
-                <div id="radarAnalysis" class="mt-3 text-center small bg-light p-2 rounded border"></div>
-            </div>
-        </div>
-
-        <script>
-            document.addEventListener("DOMContentLoaded", function() {
-                fetch('/api/loto/graph-data')
-                    .then(response => response.json())
-                    .then(data => {
-                        const container = document.getElementById('networkGraph');
-
-                        const options = {
-                            nodes: {
-                                shape: 'dot',
-                                size: 20,
-                                font: {
-                                    size: 16,
-                                    color: '#000000', // Texte noir pour lisibilité
-                                    strokeWidth: 2,   // Contour blanc autour du texte
-                                    strokeColor: '#ffffff'
-                                },
-                                borderWidth: 2,
-                                shadow: true
-                            },
-                            edges: {
-                                width: 1,
-                                color: { color: '#cbd5e1', highlight: '#4F46E5', opacity: 0.6 },
-                                smooth: {
-                                    type: 'continuous' // Courbes plus douces
-                                }
-                            },
-                            physics: {
-                                enabled: true,
-                                solver: 'forceAtlas2Based', // Algorithme plus stable que BarnesHut
-                                forceAtlas2Based: {
-                                    gravitationalConstant: -50, // Répulsion modérée
-                                    centralGravity: 0.01,
-                                    springLength: 100,
-                                    springConstant: 0.08
-                                },
-                                stabilization: {
-                                    enabled: true,
-                                    iterations: 1000, // On pré-calcule 1000 fois avant d'afficher
-                                    updateInterval: 25,
-                                    onlyDynamicEdges: false,
-                                    fit: true
-                                },
-                                minVelocity: 0.75 // S'arrête dès que ça bouge doucement
-                            },
-                            interaction: {
-                                hover: true,
-                                dragNodes: true, // On peut bouger les boules manuellement
-                                zoomView: true,
-                                dragView: true
-                            }
-                        };
-
-                        // Création du réseau
-                        var network = new vis.Network(container, data, options);
-
-                        // --- L'ASTUCE MAGIQUE ---
-                        // Une fois que le graph est stable, on coupe la physique !
-                        network.on("stabilizationIterationsDone", function () {
-                            network.setOptions( { physics: false } );
-                        });
-
-                        // Si on clique sur une boule, on réactive un peu la physique pour que ça bouge fluide
-                        network.on("dragStart", function (params) {
-                            network.setOptions( { physics: true } );
-                        });
-
-                        // Quand on lâche, on re-fige
-                        network.on("dragEnd", function (params) {
-                            network.setOptions( { physics: false } );
-                        });
-                    });
-            });
-        </script>
+        <style>.loto-badge {width: 28px; height: 28px; line-height: 24px; font-size: 0.85rem; display: inline-block; padding: 0; text-align: center;}.ai-ball {width: 28px; height: 28px; line-height: 28px; font-size: 0.85rem; display: inline-block;}</style>
     </div>
 
     <div class="modal fade" id="modalAstro" tabindex="-1">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content border-0 shadow">
-                <div class="modal-header bg-primary text-white">
-                    <h5 class="modal-title"><i class="bi bi-moon-stars-fill me-2"></i>Analyse Astrologique</h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-                </div>
+                <div class="modal-header bg-primary text-white"><h5 class="modal-title"><i class="bi bi-moon-stars-fill me-2"></i>Analyse Astrologique</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
                 <div class="modal-body bg-light">
                     <form id="formAstro">
                         <div class="row g-2 mb-3">
                             <div class="col-6"><label class="form-label small fw-bold text-muted">Date Naissance</label><input type="date" id="astroDate" class="form-control" th:value="${birthDate}" required></div>
                             <div class="col-6"><label class="form-label small fw-bold text-muted">Heure</label><input type="time" id="astroTime" class="form-control" th:value="${birthTime}" required></div>
                             <div class="col-6"><label class="form-label small fw-bold text-muted">Ville</label><input type="text" id="astroVille" class="form-control" placeholder="ex: Paris" th:value="${birthCity}" required></div>
-                            <div class="col-6">
-                                <label class="form-label small fw-bold text-muted">Signe</label>
-                                <select id="astroSigne" class="form-select" required>
-                                    <option th:each="s : ${ {'BELIER','TAUREAU','GEMEAUX','CANCER','LION','VIERGE','BALANCE','SCORPION','SAGITTAIRE','CAPRICORNE','VERSEAU','POISSONS'} }"
-                                            th:value="${s}" th:text="${s}" th:selected="${astroSigne == s}"></option>
-                                </select>
-                            </div>
+                            <div class="col-6"><label class="form-label small fw-bold text-muted">Signe</label><select id="astroSigne" class="form-select" required><option th:each="s : ${ {'BELIER','TAUREAU','GEMEAUX','CANCER','LION','VIERGE','BALANCE','SCORPION','SAGITTAIRE','CAPRICORNE','VERSEAU','POISSONS'} }" th:value="${s}" th:text="${s}" th:selected="${astroSigne == s}"></option></select></div>
                         </div>
-                        <div class="d-grid gap-2 mt-4">
-                            <button type="submit" class="btn btn-outline-primary">🔮 Voir mes numéros astraux</button>
-                            <button type="button" id="btnHybridAlgo" class="btn btn-primary fw-bold shadow-sm py-2">🚀 Lancer l'Algorithme Hybride</button>
-                        </div>
+                        <div class="d-grid gap-2 mt-4"><button type="submit" class="btn btn-outline-primary">🔮 Voir mes numéros astraux</button><button type="button" id="btnHybridAlgo" class="btn btn-primary fw-bold shadow-sm py-2">🚀 Lancer l'Algorithme Hybride</button></div>
                     </form>
                     <div id="astroResult" class="d-none mt-4 text-center fade-in">
                         <div class="p-3 bg-white rounded-3 shadow-sm border">
@@ -829,7 +451,6 @@
             </div>
         </div>
     </div>
-
     <div class="modal fade" id="modalAddBet" tabindex="-1">
         <div class="modal-dialog">
             <form th:action="@{/bets/add}" method="post" class="modal-content">
@@ -844,6 +465,42 @@
             </form>
         </div>
     </div>
+
+    <div class="modal fade" id="modalAddCode" tabindex="-1">
+        <div class="modal-dialog">
+            <form th:action="@{/bets/add-code}" method="post" class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-qr-code me-2"></i>Enregistrer un Code</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold text-muted">Date du tirage</label>
+                        <input type="date" name="dateJeu" class="form-control" required>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold text-muted">Code LOTO</label>
+                        <div class="input-group">
+                            <span class="input-group-text bg-light"><i class="bi bi-upc-scan"></i></span>
+                            <input type="text" name="codeLoto" class="form-control fw-bold font-monospace text-uppercase"
+                                   placeholder="Ex: A 2563 8547" required pattern="[A-Za-z]\s?[0-9]{4}\s?[0-9]{4}.*">
+                        </div>
+                        <div class="form-text small">Format habituel : 1 lettre et 8 chiffres.</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold text-muted">Coût (€)</label>
+                        <input type="number" step="0.01" name="mise" class="form-control" value="2.20" required>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light p-2">
+                    <button type="submit" class="btn btn-dark w-100">Enregistrer le Code</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <div class="modal fade" id="modalUpdateGain" tabindex="-1">
         <div class="modal-dialog modal-sm">
             <form th:action="@{/bets/update}" method="post" class="modal-content">
@@ -853,319 +510,214 @@
             </form>
         </div>
     </div>
-
 </div>
 
 <footer class="footer mt-auto">
     <div class="container">
         <div class="row align-items-center">
-
             <div class="col-md-6 text-center text-md-start mb-3 mb-md-0">
-                <p class="mb-0 fw-bold text-dark">Loto Master AI <span class="badge bg-light text-secondary border ms-1">v2.0</span></p>
-                <small class="d-block mt-1">
-                    &copy; <span th:text="${#dates.format(#dates.createNow(), 'yyyy')}">2025</span> - Développé avec <i class="bi bi-heart-fill text-danger mx-1" style="font-size:10px;"></i> et Spring Boot.
-                </small>
+                <p class="mb-0 fw-bold text-dark">Loto Master AI <span class="badge bg-light text-secondary border ms-1">v3.0</span></p>
+                <small class="d-block mt-1">&copy; <span th:text="${#dates.format(#dates.createNow(), 'yyyy')}">2025</span> - Développé avec <i class="bi bi-heart-fill text-danger mx-1" style="font-size:10px;"></i> et Spring Boot.</small>
             </div>
-
             <div class="col-md-6 text-center text-md-end">
-                <div class="mb-2">
-                    <a href="#" class="mx-2 small">Mentions Légales</a>
-                    <a href="#" class="mx-2 small">Confidentialité</a>
-                    <a href="#" class="mx-2 small">Contact</a>
-                </div>
-                <div>
-                    <a href="#" class="footer-social-btn"><i class="bi bi-github"></i></a>
-                    <a href="#" class="footer-social-btn"><i class="bi bi-twitter"></i></a>
-                    <a href="#" class="footer-social-btn"><i class="bi bi-linkedin"></i></a>
-                </div>
-            </div>
-        </div>
-
-        <div class="row mt-4">
-            <div class="col-12 text-center">
-                <div class="p-2 rounded bg-light border d-inline-block">
-                    <small class="text-muted fst-italic">
-                        <i class="bi bi-exclamation-triangle-fill text-warning me-1"></i>
-                        Les jeux d'argent présentent des risques : endettement, isolement, dépendance. Pour être aidé, appelez le 09 74 75 13 13 (appel non surtaxé).
-                    </small>
-                </div>
+                <div class="mb-2"><a href="#" class="mx-2 small">Mentions</a><a href="#" class="mx-2 small">Confidentialité</a></div>
+                <div><a href="#" class="footer-social-btn"><i class="bi bi-github"></i></a></div>
             </div>
         </div>
     </div>
 </footer>
 
 <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
-
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 
 <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
-
 <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
 
-<link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css">
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/fr.js"></script> <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/driver.js@1.0.1/dist/driver.js.iife.js"></script>
+
+<script th:src="@{/js/app.js}"></script>
+
+<script>
+    // Fonction utilitaire pour la modale de gain
+    function setBetId(id) {
+        document.getElementById('gainBetId').value = id;
+    }
+</script>
 
 <script th:inline="none">
     $(document).ready(function() {
-        // 1. Initialisation de la table
+        // --- 1. INITIALISATION DATATABLE ---
+        // Correction CORS : On met la traduction directement ici au lieu de la charger via URL
         var table = $('#betsTable').DataTable({
             "language": {
-                "url": "//cdn.datatables.net/plug-ins/1.13.6/i18n/fr-FR.json",
-                "paginate": { "previous": "<i class='bi bi-chevron-left'></i>", "next": "<i class='bi bi-chevron-right'></i>" },
-                // Message quand on cherche quelque chose qui n'existe pas
-                "zeroRecords": "<div class='py-4 text-muted'><i class='bi bi-search display-6 mb-2'></i><br>Aucune grille ne correspond à ces filtres.</div>",
-
-                // --- AJOUT : Message quand le tableau est vide au démarrage ---
-                "emptyTable": `
-            <div class='py-5 text-muted d-flex flex-column align-items-center'>
-                <i class='bi bi-ticket-perforated display-4 mb-3 opacity-25'></i>
-                <p class='mb-0'>Aucune grille enregistrée.</p>
-                <button class='btn btn-sm btn-outline-primary mt-2' data-bs-toggle='modal' data-bs-target='#modalAddBet'>
-                    Ajouter ma première grille
-                </button>
-            </div>
-        `
+                "processing":     "Traitement en cours...",
+                "search":         "<i class='bi bi-search'></i>",
+                "lengthMenu":     "Afficher _MENU_ éléments",
+                "info":           "Affichage de l'élément _START_ à _END_ sur _TOTAL_ éléments",
+                "infoEmpty":      "Affichage de l'élément 0 à 0 sur 0 élément",
+                "infoFiltered":   "(filtré de _MAX_ éléments au total)",
+                "infoPostFix":    "",
+                "loadingRecords": "Chargement en cours...",
+                "zeroRecords":    "<div class='py-4 text-muted'><i class='bi bi-search display-6 mb-2'></i><br>Aucune grille trouvée.</div>",
+                "emptyTable":     "<div class='py-5 text-muted d-flex flex-column align-items-center'><i class='bi bi-ticket-perforated display-4 mb-3 opacity-25'></i><p class='mb-0'>Aucune grille enregistrée.</p><button class='btn btn-sm btn-outline-primary mt-2' data-bs-toggle='modal' data-bs-target='#modalAddBet'>Ajouter ma première grille</button></div>",
+                "paginate": {
+                    "first":      "Premier",
+                    "previous":   "<i class='bi bi-chevron-left'></i>",
+                    "next":       "<i class='bi bi-chevron-right'></i>",
+                    "last":       "Dernier"
+                }
             },
-            "order": [[ 0, "desc" ]],
+            "order": [[ 0, "desc" ]], // Tri par date décroissante
             "pageLength": 5,
             "lengthChange": false,
             "searching": true,
             "dom": 'rt<"d-flex flex-column align-items-center mt-3"ip>'
         });
 
-        // 2. Initialisation Flatpickr
+        // --- 2. CONFIGURATION DATEPICKER (FLATPICKR) ---
         const filterConfig = {
-            locale: "fr", dateFormat: "Y-m-d", altInput: true, altFormat: "j F Y", allowInput: true,
+            locale: "fr",
+            dateFormat: "Y-m-d",
+            altInput: true,
+            altFormat: "j F Y",
+            allowInput: true,
             onChange: function() { table.draw(); }
         };
+        // Initialisation sécurisée
         flatpickr("#filterDateMin", filterConfig);
         flatpickr("#filterDateMax", filterConfig);
 
-        // 3. FONCTION DE FILTRAGE INTELLIGENTE
-        $.fn.dataTable.ext.search.push(
-            function(settings, data, dataIndex) {
 
-                // --- A. DATE ---
-                var min = $('#filterDateMin').val();
-                var max = $('#filterDateMax').val();
-                var dateRow = table.row(dataIndex).node().cells[0].getAttribute('data-order');
+        // --- 3. MOTEUR DE FILTRE SUR MESURE ---
+        $.fn.dataTable.ext.search.push(function(settings, data, dataIndex) {
 
-                if (!((min === "" && max === "") || (min === "" && dateRow <= max) || (min <= dateRow && max === "") || (min <= dateRow && dateRow <= max))) {
-                    return false;
-                }
+            // A. FILTRE DATE
+            var min = $('#filterDateMin').val();
+            var max = $('#filterDateMax').val();
+            // On récupère la date brute via l'attribut data-order mis sur le <td>
+            var dateRow = table.row(dataIndex).node().getAttribute('data-order') || data[0];
+            // Note: data-order est sur le TD, mais table.row().node() renvoie le TR.
+            // Correction : On utilise directement les valeurs cachées si possible, ou on parse data[0]
+            // Le plus simple avec ton HTML actuel :
+            var cellDate = table.cell(dataIndex, 0).nodes().to$().attr('data-order');
+            if (!cellDate) cellDate = data[0]; // Fallback
 
-                // --- B. STATUT (MULTI-SELECTION) ---
-                // On récupère la liste des valeurs cochées
-                var selectedStatuses = [];
-                $('.status-checkbox:checked').each(function() {
-                    selectedStatuses.push($(this).val());
-                });
-
-                var statusRowText = data[2]; // Colonne Statut
-
-                // Si aucun statut coché, on n'affiche rien (ou tout, selon la logique voulue, ici j'assume rien)
-                // Si la ligne ne contient AUCUN des statuts cochés, on masque
-                var matchStatus = false;
-                if (selectedStatuses.length > 0) {
-                    for (var i = 0; i < selectedStatuses.length; i++) {
-                        if (statusRowText.includes(selectedStatuses[i])) {
-                            matchStatus = true;
-                            break;
-                        }
-                    }
-                }
-
-                if (!matchStatus) return false;
-
-                // --- C. FILTRE GAIN MINIMUM (STRICT) ---
-                var gainInput = $('#filterGain').val();
-
-                if (gainInput !== "") {
-                    var gainMin = parseFloat(gainInput);
-                    var statusText = data[2]; // Colonne Statut (Index 2)
-
-                    // 1. SÉCURITÉ : Si on filtre par gain, on vire les Perdants et En attente
-                    // Même si le script lit "2.20" (mise barrée), on le force à masquer la ligne
-                    if (statusText.includes("Perdu") || statusText.includes("En attente")) {
-                        return false;
-                    }
-
-                    // 2. Nettoyage du montant pour les Gagnants / Remboursés
-                    var rawGain = data[3];
-
-                    // On nettoie : on garde chiffres, virgule, point et le signe moins
-                    // Ex: "+ 145,20 €" devient "145.20"
-                    var cleanGainString = rawGain.replace(/[^\d,-]/g, '').replace(',', '.');
-                    var gainRow = parseFloat(cleanGainString);
-
-                    // Si le parsing échoue ou si le montant est inférieur au filtre
-                    if (isNaN(gainRow) || gainRow < gainMin) {
-                        return false;
-                    }
-                }
-
-                return true;
+            if (!((min === "" && max === "") ||
+                (min === "" && cellDate <= max) ||
+                (min <= cellDate && max === "") ||
+                (min <= cellDate && cellDate <= max))) {
+                return false;
             }
-        );
 
-        // 4. Écouteurs d'événements
+            // B. FILTRE TYPE (GRILLE vs CODE)
+            var typeFilter = $('#filterType').val();
+            // data[1] contient le TEXTE de la colonne combinaison.
+            // Si c'est un code, le texte contient "CODE A 1234..."
+            // Si c'est une grille, le texte contient "5 12 45..."
+            var colContent = data[1];
 
-        // Au changement d'une checkbox
-        $('.status-checkbox').on('change', function() {
-            // Mise à jour du texte du bouton (UX)
-            var checkedCount = $('.status-checkbox:checked').length;
-            var totalCount = $('.status-checkbox').length;
+            if (typeFilter === 'grid') {
+                // Si on veut les grilles, on cache si ça contient le mot "CODE"
+                if (colContent.indexOf('CODE') !== -1) return false;
+            } else if (typeFilter === 'code') {
+                // Si on veut les codes, on cache si ça NE contient PAS le mot "CODE"
+                if (colContent.indexOf('CODE') === -1) return false;
+            }
 
-            if(checkedCount === totalCount) {
-                $('#selectedStatusText').text('Tous les statuts');
-            } else if (checkedCount === 0) {
-                $('#selectedStatusText').text('Aucun sélectionné');
+            // C. FILTRE STATUT
+            var selectedStatuses = [];
+            $('.status-checkbox:checked').each(function() { selectedStatuses.push($(this).val()); });
+            var statusRowText = data[2];
+            var matchStatus = false;
+            if (selectedStatuses.length > 0) {
+                for (var i = 0; i < selectedStatuses.length; i++) {
+                    if (statusRowText.includes(selectedStatuses[i])) { matchStatus = true; break; }
+                }
             } else {
-                $('#selectedStatusText').text(checkedCount + ' filtres actifs');
+                matchStatus = true; // Si rien coché (cas rare), on affiche tout ou rien selon logique UX
+            }
+            if (!matchStatus) return false;
+
+            // D. FILTRE GAIN
+            var gainInput = $('#filterGain').val();
+            if (gainInput !== "") {
+                var gainMin = parseFloat(gainInput);
+                var statusText = data[2];
+                // On n'affiche pas les jeux perdus/attente si on cherche un gain spécifique
+                if (statusText.includes("Perdu") || statusText.includes("En attente")) return false;
+
+                var rawGain = data[3]; // ex: "+ 20,50 €"
+                var cleanGainString = rawGain.replace(/[^\d,-]/g, '').replace(',', '.');
+                var gainRow = parseFloat(cleanGainString);
+
+                if (isNaN(gainRow) || gainRow < gainMin) return false;
             }
 
-            table.draw();
+            return true;
         });
 
-        $('#filterGain').on('keyup change', function() {
-            table.draw();
-        });
+        // --- 4. ECOUTEURS D'EVENEMENTS ---
+        $('.status-checkbox').on('change', function() { table.draw(); });
+        $('#filterGain').on('keyup change', function() { table.draw(); });
+        $('#filterType').on('change', function() { table.draw(); });
 
-        // 5. Reset
         $('#btnResetFilters').on('click', function() {
             $('#filterDateMin').val('').next().val('');
             $('#filterDateMax').val('').next().val('');
             $('#filterGain').val('');
+            $('#filterType').val('all');
+            $('.status-checkbox').prop('checked', true);
 
-            // On recoche tout par défaut
-            $('.status-checkbox').prop('checked', true).trigger('change');
-
-            document.querySelector("#filterDateMin")._flatpickr.clear();
-            document.querySelector("#filterDateMax")._flatpickr.clear();
+            // Reset des instances Flatpickr si elles existent
+            if(document.querySelector("#filterDateMin")._flatpickr) document.querySelector("#filterDateMin")._flatpickr.clear();
+            if(document.querySelector("#filterDateMax")._flatpickr) document.querySelector("#filterDateMax")._flatpickr.clear();
 
             table.draw();
         });
-    });
-</script>
 
-<script>
-    document.addEventListener("DOMContentLoaded", function() {
-        // Configuration commune
-        const lotoConfig = {
-            "locale": "fr", // Langue française
-            "dateFormat": "Y-m-d", // Format envoyé au serveur
-            "altInput": true, // Affiche une date plus lisible
-            "altFormat": "l j F Y", // ex: Lundi 12 Janvier 2025
-            "allowInput": true,
-            "disable": [
-                function(date) {
-                    // Renvoyer 'true' pour désactiver un jour.
-                    // On désactive tout ce qui N'EST PAS (1=Lun, 3=Mer, 6=Sam)
-                    return (date.getDay() !== 1 && date.getDay() !== 3 && date.getDay() !== 6);
-                }
-            ],
-            // Optionnel : Mettre en évidence les jours disponibles
-            "onDayCreate": function(dObj, dStr, fp, dayElem) {
-                // Si c'est un jour de Loto, on ajoute une petite puce colorée
-                if (dayElem.dateObj.getDay() === 1 || dayElem.dateObj.getDay() === 3 || dayElem.dateObj.getDay() === 6) {
-                    dayElem.innerHTML += "<span style='display:block; width:4px; height:4px; background:#4F46E5; border-radius:50%; margin:0 auto;'></span>";
-                }
-            }
-        };
-
-        // 1. Appliquer sur le Simulateur
-        flatpickr("#simDate", lotoConfig);
-
-        // 2. Appliquer sur le Modal d'ajout (via le nom ou la classe)
-        // On sélectionne l'input date dans le modal
-        flatpickr("input[name='dateJeu']", lotoConfig);
-
-        // 3. Appliquer sur le Modal Astro (si besoin)
-        flatpickr("#astroDate", {
-            "locale": "fr",
-            "dateFormat": "Y-m-d",
-            "altInput": true,
-            "altFormat": "j F Y"
-            // Pas de restriction de jours pour l'anniversaire !
+        // Forcer majuscules Code Loto
+        $('input[name="codeLoto"]').on('input', function() {
+            $(this).val($(this).val().toUpperCase());
         });
     });
 </script>
-<script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
-<script th:src="@{/js/app.js}"></script>
-<script>function setBetId(id){document.getElementById('gainBetId').value=id;}</script>
-
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/driver.js@1.0.1/dist/driver.css"/>
-<script src="https://cdn.jsdelivr.net/npm/driver.js@1.0.1/dist/driver.js.iife.js"></script>
 
 <script>
+    // --- SCRIPT SUPPLEMENTAIRE POUR LE SIMULATEUR ---
     document.addEventListener("DOMContentLoaded", function() {
-        // On vérifie si l'utilisateur a déjà vu le tour (via localStorage)
-        if (!localStorage.getItem('lotoTourSeen')) {
-
-            const driver = window.driver.js.driver;
-            const driverObj = driver({
-                showProgress: true,
-                steps: [
-                    { element: '.navbar-brand', popover: { title: 'Bienvenue !', description: 'Découvrez Loto Master AI en 30 secondes.' } },
-                    { element: '#formSimulateur', popover: { title: 'Le Cerveau IA', description: 'C\'est ici que tout commence. Entrez une date, choisissez une quantité et laissez l\'IA calculer.' } },
-                    { element: '#btnMagic', popover: { title: 'Génération Magique', description: 'Cliquez ici pour générer des grilles optimisées par nos algorithmes.' } },
-                    { element: '#statsAccordion', popover: { title: 'Analysez tout', description: 'Consultez les statistiques détaillées, les heatmaps et les graphiques ici.' } },
-                    { element: '#betsTable', popover: { title: 'Vos Grilles', description: 'Retrouvez ici vos paris enregistrés et vérifiez vos gains.' } }
-                ],
-                onDestroyed: () => {
-                    localStorage.setItem('lotoTourSeen', 'true'); // On ne le montre plus
-                }
-            });
-
-            driverObj.drive();
-        }
-    });
-</script>
-<script>
-    document.addEventListener("DOMContentLoaded", function() {
-
-        // --- FONCTION : Trouver la prochaine date de Loto ---
         function getNextLotoDate() {
             let date = new Date();
-            // On boucle jusqu'à trouver un jour valide (1=Lun, 3=Mer, 6=Sam)
             while (true) {
                 let day = date.getDay();
-                if (day === 1 || day === 3 || day === 6) {
-                    return date;
-                }
-                // Sinon on ajoute 1 jour
+                if (day === 1 || day === 3 || day === 6) return date;
                 date.setDate(date.getDate() + 1);
             }
         }
 
-        // --- FONCTION : Forcer la date si vide ---
-        function ensureDateIsSet() {
-            const input = document.getElementById('simDate');
-            // Si le champ est vide
-            if (!input.value) {
-                const nextDate = getNextLotoDate();
-                // On met à jour via l'instance Flatpickr pour garder le formatage
-                if (input._flatpickr) {
-                    input._flatpickr.setDate(nextDate, true); // true = déclenche les événements de changement
-                }
-            }
-        }
+        // Configuration Flatpickr commune
+        const lotoConfig = {
+            "locale": "fr",
+            "dateFormat": "Y-m-d",
+            "altInput": true,
+            "altFormat": "l j F Y",
+            "allowInput": true,
+            "defaultDate": getNextLotoDate(),
+            "disable": [function(date) { return (date.getDay() !== 1 && date.getDay() !== 3 && date.getDay() !== 6); }],
+        };
 
-        // --- NOUVELLE FONCTION : Transférer un prono vers la modale d'ajout ---
+        // Appliquer aux champs dates
+        flatpickr("#simDate", lotoConfig);
+        flatpickr("input[name='dateJeu']", lotoConfig);
+        flatpickr("#astroDate", { "locale": "fr", "dateFormat": "Y-m-d", "altInput": true, "altFormat": "j F Y" });
+
+        // Helper pour passer du simulateur à la modale
         window.preparerGrille = function(b1, b2, b3, b4, b5, chance) {
-
-            // 1. Récupérer la date sélectionnée dans le simulateur
             const simDateValue = document.getElementById('simDate').value;
-
-            // 2. Remplir la date dans la modale (compatible Flatpickr)
             const modalDateInput = document.querySelector("#modalAddBet input[name='dateJeu']");
-            if (modalDateInput && modalDateInput._flatpickr) {
-                modalDateInput._flatpickr.setDate(simDateValue, true);
-            } else if (modalDateInput) {
-                modalDateInput.value = simDateValue;
-            }
+            if (modalDateInput && modalDateInput._flatpickr) modalDateInput._flatpickr.setDate(simDateValue, true);
 
-            // 3. Remplir les boules
-            // On cible le formulaire dans la modale
             const form = document.querySelector("#modalAddBet form");
             if(form) {
                 form.querySelector("input[name='b1']").value = b1;
@@ -1175,68 +727,11 @@
                 form.querySelector("input[name='b5']").value = b5;
                 form.querySelector("input[name='chance']").value = chance;
             }
-
-            // 4. Ouvrir la modale Bootstrap
-            const modalEl = document.getElementById('modalAddBet');
-            // 'getOrCreateInstance' est plus sûr pour éviter les conflits
-            const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+            const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('modalAddBet'));
             modal.show();
         };
-
-        // --- Configuration Flatpickr ---
-        const lotoConfig = {
-            "locale": "fr",
-            "dateFormat": "Y-m-d",
-            "altInput": true,
-            "altFormat": "l j F Y",
-            "allowInput": true,
-            "defaultDate": getNextLotoDate(), // <--- AJOUT : Pré-remplit au chargement !
-            "disable": [
-                function(date) {
-                    return (date.getDay() !== 1 && date.getDay() !== 3 && date.getDay() !== 6);
-                }
-            ],
-            "onDayCreate": function(dObj, dStr, fp, dayElem) {
-                if (dayElem.dateObj.getDay() === 1 || dayElem.dateObj.getDay() === 3 || dayElem.dateObj.getDay() === 6) {
-                    dayElem.innerHTML += "<span style='display:block; width:4px; height:4px; background:#4F46E5; border-radius:50%; margin:0 auto;'></span>";
-                }
-            }
-        };
-
-        // 1. Initialisation Simulateur
-        flatpickr("#simDate", lotoConfig);
-
-        // 2. Initialisation Modal Ajout
-        flatpickr("input[name='dateJeu']", lotoConfig);
-
-        // 3. Initialisation Astro
-        flatpickr("#astroDate", {
-            "locale": "fr",
-            "dateFormat": "Y-m-d",
-            "altInput": true,
-            "altFormat": "j F Y"
-        });
-
-        // --- LISTENERS : On vérifie la date au clic ---
-
-        // Bouton Générer (Magic)
-        const btnMagic = document.getElementById('btnMagic');
-        if (btnMagic) {
-            // On utilise 'mousedown' pour être sûr que la date se met AVANT que le click ne lance le calcul
-            btnMagic.addEventListener('mousedown', ensureDateIsSet);
-        }
-
-        // Bouton Analyser (Submit du formulaire)
-        const formSimulateur = document.getElementById('formSimulateur');
-        if (formSimulateur) {
-            formSimulateur.addEventListener('submit', function() {
-                ensureDateIsSet();
-            });
-            // Aussi sur le bouton loupe spécifiquement
-            const btnSearch = formSimulateur.querySelector('button[type="submit"]');
-            if(btnSearch) btnSearch.addEventListener('mousedown', ensureDateIsSet);
-        }
     });
 </script>
+
 </body>
 </html>

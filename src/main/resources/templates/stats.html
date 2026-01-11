@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="fr" xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8">
+  <title>Analyses Avancées - Loto Master AI</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
+  <link th:href="@{/css/style.css}" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="bg-light">
+
+<nav class="navbar navbar-dark navbar-custom shadow-sm mb-4">
+  <div class="container">
+    <a class="navbar-brand" th:href="@{/}">
+      <i class="bi bi-arrow-left-circle me-2"></i> Retour au Dashboard
+    </a>
+    <span class="navbar-text text-white fw-bold">Centre d'Analyse</span>
+  </div>
+</nav>
+
+<div class="container pb-5">
+
+  <div class="card border-0 shadow-sm mb-4 animate-up">
+    <div class="card-header bg-white py-3">
+      <h5 class="fw-bold text-primary mb-0"><i class="bi bi-crosshair me-2"></i>Radar des Opportunités</h5>
+      <small class="text-muted">Identifiez les numéros "sous tension" (Fréquents mais absents récemment)</small>
+    </div>
+    <div class="card-body">
+      <div style="height: 400px;"><canvas id="tensionChart"></canvas></div>
+      <div class="mt-3 text-center small text-muted">
+        <span class="badge bg-success me-2">Zone Cible</span> : Numéros fréquents avec un fort écart actuel.
+      </div>
+    </div>
+  </div>
+
+  <div class="card border-0 shadow-sm mb-4 animate-up delay-1">
+    <div class="card-header bg-white py-3">
+      <h5 class="fw-bold text-danger mb-0"><i class="bi bi-fire me-2"></i>Numéros "Amis" (Top Affinités)</h5>
+    </div>
+    <div class="card-body">
+      <div class="row g-3" id="affinityContainer">
+        <div class="col-12 text-center text-muted py-5"><div class="spinner-border text-primary"></div> Chargement des affinités...</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+<script th:inline="javascript">
+  document.addEventListener("DOMContentLoaded", function() {
+    // --- 1. GRAPHIQUE TENSION (Scatter) ---
+    // On récupère les données brutes depuis le contrôleur
+    const rawStats = /*[[${stats.points}]]*/ [];
+
+    // On filtre pour ne garder que les boules (pas les chances)
+    const boules = rawStats.filter(s => !s.chance);
+
+    const ctx = document.getElementById('tensionChart').getContext('2d');
+    new Chart(ctx, {
+      type: 'scatter',
+      data: {
+        datasets: [{
+          label: 'Numéros (1-49)',
+          data: boules.map(b => ({ x: b.ecart, y: b.frequence, num: b.numero })),
+          backgroundColor: 'rgba(79, 70, 229, 0.6)', // Couleur Primary
+          borderColor: 'rgba(79, 70, 229, 1)',
+          pointRadius: 6,
+          pointHoverRadius: 10
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          tooltip: {
+            callbacks: {
+              label: function(context) {
+                let point = context.raw;
+                return 'Boule #' + point.num + ' (Écart: ' + point.x + ', Freq: ' + point.y + ')';
+              }
+            }
+          }
+        },
+        scales: {
+          x: { title: { display: true, text: 'Jours sans sortir (Écart)' } },
+          y: { title: { display: true, text: 'Fréquence de sortie' } }
+        }
+      }
+    });
+
+    // --- 2. AFFINITÉS (JS pur pour l'instant) ---
+    // Simule l'affichage des meilleures paires basées sur la matrice
+    // Dans une vraie V2, on utiliserait la variable 'matrice' passée par le modèle
+    // Ici, je mets un exemple statique pour le rendu visuel immédiat
+    const container = document.getElementById('affinityContainer');
+    container.innerHTML = `
+            <div class="col-md-4">
+                <div class="p-3 border rounded bg-light text-center">
+                    <h6 class="fw-bold">Le Couple Star</h6>
+                    <div class="d-flex justify-content-center gap-2 mt-2">
+                        <span class="badge rounded-circle bg-dark fs-5" style="width:40px;height:40px;line-height:30px">7</span>
+                        <i class="bi bi-heart-fill text-danger align-self-center"></i>
+                        <span class="badge rounded-circle bg-dark fs-5" style="width:40px;height:40px;line-height:30px">23</span>
+                    </div>
+                    <small class="d-block mt-2 text-muted">Sortis ensemble 14 fois cette année</small>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="p-3 border rounded bg-light text-center">
+                    <h6 class="fw-bold">Le Trio du moment</h6>
+                    <div class="d-flex justify-content-center gap-1 mt-2">
+                        <span class="badge rounded-circle bg-primary fs-6 py-2">12</span>
+                        <span class="badge rounded-circle bg-primary fs-6 py-2">34</span>
+                        <span class="badge rounded-circle bg-primary fs-6 py-2">45</span>
+                    </div>
+                    <small class="d-block mt-2 text-muted">Tendance forte sur les 3 derniers mois</small>
+                </div>
+            </div>
+             <div class="col-md-4">
+                <div class="p-3 border rounded bg-light text-center">
+                    <h6 class="fw-bold">À éviter</h6>
+                    <div class="d-flex justify-content-center gap-2 mt-2 opacity-50">
+                        <span class="badge rounded-circle bg-secondary fs-6 py-2">1</span>
+                        <span class="badge rounded-circle bg-secondary fs-6 py-2">2</span>
+                    </div>
+                    <small class="d-block mt-2 text-muted">Jamais sortis ensemble depuis 2 ans</small>
+                </div>
+            </div>
+        `;
+  });
+</script>
+</body>
+</html>

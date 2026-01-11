@@ -61,7 +61,7 @@ public class LotoController {
         List<GraphDto.Node> nodes = new ArrayList<>();
 
         // Création des Nœuds (Boules 1-49)
-        for (LotoService.StatPoint p : stats.getPoints()) {
+        for (StatPoint p : stats.getPoints()) {
             if (!p.isChance()) {
                 // Taille basée sur la fréquence
                 nodes.add(new GraphDto.Node(p.getNumero(), String.valueOf(p.getNumero()), p.getFrequence(), "#4F46E5"));

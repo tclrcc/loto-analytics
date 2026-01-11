@@ -9,7 +9,7 @@ import java.util.List;
 @Data
 @AllArgsConstructor
 public class StatsReponse {
-    private List<LotoService.StatPoint> points; // Vos stats habituelles
+    private List<StatPoint> points; // Vos stats habituelles
     private String dateMin;
     private String dateMax;
     private int nombreTirages; // Petit bonus : le nombre total de tirages analysés

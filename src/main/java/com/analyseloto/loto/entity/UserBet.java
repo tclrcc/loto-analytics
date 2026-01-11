@@ -1,5 +1,6 @@
 package com.analyseloto.loto.entity;
 
+import com.analyseloto.loto.enums.BetType;
 import jakarta.persistence.*;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -23,13 +24,19 @@ public class UserBet {
     @Column(nullable = false)
     private LocalDate dateJeu;
 
+    @Enumerated(EnumType.STRING)
+    private BetType type;
+
     // Les numéros joués
-    private int b1;
-    private int b2;
-    private int b3;
-    private int b4;
-    private int b5;
-    private int chance;
+    private Integer b1;
+    private Integer b2;
+    private Integer b3;
+    private Integer b4;
+    private Integer b5;
+    private Integer chance;
+
+    @Column(name = "code_loto")
+    private String codeLoto;
 
     @Column(nullable = false)
     private double mise; // Combien ça a coûté (ex: 2.20)

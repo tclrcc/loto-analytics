@@ -20,6 +20,7 @@ import tools.jackson.databind.ObjectMapper;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
+import java.util.regex.Pattern;
 import java.util.stream.StreamSupport;
 
 @Service
@@ -33,6 +34,9 @@ public class FdjService {
     // Constantes
     @Value("${fdj.api.url}")
     private String fdjApiUrl;
+
+    // Regex pour détecter un code loto : 1 Lettre, espace optionnel, 8 chiffres (ex: A 1234 5678 ou A12345678)
+    private static final Pattern CODE_LOTO_PATTERN = Pattern.compile("^[A-Z]\\s?[0-9]{4}\\s?[0-9]{4}$|^[A-Z][0-9]{8}$");
 
     /**
      * Méthode récupérant automatiquement le dernier tirage du Loto via API
@@ -134,20 +138,33 @@ public class FdjService {
 
             // 2. EXTRACTION BOULES (Inchangé)
             List<Integer> boules = new ArrayList<>();
+            List<String> codesGagnants = new ArrayList<>();
             int numeroChance = -1;
 
             JsonNode results = drawNode.get("results");
             if (results.isArray()) {
                 for (JsonNode result : results) {
-                    int drawIndex = result.path("draw_index").asInt();
                     String type = result.path("type").asText();
                     String valueStr = result.path("value").asText();
+                    int drawIndex = result.path("draw_index").asInt();
 
-                    if (drawIndex != 1 || (!"number".equals(type) && !"special".equals(type))) continue;
+                    if (drawIndex == 1) {
+                        if ("number".equals(type)) {
+                            boules.add(Integer.parseInt(valueStr));
+                        } else if ("special".equals(type)) {
+                            numeroChance = Integer.parseInt(valueStr);
+                        }
+                    }
 
-                    int value = Integer.parseInt(valueStr);
-                    if ("number".equals(type)) boules.add(value);
-                    else numeroChance = value;
+                    if ("string".equals(type) && valueStr != null) {
+                        // On nettoie la valeur (Majuscule, Trim)
+                        String cleanVal = valueStr.trim().toUpperCase();
+                        if (CODE_LOTO_PATTERN.matcher(cleanVal).matches()) {
+                            // On normalise (suppression des espaces pour stockage: A 1234 5678 -> A12345678)
+                            // C'est plus simple pour comparer ensuite
+                            codesGagnants.add(cleanVal.replaceAll("\\s", ""));
+                        }
+                    }
                 }
             }
 
@@ -167,8 +184,12 @@ public class FdjService {
             dto.setBoule5(boules.get(4));
             dto.setNumeroChance(numeroChance);
 
+            // Ajout des infos du tirage (sauf codes loto)
             LotoTirage lotoTirage = lotoService.ajouterTirageManuel(dto);
-            log.info("✨ Tirage principal importé : {}", dto);
+            // Ajout des codes loto
+            lotoTirage.setWinningCodes(codesGagnants);
+
+            log.info("✨ Tirage principal importé : {} | Codes trouvés : {}", dto, codesGagnants.size());
 
             // --- 4. TRAITEMENT DES RANGS (CORRIGÉ SELON TON JSON) ---
             JsonNode ranksNode = drawNode.get("ranks");
