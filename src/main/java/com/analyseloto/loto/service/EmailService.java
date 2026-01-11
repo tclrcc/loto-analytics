@@ -62,11 +62,15 @@ public class EmailService {
         if (bets.isEmpty()) return;
 
         // 1. Calculs des totaux
-        double totalMise = bets.stream().mapToDouble(UserBet::getMise).sum();
+        double totalMise = bets.stream()
+                .mapToDouble(b -> (b.getCodeLoto() != null && !b.getCodeLoto().isEmpty()) ? 0.0 : b.getMise())
+                .sum();
+
         double totalGain = bets.stream()
                 .filter(b -> b.getGain() != null)
                 .mapToDouble(UserBet::getGain)
                 .sum();
+
         double benefice = totalGain - totalMise;
 
         // 2. Formatage Date
@@ -151,14 +155,26 @@ public class EmailService {
 
             // Colonne Numéros
             html.append("<td style='padding: 12px 10px;'>");
-            html.append("<span style='color: #475569;'>")
-                    .append(bet.getB1()).append(" - ")
-                    .append(bet.getB2()).append(" - ")
-                    .append(bet.getB3()).append(" - ")
-                    .append(bet.getB4()).append(" - ")
-                    .append(bet.getB5())
-                    .append("</span>");
-            html.append(" <strong style='color: #dc2626; margin-left:5px;'>C").append(bet.getChance()).append("</strong>");
+            if (bet.getCodeLoto() != null && !bet.getCodeLoto().isEmpty()) {
+                // CAS CODE LOTO : Affiche le code
+                html.append("<span style='background-color: #e2e8f0; color: #1e293b; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: bold; margin-right: 5px;'>CODE</span>");
+                html.append("<span style='font-family: monospace; font-weight: bold; font-size: 14px; letter-spacing: 1px;'>")
+                        .append(bet.getCodeLoto())
+                        .append("</span>");
+            } else {
+                // CAS GRILLE CLASSIQUE : Affiche les boules
+                html.append("<span style='color: #475569;'>")
+                        .append(bet.getB1() != null ? bet.getB1() : "?").append(" - ")
+                        .append(bet.getB2() != null ? bet.getB2() : "?").append(" - ")
+                        .append(bet.getB3() != null ? bet.getB3() : "?").append(" - ")
+                        .append(bet.getB4() != null ? bet.getB4() : "?").append(" - ")
+                        .append(bet.getB5() != null ? bet.getB5() : "?")
+                        .append("</span>");
+
+                if (bet.getChance() != null) {
+                    html.append(" <strong style='color: #dc2626; margin-left:5px;'>C").append(bet.getChance()).append("</strong>");
+                }
+            }
             html.append("</td>");
 
             // Colonne Gain
