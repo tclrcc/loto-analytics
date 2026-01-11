@@ -10,6 +10,15 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
     restart: always
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     ports:
       # Mappage : Port Extérieur 5433 -> Port Interne 5432
       # Permet d'accéder à la BDD via 51.254.133.205:5433
@@ -25,6 +34,7 @@ services:
     environment:
       TZ: Europe/Paris
       SPRING_PROFILES_ACTIVE: prod
+      JAVA_OPTS: -Xms512m -Xmx1024m
       SPRING_DATASOURCE_URL: jdbc:postgresql://loto_db:5432/lotodb
       SPRING_DATASOURCE_USERNAME: loto
       SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
@@ -35,6 +45,15 @@ services:
       SPRING_MAIL_PASSWORD: ${MAIL_PASSWORD}
       APP_LOTO_RECIPIENT: tonycoloricchio01@gmail.com
     restart: always
+    deploy:
+      resources:
+        limits:
+          memory: 1536M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 volumes:
   pgdata:
