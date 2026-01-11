@@ -24,6 +24,7 @@ services:
       - loto_db
     environment:
       TZ: Europe/Paris
+      SPRING_PROFILES_ACTIVE: prod
       SPRING_DATASOURCE_URL: jdbc:postgresql://loto_db:5432/lotodb
       SPRING_DATASOURCE_USERNAME: loto
       SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
