@@ -26,6 +26,7 @@ public class CustomLoginSuccessHandler extends SimpleUrlAuthenticationSuccessHan
 
         // On récupère l'email depuis l'objet UserDetails de Spring
         UserDetails userDetails = (UserDetails) authentication.getPrincipal();
+        assert userDetails != null;
         String email = userDetails.getUsername();
 
         // On reset les compteurs
@@ -34,6 +35,14 @@ public class CustomLoginSuccessHandler extends SimpleUrlAuthenticationSuccessHan
         // Vérification si "Se souvenir" est coché pour mail lors de la connexion
         // TODO : terminer cookie se souvenir login email
         String rememberMeValue = request.getParameter("remember-me");
+        Cookie emailCookie = getCookie(rememberMeValue, email);
+        response.addCookie(emailCookie);
+
+        setDefaultTargetUrl("/");
+        super.onAuthenticationSuccess(request, response, authentication);
+    }
+
+    private static Cookie getCookie(String rememberMeValue, String email) {
         boolean isRememberMeChecked = rememberMeValue != null &&
                 (rememberMeValue.equalsIgnoreCase("on") || rememberMeValue.equalsIgnoreCase("true"));
 
@@ -52,9 +61,6 @@ public class CustomLoginSuccessHandler extends SimpleUrlAuthenticationSuccessHan
             emailCookie.setPath("/");
             emailCookie.setSecure(false);
         }
-        response.addCookie(emailCookie);
-
-        setDefaultTargetUrl("/");
-        super.onAuthenticationSuccess(request, response, authentication);
+        return emailCookie;
     }
 }

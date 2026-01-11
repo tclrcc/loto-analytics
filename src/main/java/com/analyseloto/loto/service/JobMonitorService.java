@@ -1,6 +1,5 @@
 package com.analyseloto.loto.service;
 
-import com.analyseloto.loto.dto.JobScheduleDto;
 import com.analyseloto.loto.entity.JobLog;
 import com.analyseloto.loto.repository.JobLogRepository;
 import lombok.Data;
@@ -73,7 +72,7 @@ public class JobMonitorService {
     /**
      * Enregistrement log job
      * @param name nom job
-     * @return
+     * @return JobLog
      */
     @Transactional
     public JobLog startJob(String name) {

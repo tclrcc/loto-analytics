@@ -15,6 +15,7 @@ import lombok.NoArgsConstructor;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -229,13 +230,21 @@ public class LotoService {
         List<List<Integer>> population = new ArrayList<>();
 
         // 1. Initialisation (100 grilles aléatoires cohérentes)
+        // 1. Initialisation
         for (int i = 0; i < populationSize; i++) {
-            List<Integer> g = new ArrayList<>();
-            while (g.size() < 5) {
-                int n = 1 + rng.nextInt(49);
-                if (!g.contains(n)) g.add(n);
+            if (i < populationSize / 2) {
+                // 50% de population "intelligente" dès le début
+                // On utilise buckets et affinités pour pré-remplir
+                population.add(genererGrilleParAffinite(creerBuckets(scores), affinites, new ArrayList<>(), rng));
+            } else {
+                // 50% de pur hasard pour garder de la diversité génétique
+                List<Integer> g = new ArrayList<>();
+                while (g.size() < 5) {
+                    int n = 1 + rng.nextInt(49);
+                    if (!g.contains(n)) g.add(n);
+                }
+                population.add(g);
             }
-            population.add(g);
         }
 
         // 2. Boucle d'évolution
@@ -250,7 +259,7 @@ public class LotoService {
             List<List<Integer>> survivors = population.stream()
                     .sorted((g1, g2) -> Double.compare(fitnessMap.get(g2), fitnessMap.get(g1)))
                     .limit(populationSize / 2)
-                    .collect(Collectors.toList());
+                    .toList();
 
             // Reproduction (Croisement + Mutation) pour remplir la nouvelle pop
             List<List<Integer>> nextGen = new ArrayList<>(survivors);
@@ -300,16 +309,24 @@ public class LotoService {
 
     private double evaluerFitness(List<Integer> grille, Map<Integer, Double> scores, Map<Integer, Map<Integer, Integer>> affinites) {
         double score = 0;
-        // Score individuel
+
+        // 1. Score de base (Poids des numéros)
         for (Integer n : grille) {
             score += scores.getOrDefault(n, 0.0);
         }
-        // Score structurel (Affinités internes)
+
+        // 2. Score d'affinité (Les numéros vont-ils bien ensemble ?)
         for (int i = 0; i < grille.size(); i++) {
             for (int j = i + 1; j < grille.size(); j++) {
-                score += affinites.getOrDefault(grille.get(i), Map.of()).getOrDefault(grille.get(j), 0) * 0.5;
+                score += affinites.getOrDefault(grille.get(i), Map.of()).getOrDefault(grille.get(j), 0) * 0.2; // Poids réduit
             }
         }
+
+        // 3. PÉNALITÉS (Nouveau)
+        if (!estGrilleCoherente(grille)) {
+            score -= 500.0; // Enorme malus pour tuer cette grille dans l'œuf
+        }
+
         return score;
     }
 
@@ -368,6 +385,13 @@ public class LotoService {
                     scoreMarkov += matriceMarkov.getOrDefault(prev, Map.of()).getOrDefault(num, 0);
                 }
                 score += (scoreMarkov * config.getPoidsMarkov());
+            }
+
+            long ecartMoyen = totalTirages / Math.max(1, histJour.stream().filter(t -> t.getBoules().contains(num)).count());
+            if (ecartActuel > (ecartMoyen * 3)) {
+                // Si l'écart actuel est 3x supérieur à sa moyenne habituelle, c'est une anomalie statistique
+                // On force le destin (ou pas, c'est le hasard, mais on le tente)
+                score += 25.0;
             }
 
             scores.put(num, score);
@@ -431,24 +455,32 @@ public class LotoService {
         return Constantes.BUCKET_NEUTRAL;
     }
 
-    // --- HELPERS EXISTANTS ---
 
     private Map<Integer, Map<Integer, Integer>> construireMatriceAffinites(List<LotoTirage> history) {
         Map<Integer, Map<Integer, Integer>> matrix = new HashMap<>();
         for (int i = 1; i <= 49; i++) matrix.put(i, new HashMap<>());
+
+        // On trie du plus récent au plus ancien
         List<LotoTirage> sorted = new ArrayList<>(history);
         sorted.sort(Comparator.comparing(LotoTirage::getDateTirage).reversed());
-        int count = 0;
+
+        double decayFactor = 0.995; // Chaque tirage perd 0.5% d'influence par rapport au précédent
+        double currentWeight = 100.0; // Poids initial arbitraire
+
         for (LotoTirage t : sorted) {
-            count++;
-            int poids = (count <= 50) ? 3 : (count <= 150 ? 2 : 1);
+            // On convertit le double en int pour votre Map, ou on passe la Map en <Integer, Double> (recommandé)
+            // Ici on arrondit pour garder votre signature actuelle, mais l'idée est là
+            int poidsInt = (int) Math.max(1, Math.round(currentWeight));
+
             List<Integer> b = t.getBoules();
             for (int i = 0; i < b.size(); i++) {
                 for (int j = i + 1; j < b.size(); j++) {
-                    matrix.get(b.get(i)).merge(b.get(j), poids, Integer::sum);
-                    matrix.get(b.get(j)).merge(b.get(i), poids, Integer::sum);
+                    matrix.get(b.get(i)).merge(b.get(j), poidsInt, Integer::sum);
+                    matrix.get(b.get(j)).merge(b.get(i), poidsInt, Integer::sum);
                 }
             }
+            // Le poids diminue pour les vieux tirages
+            currentWeight *= decayFactor;
         }
         return matrix;
     }
@@ -533,13 +565,39 @@ public class LotoService {
     private boolean estGrilleCoherente(List<Integer> boules) {
         if (boules == null || boules.size() != 5) return false;
         List<Integer> s = boules.stream().sorted().toList();
+
+        // 1. Somme (Resserrer la courbe de Gauss)
+        // La majorité des tirages se situe entre 120 et 170
         int sum = s.stream().mapToInt(Integer::intValue).sum();
-        if (sum < 95 || sum > 180) return false;
+        if (sum < 100 || sum > 175) return false;
+
+        // 2. Parité (On évite 5 Pairs ou 5 Impairs, mais aussi 4/1 qui est déséquilibré)
         long pairs = s.stream().filter(n -> n % 2 == 0).count();
-        if (pairs == 0 || pairs == 5) return false;
+        // On favorise l'équilibre : 2 Pairs/3 Impairs ou 3 Pairs/2 Impairs
+        if (pairs < 2 || pairs > 3) return false;
+
+        // 3. Dizaines (Répartition spatiale)
         long diz = s.stream().map(n -> n / 10).distinct().count();
-        if (diz < 3) return false;
-        return true;
+        if (diz < 3) return false; // Il faut couvrir au moins 3 dizaines différentes
+
+        // 4. Suites (Numéros consécutifs)
+        // On refuse s'il y a 3 numéros qui se suivent (ex: 12, 13, 14)
+        int consecutiveCount = 0;
+        for (int i = 0; i < s.size() - 1; i++) {
+            if (s.get(i + 1) == s.get(i) + 1) {
+                consecutiveCount++;
+            } else {
+                consecutiveCount = 0;
+            }
+            if (consecutiveCount >= 2) return false; // Rejet si suite de 3 (donc 2 "sauts" de 1)
+        }
+
+        // 5. Finales (ex: 12, 22, 42 -> trois nombres finissant par 2)
+        // C'est rare. On limite à max 2 nombres ayant la même finale.
+        Map<Integer, Long> finales = s.stream()
+                .collect(Collectors.groupingBy(n -> n % 10, Collectors.counting()));
+
+        return finales.values().stream().noneMatch(count -> count > 2);
     }
 
     // ==================================================================================

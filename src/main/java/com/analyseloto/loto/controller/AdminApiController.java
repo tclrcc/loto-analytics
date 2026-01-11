@@ -1,7 +1,6 @@
 package com.analyseloto.loto.controller;
 
 import com.analyseloto.loto.job.LotoJob;
-import com.analyseloto.loto.service.FdjService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
