@@ -12,7 +12,6 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
-import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.util.UriComponentsBuilder;
 import tools.jackson.databind.JsonNode;
@@ -20,10 +19,8 @@ import tools.jackson.databind.ObjectMapper;
 
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.Optional;
+import java.util.*;
+import java.util.stream.StreamSupport;
 
 @Service
 @Slf4j
@@ -37,30 +34,23 @@ public class FdjService {
     @Value("${fdj.api.url}")
     private String fdjApiUrl;
 
-    private final RestTemplate restTemplate;
-
     /**
      * Méthode récupérant automatiquement le dernier tirage du Loto via API
      * @return
      */
     public Optional<LotoTirage> recupererDernierTirage(boolean manuel) {
-        log.info("🔍 DEBUG OS: {}, Arch: {}, Java: {}",
-                System.getProperty("os.name"),
-                System.getProperty("os.arch"),
-                System.getProperty("java.version"));
-
-        log.info("🌍 Appel API FDJ...");
+        log.info("🌍 Appel API FDJ (Recherche intelligente)...");
         try {
             RestTemplate restTemplate = new RestTemplate();
             HttpHeaders headers = new HttpHeaders();
-            // Permet de passer pour un navigateur
             headers.set("User-Agent", "PostmanRuntime/7.32.0");
-            // Construction URL avec paramètres
+
+            // On demande une plage de 0 à 3 pour avoir du choix (les 4 derniers tirages)
             String urlComplete = UriComponentsBuilder.fromUriString(fdjApiUrl)
                     .queryParam("include", "results,ranks")
-                    .queryParam("range", "0-0")
+                    .queryParam("range", "0-3")
                     .toUriString();
-            // Appel API
+
             ResponseEntity<String> response = restTemplate.exchange(
                     urlComplete, HttpMethod.GET, new HttpEntity<>(headers), String.class
             );
@@ -73,32 +63,54 @@ public class FdjService {
             ObjectMapper mapper = new ObjectMapper();
             JsonNode root = mapper.readTree(response.getBody());
 
-            // Le JSON est un tableau, on prend le premier élément (le plus récent)
             if (root.isArray() && !root.isEmpty()) {
-                JsonNode dernierTirageJson = root.get(0);
-                LotoTirage tirage = traiterJsonTirage(dernierTirageJson);
+                // 1. On transforme le JsonNode (Array) en Stream Java pour pouvoir filtrer/trier
+                Optional<JsonNode> meilleurTirageOpt = StreamSupport.stream(root.spliterator(), false)
+                        .filter(node -> {
+                            // Filtre 1 : On vérifie qu'il y a bien une date
+                            return node.has("drawn_at");
+                        })
+                        .filter(node -> {
+                            // Filtre 2 : On exclut les tirages dans le futur (bug FDJ ou erreur d'horloge)
+                            String dateStr = node.get("drawn_at").asText().substring(0, 10);
+                            LocalDate date = LocalDate.parse(dateStr, DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+                            return !date.isAfter(LocalDate.now());
+                        })
+                        // Tri : On prend la date la plus récente parmi celles qui restent
+                        .max(Comparator.comparing(node -> node.get("drawn_at").asText()));
 
-                // On vérifie que la réponse envoyée est bien le résultat d'aujourd'hui
-                if (!manuel && tirage != null) {
-                    LocalDate dateTirage = tirage.getDateTirage();
-                    LocalDate aujourdhui = LocalDate.now();
-                    if (!dateTirage.equals(aujourdhui)) {
-                        log.warn("⚠️ Attention : Le dernier tirage disponible date du {}, ce n'est pas celui d'aujourd'hui !", dateTirage);
-                        return Optional.empty();
+                if (meilleurTirageOpt.isEmpty()) {
+                    log.warn("⚠️ Aucun tirage valide trouvé dans le JSON reçu.");
+                    return Optional.empty();
+                }
+
+                JsonNode tirageCibleJson = meilleurTirageOpt.get();
+                String dateStr = tirageCibleJson.get("drawn_at").asText().substring(0, 10);
+                LocalDate dateTirage = LocalDate.parse(dateStr, DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+
+                log.info("🔎 Tirage le plus pertinent trouvé dans l'API : {}", dateTirage);
+
+                // 2. Vérification de date (POUR LE JOB AUTOMATIQUE SEULEMENT)
+                // Si c'est le CRON de 21h15, on exige que le tirage soit celui d'AUJOURD'HUI.
+                if (!manuel) {
+                    if (!dateTirage.equals(LocalDate.now())) {
+                        log.warn("⏳ Le tirage récupéré date du {}, or nous sommes le {}. La FDJ n'a pas encore publié le résultat du jour. (API Cache ou Retard)", dateTirage, LocalDate.now());
+                        return Optional.empty(); // On ne fait rien, on réessaiera plus tard ou au prochain cron
                     }
                 }
 
+                // 3. Traitement et Sauvegarde
+                // La méthode traiterJsonTirage gère déjà le check "existsByDateTirage"
+                LotoTirage tirage = traiterJsonTirage(tirageCibleJson);
+
                 return Optional.ofNullable(tirage);
+
             } else {
-                log.warn("⚠️ Le JSON reçu est valide mais vide ou n'est pas un tableau.");
+                log.warn("⚠️ Le JSON reçu est vide ou mal formé.");
             }
 
-        } catch (RestClientException e) {
-            // Erreurs Réseau (Timeout, DNS, 404, 500...)
-            log.error("❌ Erreur de communication avec l'API FDJ : {}", e.getMessage());
         } catch (Exception e) {
-            // Autres erreurs imprévues
-            log.error("❌ Erreur inconnue lors de la récupération FDJ", e);
+            log.error("❌ Erreur récupération FDJ", e);
         }
 
         return Optional.empty();
