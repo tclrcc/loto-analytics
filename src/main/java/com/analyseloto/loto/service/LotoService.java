@@ -33,13 +33,9 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 public class LotoService {
-    private final EmailService emailService;
     private final LotoTirageRepository repository;
     private final AstroService astroService;
     private final UserBetRepository betRepository;
-
-    @Value("${app.base-url:http://localhost:8080}")
-    private String baseUrl;
 
     // --- CONFIGURATION DYNAMIQUE (A/B TESTING) ---
     @Data
@@ -72,19 +68,6 @@ public class LotoService {
         }
     }
 
-    // ==================================================================================
-    // 1. COMPARAISON & GÉNÉRATION
-    // ==================================================================================
-
-    public Map<String, List<PronosticResultDto>> comparerAlgorithmes(LocalDate dateCible) {
-        Map<String, List<PronosticResultDto>> comparatif = new LinkedHashMap<>();
-        comparatif.put("STANDARD", genererPronosticAvecConfig(dateCible, 5, null, AlgoConfig.defaut()));
-        comparatif.put("MARKOV", genererPronosticAvecConfig(dateCible, 5, null, AlgoConfig.markov()));
-        comparatif.put("GENETIQUE", genererPronosticAvecConfig(dateCible, 5, null, AlgoConfig.genetique()));
-        comparatif.put("DELTA", genererPronosticAvecConfig(dateCible, 5, null, AlgoConfig.delta()));
-        return comparatif;
-    }
-
     public List<PronosticResultDto> genererMultiplesPronostics(LocalDate dateCible, int nombreGrilles) {
         return genererPronosticAvecConfig(dateCible, nombreGrilles, null, AlgoConfig.defaut());
     }
@@ -114,6 +97,9 @@ public class LotoService {
         List<Integer> dernierTirageConnu = sortedHistory.get(0).getBoules();
         Map<Integer, Map<Integer, Integer>> matriceMarkov = construireMatriceMarkov(history);
 
+        // Matrice Chance
+        Map<Integer, Map<Integer, Integer>> matriceAffinitesChance = construireMatriceAffinitesChance(history);
+
         // Scores
         Map<Integer, Double> scoresBoules = calculerScores(history, 49, dateCible.getDayOfWeek(), false, boostNumbers, hotFinales, config, dernierTirageConnu, matriceMarkov);
         Map<Integer, Double> scoresChance = calculerScores(history, 10, dateCible.getDayOfWeek(), true, boostNumbers, Collections.emptySet(), config, null, null);
@@ -128,15 +114,15 @@ public class LotoService {
             // --- CHOIX DE L'ALGO DE GÉNÉRATION ---
             if (config.isUtiliserGenetique()) {
                 // Solution 3 : ALGORITHME GÉNÉTIQUE
-                boules = genererGrilleGenetique(scoresBoules, matriceAffinites, rng);
+                boules = genererGrilleGenetique(scoresBoules, matriceAffinites, history, rng, dernierTirageConnu);
             } else {
                 // Solution Classique (Affinités + Buckets)
                 boules = new ArrayList<>();
                 int tentatives = 0;
                 while (tentatives < 1000) {
-                    List<Integer> candidat = genererGrilleParAffinite(buckets, matriceAffinites, dernierTirageConnu, rng);
+                    List<Integer> candidat = genererGrilleParAffinite(buckets, matriceAffinites, dernierTirageConnu, history, rng);
                     // Solution 2 : VALIDATION DELTA SYSTEM
-                    if (estGrilleCoherente(candidat) && validerDeltaSystem(candidat)) {
+                    if (estGrilleCoherente(candidat, dernierTirageConnu) && validerDeltaSystem(candidat)) {
                         boules = candidat;
                         break;
                     }
@@ -144,8 +130,8 @@ public class LotoService {
                     if (tentatives == 1000) boules = candidat;
                 }
             }
-
-            int chance = selectionnerChancePonderee(scoresChance, rng);
+            // On définit la chance à l'aide des boules définies
+            int chance = selectionnerChanceOptimisee(boules, scoresChance, matriceAffinitesChance, rng);
 
             // Simulation
             SimulationResultDto simu = simulerGrilleDetaillee(boules, dateCible, history);
@@ -209,9 +195,7 @@ public class LotoService {
 
         // 2. Pas de delta énorme (trou géant ex: 1, 48...)
         long grosDeltas = deltas.stream().filter(d -> d > 25).count();
-        if (grosDeltas > 0) return false;
-
-        return true;
+        return grosDeltas <= 0;
     }
 
     // ==================================================================================
@@ -223,7 +207,8 @@ public class LotoService {
     /**
      * Génère une grille via évolution de population
      */
-    private List<Integer> genererGrilleGenetique(Map<Integer, Double> scores, Map<Integer, Map<Integer, Integer>> affinites, Random rng) {
+    private List<Integer> genererGrilleGenetique(Map<Integer, Double> scores, Map<Integer, Map<Integer, Integer>> affinites, List<LotoTirage> history, Random rng,
+            List<Integer> dernierTirage) {
         int populationSize = 100;
         int generations = 50;
         List<List<Integer>> population = new ArrayList<>();
@@ -234,7 +219,7 @@ public class LotoService {
             if (i < populationSize / 2) {
                 // 50% de population "intelligente" dès le début
                 // On utilise buckets et affinités pour pré-remplir
-                population.add(genererGrilleParAffinite(creerBuckets(scores), affinites, new ArrayList<>(), rng));
+                population.add(genererGrilleParAffinite(creerBuckets(scores), affinites, new ArrayList<>(), history,  rng));
             } else {
                 // 50% de pur hasard pour garder de la diversité génétique
                 List<Integer> g = new ArrayList<>();
@@ -251,7 +236,7 @@ public class LotoService {
             // Évaluation
             Map<List<Integer>, Double> fitnessMap = new HashMap<>();
             for (List<Integer> individu : population) {
-                fitnessMap.put(individu, evaluerFitness(individu, scores, affinites));
+                fitnessMap.put(individu, evaluerFitness(individu, scores, affinites, dernierTirage));
             }
 
             // Sélection (Top 50%)
@@ -293,7 +278,7 @@ public class LotoService {
                 }
 
                 // Vérification cohérence basique
-                if (estGrilleCoherente(enfant)) {
+                if (estGrilleCoherente(enfant, dernierTirage)) {
                     nextGen.add(enfant);
                 }
             }
@@ -302,11 +287,12 @@ public class LotoService {
 
         // Retourne le meilleur individu de la dernière génération
         return population.stream()
-                .max(Comparator.comparingDouble(g -> evaluerFitness(g, scores, affinites)))
+                .max(Comparator.comparingDouble(g -> evaluerFitness(g, scores, affinites, dernierTirage)))
                 .orElse(population.get(0));
     }
 
-    private double evaluerFitness(List<Integer> grille, Map<Integer, Double> scores, Map<Integer, Map<Integer, Integer>> affinites) {
+    private double evaluerFitness(List<Integer> grille, Map<Integer, Double> scores, Map<Integer, Map<Integer, Integer>> affinites,
+            List<Integer> dernierTirage) {
         double score = 0;
 
         // 1. Score de base (Poids des numéros)
@@ -322,7 +308,7 @@ public class LotoService {
         }
 
         // 3. PÉNALITÉS (Nouveau)
-        if (!estGrilleCoherente(grille)) {
+        if (!estGrilleCoherente(grille, dernierTirage)) {
             score -= 500.0; // Enorme malus pour tuer cette grille dans l'œuf
         }
 
@@ -393,6 +379,11 @@ public class LotoService {
                 score += 25.0;
             }
 
+            if (!isChance && dernierTirage != null && dernierTirage.contains(num)) {
+                // Légère pénalité si déjà sorti au dernier tirage
+                score -= 10.0;
+            }
+
             scores.put(num, score);
         }
         return scores;
@@ -405,42 +396,104 @@ public class LotoService {
     // --- GENERATEUR CLASSIQUE (BUCKETS) ---
 
     private List<Integer> genererGrilleParAffinite(Map<String, List<Integer>> buckets,
-                                                   Map<Integer, Map<Integer, Integer>> matrice,
-                                                   List<Integer> dernierTirage, Random rng) {
+            Map<Integer, Map<Integer, Integer>> matrice,
+            List<Integer> dernierTirage,
+            List<LotoTirage> history, // Historique requis pour les trios
+            Random rng) {
         List<Integer> selection = new ArrayList<>();
-        if (!dernierTirage.isEmpty() && rng.nextBoolean()) {
-            selection.add(dernierTirage.get(rng.nextInt(dernierTirage.size())));
-        } else {
-            List<Integer> hots = buckets.getOrDefault("HOT", new ArrayList<>());
-            if (!hots.isEmpty()) selection.add(hots.get(rng.nextInt(hots.size())));
-            else selection.add(1 + rng.nextInt(49));
+
+        // --- STRATÉGIE 1 : GOLDEN TRIO (50% de chance) ---
+        // On tente de démarrer directement avec 3 numéros qui vont bien ensemble
+        // pour sécuriser le "socle" du Rang 6.
+        if (rng.nextBoolean()) {
+            List<List<Integer>> topTrios = getTopTriosRecents(history);
+
+            if (!topTrios.isEmpty()) {
+                // On essaie jusqu'à 3 fois de trouver un trio valide (anti-répétition)
+                for (int tryTrio = 0; tryTrio < 3; tryTrio++) {
+                    List<Integer> trioChoisi = topTrios.get(rng.nextInt(topTrios.size()));
+
+                    // Vérification Anti-Répétition :
+                    // Si ce trio contient 2 numéros ou plus du dernier tirage, on le jette.
+                    long communs = trioChoisi.stream().filter(dernierTirage::contains).count();
+
+                    if (communs < 2) {
+                        selection.addAll(trioChoisi);
+                        break; // Trio valide trouvé !
+                    }
+                }
+            }
         }
 
+        // --- STRATÉGIE 2 : DÉMARRAGE CLASSIQUE (Fallback) ---
+        // Si la stratégie Trio n'a pas été choisie ou a échoué (tous les trios rejetés)
+        if (selection.isEmpty()) {
+            List<Integer> hots = buckets.getOrDefault(Constantes.BUCKET_HOT, new ArrayList<>());
+
+            // On filtre les HOTS pour enlever ceux présents au dernier tirage
+            // (On préfère un Hot qui n'est PAS sorti hier)
+            List<Integer> hotsJouables = hots.stream()
+                    .filter(n -> !dernierTirage.contains(n))
+                    .toList();
+
+            if (!hotsJouables.isEmpty()) {
+                selection.add(hotsJouables.get(rng.nextInt(hotsJouables.size())));
+            } else {
+                // Si tous les Hots sont sortis hier (très rare), on prend un neutre
+                int n = 1 + rng.nextInt(49);
+                while (dernierTirage.contains(n)) n = 1 + rng.nextInt(49);
+                selection.add(n);
+            }
+        }
+
+        // --- COMPLÉTION DE LA GRILLE ---
+        // On remplit les trous (il reste 2 places si Trio, ou 4 places si classique)
         while (selection.size() < 5) {
             String targetBucket = determinerBucketCible(selection, buckets);
+
+            // On récupère les candidats du bucket visé
             List<Integer> pool = new ArrayList<>(buckets.getOrDefault(targetBucket, new ArrayList<>()));
+
+            // On retire ceux déjà choisis
             pool.removeAll(selection);
 
-            if (pool.isEmpty()) pool = new ArrayList<>(buckets.getOrDefault("HOT", new ArrayList<>()));
-            pool.removeAll(selection);
+            // Si le bucket est vide, on se rabat sur les HOTS
+            if (pool.isEmpty()) {
+                pool = new ArrayList<>(buckets.getOrDefault(Constantes.BUCKET_HOT, new ArrayList<>()));
+                pool.removeAll(selection);
+            }
 
             if (pool.isEmpty()) {
+                // Secours ultime : Aléatoire pur (hors doublons)
                 int n = 1 + rng.nextInt(49);
                 while(selection.contains(n)) n = 1 + rng.nextInt(49);
                 selection.add(n);
             } else {
+                // Sélection intelligente basée sur l'affinité avec les numéros déjà présents
+                // (C'est ici que le boost quadratique des paires intervient via 'selectionnerParAffinite')
                 selection.add(selectionnerParAffinite(pool, selection, matrice, rng));
             }
         }
+
         return selection;
     }
 
     private Integer selectionnerParAffinite(List<Integer> candidats, List<Integer> selectionActuelle, Map<Integer, Map<Integer, Integer>> matrice, Random rng) {
         Map<Integer, Double> scoresCandidats = new HashMap<>();
+        // On parcourt tous les candidats
         for (Integer candidat : candidats) {
+            // Initialisation à 1
             double scoreLien = 1.0;
             for (Integer dejaPris : selectionActuelle) {
-                scoreLien += matrice.getOrDefault(dejaPris, Map.of()).getOrDefault(candidat, 0);
+                // Calcul de l'affinité
+                int affinite = matrice.getOrDefault(dejaPris, Map.of()).getOrDefault(candidat, 0);
+
+                // On booste si l'affinité est forte
+                if (affinite > 12) {
+                    scoreLien += (affinite * affinite) / 5.0;
+                } else {
+                    scoreLien += affinite;
+                }
             }
             scoreLien += (rng.nextDouble() * 3.0);
             scoresCandidats.put(candidat, scoreLien);
@@ -484,46 +537,6 @@ public class LotoService {
         return matrix;
     }
 
-    private double calculerGain(UserBet bet, LotoTirage t) {
-        // Logique simplifiée des gains FDJ (À adapter selon les règles officielles si besoin)
-        List<Integer> userNums = List.of(bet.getB1(), bet.getB2(), bet.getB3(), bet.getB4(), bet.getB5());
-        List<Integer> drawNums = t.getBoules();
-
-        // Compter les bons numéros
-        long bonsNumeros = userNums.stream().filter(drawNums::contains).count();
-        boolean bonChance = (bet.getChance() == t.getNumeroChance());
-
-        // Grille de gains approximative (Mise à jour 2024)
-        if (bonsNumeros == 5 && bonChance) return 2000000.0; // Jackpot (theorique)
-        if (bonsNumeros == 5) return 100000.0;
-        if (bonsNumeros == 4 && bonChance) return 1000.0;
-        if (bonsNumeros == 4) return 500.0;
-        if (bonsNumeros == 3 && bonChance) return 50.0;
-        if (bonsNumeros == 3) return 20.0;
-        if (bonsNumeros == 2 && bonChance) return 15.0;
-        if (bonsNumeros == 2) return 5.0;
-        if (bonChance) return 2.20; // Remboursement
-
-        return 0.0;
-    }
-
-    private void envoyerMailGain(User user, double gain, LocalDate date) {
-        String subject = "💰 BRAVO ! Gain détecté sur Loto Master AI";
-        String body = "<html><body>"
-                + "<h2>Félicitations " + user.getFirstName() + " !</h2>"
-                + "<p>Suite au tirage du <strong>" + date + "</strong>, nous avons détecté un gain sur l'une de vos grilles.</p>"
-                + "<h1 style='color:green;'>" + String.format("%.2f", gain) + " €</h1>"
-                + "<p>Connectez-vous pour voir les détails.</p>"
-                + "<br><a href='" + baseUrl + "/login'>Voir mon compte</a>"
-                + "</body></html>";
-
-        try {
-            emailService.sendHtmlEmail(user.getEmail(), subject, body);
-        } catch (Exception e) {
-            log.error("Erreur envoi mail gain", e);
-        }
-    }
-
     private Map<String, List<Integer>> creerBuckets(Map<Integer, Double> scores) {
         List<Map.Entry<Integer, Double>> list = new ArrayList<>(scores.entrySet());
         list.sort((e1, e2) -> e2.getValue().compareTo(e1.getValue()));
@@ -550,18 +563,7 @@ public class LotoService {
         return construireMatriceAffinites(repository.findAll());
     }
 
-    private int selectionnerChancePonderee(Map<Integer, Double> scores, Random rng) {
-        double total = scores.values().stream().mapToDouble(d->d).sum();
-        double r = rng.nextDouble() * total;
-        double cur = 0;
-        for (Map.Entry<Integer, Double> e : scores.entrySet()) {
-            cur += e.getValue();
-            if (r <= cur) return e.getKey();
-        }
-        return 1;
-    }
-
-    private boolean estGrilleCoherente(List<Integer> boules) {
+    private boolean estGrilleCoherente(List<Integer> boules, List<Integer> dernierTirage) {
         if (boules == null || boules.size() != 5) return false;
         List<Integer> s = boules.stream().sorted().toList();
 
@@ -590,6 +592,20 @@ public class LotoService {
             }
             if (consecutiveCount >= 2) return false; // Rejet si suite de 3 (donc 2 "sauts" de 1)
         }
+
+        // Si 2 chiffres minimum lors du dernier tirage sont repris, on rejette aussi
+        if (dernierTirage != null && !dernierTirage.isEmpty()) {
+            long communs = s.stream().filter(dernierTirage::contains).count();
+
+            if (communs >= 2) return false;
+        }
+
+        // 7. Nombres Premiers (2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47)
+        List<Integer> primes = List.of(2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47);
+        long countPrimes = s.stream().filter(primes::contains).count();
+
+        // On rejette les extrêmes (aucun premier ou que des premiers)
+        if (countPrimes == 0 || countPrimes > 4) return false;
 
         // 5. Finales (ex: 12, 22, 42 -> trois nombres finissant par 2)
         // C'est rare. On limite à max 2 nombres ayant la même finale.
@@ -782,26 +798,12 @@ public class LotoService {
         }
     }
 
-    @Transactional
-    public void mettreAJourGainsUtilisateur(User user, LotoTirage tirage) {
-        // 1. Récupérer les grilles de l'utilisateur pour ce tirage
-        List<UserBet> bets = betRepository.findByUserAndDateJeu(user, tirage.getDateTirage());
-
-        if (bets.isEmpty()) return;
-
-        // 2. Calculer et enregistrer les gains
-        for (UserBet bet : bets) {
-            double gain = calculerGainSimule(bet, tirage); // Votre méthode de calcul existante
-            bet.setGain(gain);
-
-            betRepository.save(bet);
-        }
-
-        log.info("💰 Gains mis à jour pour l'utilisateur {} sur le tirage du {}", user.getEmail(), tirage.getDateTirage());
-    }
-
-    // Dans LotoService.java
-
+    /**
+     * Calcul les gains simulés pour chaque grille jouée en fonction d'un tirage donné
+     * @param bet grille
+     * @param tirage tirage
+     * @return somme des gains
+     */
     public double calculerGainSimule(UserBet bet, LotoTirage tirage) {
         if (tirage == null || bet == null) return 0.0;
 
@@ -860,7 +862,7 @@ public class LotoService {
 
     /**
      * Ajout d'un tirage via un administrateur (mode manuel)
-     * @param dto
+     * @param dto dto tirage
      * @return
      */
     public LotoTirage ajouterTirageManuel(TirageManuelDto dto) {
@@ -932,7 +934,7 @@ public class LotoService {
         Map<Integer, Integer> freqChance = new HashMap<>();
         long totalSomme = 0;
         int countPairs = 0;
-        int totalNumerosJoues = bets.size() * 5;
+        int totalNumerosJoues = 0; // On ne compte que les boules réelles
 
         // Initialisation de la map des performances
         Map<String, UserStatsDto.DayPerformance> dayStats = new LinkedHashMap<>();
@@ -941,21 +943,30 @@ public class LotoService {
         dayStats.put("SATURDAY", new UserStatsDto.DayPerformance("Samedi"));
 
         for (UserBet bet : bets) {
-            List<Integer> gr = List.of(bet.getB1(), bet.getB2(), bet.getB3(), bet.getB4(), bet.getB5());
+            // --- GESTION DU TYPE DE JEU ---
+            boolean isGrille = bet.getB1() != null; // Si b1 existe, c'est une grille classique
 
-            // Somme
-            totalSomme += gr.stream().mapToInt(Integer::intValue).sum();
+            if (isGrille) {
+                List<Integer> gr = List.of(bet.getB1(), bet.getB2(), bet.getB3(), bet.getB4(), bet.getB5());
 
-            // Parité & Fréquence
-            for (Integer n : gr) {
-                freqBoules.merge(n, 1, Integer::sum);
-                if (n % 2 == 0) countPairs++;
+                // Somme
+                totalSomme += gr.stream().mapToInt(Integer::intValue).sum();
+
+                // Parité & Fréquence
+                for (Integer n : gr) {
+                    freqBoules.merge(n, 1, Integer::sum);
+                    if (n % 2 == 0) countPairs++;
+                    totalNumerosJoues++;
+                }
+
+                // Chance
+                if (bet.getChance() != null) {
+                    freqChance.merge(bet.getChance(), 1, Integer::sum);
+                }
             }
+            // Si c'est un Code Loto, on ne fait rien pour les stats de boules, mais on compte l'argent (déjà fait plus haut)
 
-            // Chance
-            freqChance.merge(bet.getChance(), 1, Integer::sum);
-
-            // Récupération du jour
+            // Récupération du jour (Commun aux grilles et codes)
             String dayKey = bet.getDateJeu().getDayOfWeek().name();
 
             // On ne traite que Lundi/Mercredi/Samedi (sécurité)
@@ -973,17 +984,29 @@ public class LotoService {
 
         stats.setPerformanceParJour(dayStats);
 
-        // 2. Calculs Moyennes
-        stats.setMoyenneSomme(Math.round((double) totalSomme / bets.size()));
+        // 2. Calculs Moyennes (Sécurisé contre la division par zéro)
+        // On divise par le nombre de GRILLES réelles, pas le nombre total de bets (qui inclut les codes)
+        long nbGrillesReelles = bets.stream().filter(b -> b.getB1() != null).count();
+
+        if (nbGrillesReelles > 0) {
+            stats.setMoyenneSomme(Math.round((double) totalSomme / nbGrillesReelles));
+        } else {
+            stats.setMoyenneSomme(0);
+        }
+
         stats.setTotalPairsJoues(countPairs);
         stats.setTotalImpairsJoues(totalNumerosJoues - countPairs);
 
         // Parité formatée
-        double ratioPair = (double) countPairs / totalNumerosJoues; // ex: 0.6
-        int p = (int) Math.round(ratioPair * 5); // ex: 3
-        stats.setPariteMoyenne(p + " Pairs / " + (5 - p) + " Impairs");
+        if (totalNumerosJoues > 0) {
+            double ratioPair = (double) countPairs / totalNumerosJoues; // ex: 0.6
+            int p = (int) Math.round(ratioPair * 5); // ex: 3
+            stats.setPariteMoyenne(p + " Pairs / " + (5 - p) + " Impairs");
+        } else {
+            stats.setPariteMoyenne("N/A");
+        }
 
-        // 3. Top Listes (Stream API pour trier par fréquence)
+        // 3. Top Listes
         stats.setTopBoules(freqBoules.entrySet().stream()
                 .sorted((e1, e2) -> e2.getValue().compareTo(e1.getValue())) // Tri décroissant
                 .limit(5)
@@ -996,7 +1019,7 @@ public class LotoService {
                 .map(e -> new UserStatsDto.StatNumero(e.getKey(), e.getValue()))
                 .toList());
 
-        // 4. Numéros jamais joués (Optionnel mais sympa)
+        // 4. Numéros jamais joués
         List<Integer> jamais = new ArrayList<>();
         for(int i=1; i<=49; i++) {
             if(!freqBoules.containsKey(i)) jamais.add(i);
@@ -1004,5 +1027,80 @@ public class LotoService {
         stats.setNumJamaisJoues(jamais);
 
         return stats;
+    }
+
+    // --- NOUVEAU : CALCUL AFFINITÉ BOULE -> CHANCE ---
+    private Map<Integer, Map<Integer, Integer>> construireMatriceAffinitesChance(List<LotoTirage> history) {
+        Map<Integer, Map<Integer, Integer>> matrix = new HashMap<>();
+        for (int i = 1; i <= 49; i++) matrix.put(i, new HashMap<>());
+
+        for (LotoTirage t : history) {
+            int chance = t.getNumeroChance();
+            for (Integer boule : t.getBoules()) {
+                // On compte combien de fois la boule X est sortie avec le chance Y
+                matrix.get(boule).merge(chance, 1, Integer::sum);
+            }
+        }
+        return matrix;
+    }
+
+    // --- NOUVEAU : SÉLECTION INTELLIGENTE DU CHANCE ---
+    private int selectionnerChanceOptimisee(List<Integer> boules, Map<Integer, Double> scoresChanceBase,
+            Map<Integer, Map<Integer, Integer>> affinitesChance, Random rng) {
+        Map<Integer, Double> scoreFinalChance = new HashMap<>();
+
+        for (int c = 1; c <= 10; c++) {
+            // 1. Score de base (Fréquence globale)
+            double score = scoresChanceBase.getOrDefault(c, 10.0);
+
+            // 2. Score d'affinité avec la grille actuelle
+            double affiniteScore = 0;
+            for (Integer b : boules) {
+                int count = affinitesChance.getOrDefault(b, Map.of()).getOrDefault(c, 0);
+                affiniteScore += count;
+            }
+
+            // On donne un poids important à l'affinité (x2) pour viser le Rang 6
+            score += (affiniteScore * 2.0);
+            scoreFinalChance.put(c, score);
+        }
+
+        // Petit facteur aléatoire pour ne pas figer le résultat
+        return scoreFinalChance.entrySet().stream()
+                .max((e1, e2) -> Double.compare(e1.getValue() + rng.nextDouble() * 5.0, e2.getValue() + rng.nextDouble() * 5.0))
+                .map(Map.Entry::getKey)
+                .orElse(1);
+    }
+
+    // --- NOUVEAU : DÉTECTION DES TRIOS D'OR ---
+    // Trouve les 10 combinaisons de 3 chiffres les plus fréquentes sur les 100 derniers tirages
+    private List<List<Integer>> getTopTriosRecents(List<LotoTirage> history) {
+        Map<Set<Integer>, Integer> trioFrequency = new HashMap<>();
+
+        // On regarde les 100 derniers tirages pour capter la "tendance actuelle"
+        List<LotoTirage> recents = history.stream()
+                .sorted(Comparator.comparing(LotoTirage::getDateTirage).reversed())
+                .limit(100)
+                .toList();
+
+        for (LotoTirage t : recents) {
+            List<Integer> b = t.getBoules();
+            // Génération de toutes les combinaisons de 3 parmi 5
+            for (int i = 0; i < b.size(); i++) {
+                for (int j = i + 1; j < b.size(); j++) {
+                    for (int k = j + 1; k < b.size(); k++) {
+                        Set<Integer> trio = new HashSet<>(Arrays.asList(b.get(i), b.get(j), b.get(k)));
+                        trioFrequency.merge(trio, 1, Integer::sum);
+                    }
+                }
+            }
+        }
+
+        // Retourne le Top 10 des trios
+        return trioFrequency.entrySet().stream()
+                .sorted((e1, e2) -> e2.getValue().compareTo(e1.getValue()))
+                .limit(10)
+                .map(e -> new ArrayList<>(e.getKey()))
+                .collect(Collectors.toList());
     }
 }

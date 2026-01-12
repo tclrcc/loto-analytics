@@ -1,5 +1,6 @@
 package com.analyseloto.loto.controller;
 
+import com.analyseloto.loto.dto.StatsReponse;
 import com.analyseloto.loto.entity.LotoTirage;
 import com.analyseloto.loto.entity.User;
 import com.analyseloto.loto.entity.UserBet;
@@ -14,10 +15,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 
 import java.security.Principal;
 import java.time.LocalDate;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -48,8 +46,19 @@ public class HomeController {
         model.addAttribute("lastLogin", user.getLastLogin());
         model.addAttribute("astroSigne", user.getZodiacSign());
 
+        // --- 2. AJOUT : RÉCUPÉRATION DES STATS GLOBALES (Widget Dashboard) ---
+        StatsReponse globalStats = lotoService.getStats(null);
+        model.addAttribute("globalStats", globalStats);
+
         // Récupération des grilles du joueur
-        List<UserBet> bets = betRepository.findByUserOrderByDateJeuDesc(user);
+        List<UserBet> rawBets = betRepository.findByUser(user);
+        // On trie cette grille selon la date puis grilles classiques / code loto
+        List<UserBet> bets = rawBets.stream()
+                .sorted(
+                        Comparator.comparing(UserBet::getDateJeu).reversed()
+                            .thenComparing(bet -> bet.getCodeLoto() != null)
+                )
+                .collect(Collectors.toList());
         model.addAttribute("bets", bets);
 
         // On récupère toutes les dates uniques jouées par l'utilisateur

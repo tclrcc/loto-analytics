@@ -100,6 +100,26 @@
                 </div>
             </div>
         </div>
+
+            <div class="col-md-3"> <div class="card h-100 shadow-sm border-0" style="background: linear-gradient(135deg, #e0e7ff 0%, #ffffff 100%);">
+                <div class="card-header bg-transparent py-3 d-flex align-items-center border-0">
+                    <div class="bg-primary text-white rounded-circle p-2 me-3 shadow-sm"><i class="bi bi-cpu-fill fs-5"></i></div>
+                    <div><h6 class="mb-0 fw-bold text-primary">Génération IA</h6><small class="text-muted" style="font-size: 0.7rem;">Pronostics du jour</small></div>
+                </div>
+                <div class="card-body">
+                    <p class="small text-muted mb-3">Génère les 10 grilles de l'IA pour le tirage de ce soir.</p>
+
+                    <div class="form-check form-switch mb-3">
+                        <input class="form-check-input" type="checkbox" id="forceProno">
+                        <label class="form-check-label small" for="forceProno">Forcer (Écraser existants)</label>
+                    </div>
+
+                    <button class="btn btn-outline-primary w-100 fw-bold shadow-sm btn-sm" id="btnGenProno">
+                        <i class="bi bi-lightning-charge-fill me-1"></i>Lancer
+                    </button>
+                </div>
+            </div>
+        </div>
     </div>
 
     <div class="row mb-5">
@@ -356,6 +376,37 @@
             })
             .finally(() => {
                 // On remet le bouton normal quoi qu'il arrive
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+            });
+    });
+
+    // 4. Gestion de la GÉNÉRATION PRONOSTICS IA
+    document.getElementById('btnGenProno').addEventListener('click', function() {
+        const btn = this;
+        const originalText = btn.innerHTML;
+        const force = document.getElementById('forceProno').checked;
+
+        // Feedback visuel
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Calcul...';
+        btn.disabled = true;
+
+        // Appel API avec paramètre force
+        fetch(`/api/admin/trigger-prono?force=${force}`, { method: 'POST' })
+            .then(async response => {
+                if (response.ok) {
+                    const msg = await response.text();
+                    alert("🤖 " + msg);
+                    window.location.reload();
+                } else {
+                    throw new Error("Erreur serveur");
+                }
+            })
+            .catch(err => {
+                console.error(err);
+                alert("❌ Erreur lors du lancement de l'IA.");
+            })
+            .finally(() => {
                 btn.innerHTML = originalText;
                 btn.disabled = false;
             });

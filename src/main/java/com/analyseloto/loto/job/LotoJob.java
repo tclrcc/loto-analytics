@@ -3,6 +3,7 @@ package com.analyseloto.loto.job;
 import com.analyseloto.loto.dto.AstroProfileDto;
 import com.analyseloto.loto.dto.PronosticResultDto;
 import com.analyseloto.loto.entity.*;
+import com.analyseloto.loto.enums.BetType;
 import com.analyseloto.loto.enums.JobExecutionStatus;
 import com.analyseloto.loto.event.NouveauTirageEvent;
 import com.analyseloto.loto.repository.UserBetRepository;
@@ -103,6 +104,10 @@ public class LotoJob {
 
     @Scheduled(cron = "${loto.jobs.cron.gen-pronos}", zone = "Europe/Paris")
     public void genererPronosticsDuJour() {
+        executerGenerationPronostics(false);
+    }
+
+    public void executerGenerationPronostics(boolean force) {
         log.info("🔮 Lancement du Job : Génération des pronostics de référence...");
         JobLog jobLog = jobMonitorService.startJob("GEN_PRONOSTICS_IA");
 
@@ -118,10 +123,16 @@ public class LotoJob {
                     .filter(b -> b.getDateJeu().isEqual(today))
                     .toList();
 
+            // On supprime les pronos existants si on active mode Force le Job, sinon fin du Job
             if (!existants.isEmpty()) {
-                log.info("⚠️ Pronostics déjà générés pour aujourd'hui. Annulation.");
-                jobMonitorService.endJob(jobLog, "SKIPPED", "Déjà existant");
-                return;
+                if (force) {
+                    log.info("♻️ Mode FORCE activé : Suppression des {} anciens pronostics...", existants.size());
+                    betRepository.deleteAll(existants);
+                } else {
+                    log.info("⚠️ Pronostics déjà générés pour aujourd'hui. Annulation.");
+                    jobMonitorService.endJob(jobLog, "SKIPPED", "Déjà existant");
+                    return;
+                }
             }
 
             // 3. Générer les 10 grilles via l'algorithme (Sans profil astro = Config par défaut)
@@ -142,12 +153,13 @@ public class LotoJob {
                 bet.setB4(sorted.get(3));
                 bet.setB5(sorted.get(4));
                 bet.setChance(prono.getNumeroChance());
+                bet.setType(BetType.GRILLE);
 
                 betRepository.save(bet);
             }
 
-            log.info("✅ 5 Pronostics de référence enregistrés pour le compte {}", aiUser.getEmail());
-            jobMonitorService.endJob(jobLog, JobExecutionStatus.SUCCESS.getCode(), "5 grilles générées");
+            log.info("✅ 10 Pronostics de référence enregistrés pour le compte {}", aiUser.getEmail());
+            jobMonitorService.endJob(jobLog, JobExecutionStatus.SUCCESS.getCode(), "10 grilles générées");
 
         } catch (Exception e) {
             log.error("❌ Erreur génération pronostics IA", e);

@@ -45,15 +45,6 @@ public class LotoController {
         return ResponseEntity.ok(service.genererPronosticsHybrides(date, count, profil));
     }
 
-    @GetMapping("/comparer-algos")
-    @ResponseBody // Pour renvoyer du JSON brut facile à lire
-    public Map<String, List<PronosticResultDto>> comparerAlgorithmes(
-            @RequestParam(required = false) String date) {
-
-        LocalDate dateCible = (date != null) ? LocalDate.parse(date) : LocalDate.now();
-        return service.comparerAlgorithmes(dateCible);
-    }
-
     @GetMapping("/graph-data")
     public ResponseEntity<GraphDto> getGraphData() {
         // 1. Récupérer les stats brutes pour la taille des nœuds
