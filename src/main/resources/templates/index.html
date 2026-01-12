@@ -158,13 +158,13 @@
                 </div>
                 <div class="col-lg-8">
                     <div class="d-flex justify-content-center align-items-center gap-2 gap-md-3 flex-wrap">
-                        <span class="ball-display shadow" th:text="${lastDraw.boule1}">1</span>
-                        <span class="ball-display shadow" th:text="${lastDraw.boule2}">2</span>
-                        <span class="ball-display shadow" th:text="${lastDraw.boule3}">3</span>
-                        <span class="ball-display shadow" th:text="${lastDraw.boule4}">4</span>
-                        <span class="ball-display shadow" th:text="${lastDraw.boule5}">5</span>
+                        <span class="ball-display shadow pop-in pop-delay-1" th:text="${lastDraw.boule1}">1</span>
+                        <span class="ball-display shadow pop-in pop-delay-2" th:text="${lastDraw.boule2}">2</span>
+                        <span class="ball-display shadow pop-in pop-delay-3" th:text="${lastDraw.boule3}">3</span>
+                        <span class="ball-display shadow pop-in pop-delay-4" th:text="${lastDraw.boule4}">4</span>
+                        <span class="ball-display shadow pop-in pop-delay-5" th:text="${lastDraw.boule5}">5</span>
                         <div style="width: 1px; height: 40px; background: rgba(255,255,255,0.3);" class="mx-2 d-none d-md-block"></div>
-                        <span class="ball-display ball-chance shadow pulse-animation" th:text="${lastDraw.numeroChance}">C</span>
+                        <span class="ball-display ball-chance shadow pulse-animation pop-in pop-delay-6" th:text="${lastDraw.numeroChance}">C</span>
                     </div>
                 </div>
             </div>
@@ -184,7 +184,7 @@
         <div class="card-body bg-light rounded-bottom-4">
             <div class="row g-3">
                 <div class="col-md-6 col-lg-4" th:each="bet, iter : ${aiBets}">
-                    <div class="bg-white p-2 rounded shadow-sm border d-flex justify-content-between align-items-center position-relative overflow-hidden"
+                    <div class="bg-white p-2 rounded shadow-sm border glass-hover d-flex justify-content-between align-items-center position-relative overflow-hidden"
                          th:classappend="${bet.gain != null && bet.gain > 0} ? 'border-start border-4 border-success ps-1' : ''">
                         <div class="d-flex align-items-center">
                             <span class="badge bg-light text-muted border me-2" th:text="'#' + ${iter.count}">#1</span>
@@ -246,13 +246,19 @@
     <div class="row g-3 mb-4 animate-up delay-1">
         <div class="col-md-4">
             <div class="card p-3 shadow-sm h-100 border-0 bg-white d-flex flex-row align-items-center justify-content-between">
-                <div><small class="text-muted text-uppercase fw-bold" style="font-size: 0.7rem;">Dépenses</small><h4 class="fw-bold text-danger mb-0">- <span th:text="${#numbers.formatDecimal(totalDepense, 1, 2)}">0.00</span> €</h4></div>
+                <div><small class="text-muted text-uppercase fw-bold" style="font-size: 0.7rem;">Dépenses</small><h4 class="fw-bold text-danger mb-0">- <span class="count-up" th:data-value="${totalDepense}" th:text="${#numbers.formatDecimal(totalDepense, 1, 2)}">0.00</span> €</h4></div>
                 <div class="bg-danger bg-opacity-10 text-danger rounded-circle p-2"><i class="bi bi-arrow-down-right fs-4"></i></div>
             </div>
         </div>
         <div class="col-md-4">
             <div class="card p-3 shadow-sm h-100 border-0 bg-white d-flex flex-row align-items-center justify-content-between">
-                <div><small class="text-muted text-uppercase fw-bold" style="font-size: 0.7rem;">Gains</small><h4 class="fw-bold text-success mb-0">+ <span th:text="${#numbers.formatDecimal(totalGains, 1, 2)}">0.00</span> €</h4></div>
+                <div><small class="text-muted text-uppercase fw-bold" style="font-size: 0.7rem;">Gains</small>
+                    <h4 class="fw-bold text-success mb-0">+
+                        <span class="count-up" th:data-value="${totalGains}" th:text="${#numbers.formatDecimal(totalGains, 1, 2)}">
+                            0.00
+                        </span> €
+                    </h4>
+                </div>
                 <div class="bg-success bg-opacity-10 text-success rounded-circle p-2"><i class="bi bi-trophy fs-4"></i></div>
             </div>
         </div>
@@ -263,7 +269,7 @@
                     <div>
                         <small class="text-uppercase fw-bold opacity-75" style="font-size: 0.7rem;">Bilan Net</small>
                         <h4 class="fw-bold mb-0">
-                            <span th:if="${solde > 0}">+</span><span th:text="${#numbers.formatDecimal(solde, 1, 2)}">0.00</span> €
+                            <span th:if="${solde > 0}">+</span><span class="count-up" th:data-value="${solde}" th:text="${#numbers.formatDecimal(solde, 1, 2)}">0.00</span> €
                         </h4>
                     </div>
                     <div class="bg-white bg-opacity-50 rounded-circle p-2">
@@ -519,34 +525,38 @@
 
     <div class="modal fade" id="modalAddCode" tabindex="-1">
         <div class="modal-dialog">
-            <form th:action="@{/bets/add-code}" method="post" class="modal-content">
+            <form th:action="@{/bets/add-codes}" method="post" class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title"><i class="bi bi-qr-code me-2"></i>Enregistrer un Code</h5>
+                    <h5 class="modal-title"><i class="bi bi-qr-code me-2"></i>Enregistrer des Codes</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
                     <div class="mb-3">
                         <label class="form-label small fw-bold text-muted">Date du tirage</label>
-                        <input type="date" name="dateJeu" class="form-control" required>
+                        <input type="date" name="dateJeu" class="form-control" required
+                               th:value="${#dates.format(#dates.createNow(), 'yyyy-MM-dd')}">
                     </div>
 
                     <div class="mb-3">
-                        <label class="form-label small fw-bold text-muted">Code LOTO</label>
-                        <div class="input-group">
-                            <span class="input-group-text bg-light"><i class="bi bi-upc-scan"></i></span>
-                            <input type="text" name="codeLoto" class="form-control fw-bold font-monospace text-uppercase"
-                                   placeholder="Ex: A 2563 8547" required pattern="[A-Za-z]\s?[0-9]{4}\s?[0-9]{4}.*">
+                        <div class="d-flex justify-content-between">
+                            <label class="form-label small fw-bold text-muted">Codes LOTO (Un par ligne)</label>
+                            <span id="codeCounter" class="badge bg-light text-primary border">0 détecté</span>
                         </div>
-                        <div class="form-text small">Format habituel : 1 lettre et 8 chiffres.</div>
-                    </div>
 
-                    <div class="mb-3">
-                        <label class="form-label small fw-bold text-muted">Coût (€)</label>
-                        <input type="number" step="0.01" name="mise" class="form-control" value="2.20" required>
+                        <div class="input-group">
+                            <span class="input-group-text bg-light align-items-start pt-2"><i class="bi bi-justify"></i></span>
+                            <textarea name="rawCodes" id="rawCodesInput" class="form-control font-monospace text-uppercase"
+                                      rows="5" placeholder="A 2563 8547&#10;B 9856 7412&#10;C 1234 5678" required></textarea>
+                        </div>
+                        <div class="form-text small text-success">
+                            <i class="bi bi-info-circle me-1"></i> Coût automatique : 0,00 €.
+                        </div>
                     </div>
                 </div>
                 <div class="modal-footer bg-light p-2">
-                    <button type="submit" class="btn btn-dark w-100">Enregistrer le Code</button>
+                    <button type="submit" class="btn btn-dark w-100">
+                        <i class="bi bi-save me-2"></i>Enregistrer les Codes
+                    </button>
                 </div>
             </form>
         </div>
@@ -781,6 +791,60 @@
             const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('modalAddBet'));
             modal.show();
         };
+    });
+
+    // --- GESTION INTELLIGENTE DES CODES LOTO ---
+    const area = document.getElementById('rawCodesInput');
+    const counter = document.getElementById('codeCounter');
+
+    if (area) {
+        area.addEventListener('input', function() {
+            // 1. Force Majuscules
+            this.value = this.value.toUpperCase();
+
+            // 2. Compte les lignes non vides
+            const lines = this.value.split('\n').filter(line => line.trim().length > 0);
+            const count = lines.length;
+
+            // 3. Update UI
+            counter.textContent = count + (count > 1 ? " détectés" : " détecté");
+            counter.className = count > 0
+                ? "badge bg-primary text-white border border-primary fade-in"
+                : "badge bg-light text-muted border";
+        });
+    }
+</script>
+
+<script>
+    // Fonction d'animation des nombres
+    function animateValue(obj, start, end, duration) {
+        let startTimestamp = null;
+        const step = (timestamp) => {
+            if (!startTimestamp) startTimestamp = timestamp;
+            const progress = Math.min((timestamp - startTimestamp) / duration, 1);
+            // Formatage monétaire simple
+            const value = (progress * (end - start) + start).toFixed(2);
+            obj.innerHTML = value.replace('.', ',');
+            if (progress < 1) {
+                window.requestAnimationFrame(step);
+            }
+        };
+        window.requestAnimationFrame(step);
+    }
+
+    // Lancer l'animation au chargement sur tous les éléments avec la classe 'count-up'
+    document.addEventListener("DOMContentLoaded", () => {
+        const counters = document.querySelectorAll('.count-up');
+        counters.forEach(counter => {
+            // On lit la valeur cible dans le texte HTML (ex: 150.00)
+            // Note: Thymeleaf aura déjà rendu la valeur, on la parse
+            const finalValueStr = counter.getAttribute('data-value').replace(',', '.');
+            const finalValue = parseFloat(finalValueStr);
+
+            if (!isNaN(finalValue)) {
+                animateValue(counter, 0, finalValue, 1500); // Durée 1.5s
+            }
+        });
     });
 </script>
 

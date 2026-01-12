@@ -82,40 +82,47 @@ public class BetController {
      * Action d'ajout d'un Code Loto (ex: A 2563 8547)
      * @param principal utilisateur connecté
      * @param dateJeu date du tirage
-     * @param codeLoto le code alphanumérique
-     * @param mise coût du jeu
+     * @param rawCodes codes forme text
      * @return redirection
      */
-    @PostMapping("/add-code")
-    public String addCode(Principal principal,
+    @PostMapping("/add-codes") // Attention au "s" final pour matcher le formulaire HTML
+    public String addCodes(Principal principal,
             @RequestParam LocalDate dateJeu,
-            @RequestParam String codeLoto,
-            @RequestParam double mise) {
+            @RequestParam String rawCodes) { // On reçoit tout le bloc de texte
         try {
-            // Mettre le code en majuscules et sans espaces superflus
-            String cleanCode = codeLoto.trim().toUpperCase();
-
-            log.info("Ajout Code Loto pour {} : Date={}, Code={}", principal.getName(), dateJeu, cleanCode);
-
-            // 2. Récupération utilisateur
+            // 1. Récupération utilisateur
             User user = userRepository.findByEmail(principal.getName())
                     .orElseThrow(() -> new RuntimeException("Utilisateur introuvable"));
 
-            // 3. Création de l'objet (On ne remplit QUE le code, pas les boules)
-            UserBet bet = new UserBet();
-            bet.setUser(user);
-            bet.setDateJeu(dateJeu);
-            bet.setMise(mise);
-            bet.setCodeLoto(cleanCode);
-            bet.setType(BetType.CODE_LOTO);
+            // 2. Découpage du texte : on sépare à chaque retour à la ligne (\n ou \r\n)
+            String[] lines = rawCodes.split("\\r?\\n");
+            int count = 0;
 
-            // 4. Sauvegarde
-            betRepository.save(bet);
+            for (String line : lines) {
+                // Nettoyage : Majuscules et suppression espaces autour
+                String cleanCode = line.trim().toUpperCase();
 
-            return "redirect:/?codeAdded";
+                // On ne traite pas les lignes vides
+                if (!cleanCode.isEmpty()) {
+                    UserBet bet = new UserBet();
+                    bet.setUser(user);
+                    bet.setDateJeu(dateJeu);
+                    bet.setMise(0.0); // Toujours gratuit
+                    bet.setCodeLoto(cleanCode);
+                    bet.setType(BetType.CODE_LOTO); // Si tu as un Enum pour le type
+
+                    betRepository.save(bet);
+                    count++;
+                }
+            }
+
+            log.info("Ajout de {} Codes Loto pour {} à la date du {}", count, principal.getName(), dateJeu);
+
+            return "redirect:/?codesAdded=" + count;
+
         } catch (Exception e) {
-            log.error("Erreur lors de l'ajout du Code Loto : ", e);
-            return "redirect:/?error=saveCodeFailed";
+            log.error("Erreur lors de l'ajout des Codes Loto : ", e);
+            return "redirect:/?error=saveCodesFailed";
         }
     }
 
