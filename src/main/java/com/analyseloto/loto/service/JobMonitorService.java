@@ -113,7 +113,7 @@ public class JobMonitorService {
      * @return liste jobs
      */
     public List<JobLog> getHistory() {
-        return jobLogRepository.findAllOrderByStartTimeDesc();
+        return jobLogRepository.findAllByOrderByStartTimeDesc();
     }
 
 

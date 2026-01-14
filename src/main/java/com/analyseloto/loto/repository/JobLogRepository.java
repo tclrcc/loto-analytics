@@ -7,5 +7,5 @@ import java.util.List;
 
 public interface JobLogRepository extends JpaRepository<JobLog, Long> {
     List<JobLog> findByStartTimeAfterOrderByStartTimeDesc(java.time.LocalDateTime time);
-    List<JobLog> findAllOrderByStartTimeDesc();
+    List<JobLog> findAllByOrderByStartTimeDesc();
 }
