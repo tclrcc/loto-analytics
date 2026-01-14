@@ -143,8 +143,8 @@ public class LotoJob {
                 }
             }
 
-            // 3. Générer les 5 grilles via l'algorithme (Sans profil astro = Config par défaut)
-            List<PronosticResultDto> pronostics = lotoService.genererMultiplesPronostics(today, 5);
+            // 3. Générer les 10 via l'algorithme (Sans profil astro = Config par défaut)
+            List<PronosticResultDto> pronostics = lotoService.genererMultiplesPronostics(today, 10, true);
 
             // 4. Sauvegarder en base
             for (PronosticResultDto prono : pronostics) {
@@ -166,8 +166,8 @@ public class LotoJob {
                 betRepository.save(bet);
             }
 
-            log.info("✅ 5 Pronostics de référence enregistrés pour le compte {}", aiUser.getEmail());
-            jobMonitorService.endJob(jobLog, JobExecutionStatus.SUCCESS.getCode(), "5 grilles générées");
+            log.info("✅ {} Pronostics de référence enregistrés pour le compte {}", pronostics.size() ,aiUser.getEmail());
+            jobMonitorService.endJob(jobLog, JobExecutionStatus.SUCCESS.getCode(), pronostics.size() + " grilles générées");
 
         } catch (Exception e) {
             log.error("❌ Erreur génération pronostics IA", e);
@@ -215,7 +215,7 @@ public class LotoJob {
                 );
 
                 // B. Génération des pronostics HYBRIDES (Spécifiques à LUI)
-                List<PronosticResultDto> pronostics = lotoService.genererPronosticsHybrides(today, 5, profil);
+                List<PronosticResultDto> pronostics = lotoService.genererPronosticsHybrides(today, 5, profil, true);
 
                 // C. Construction du mail personnalisé
                 String subject = "🎱 " + user.getFirstName() + ", vos numéros chance pour ce soir !";

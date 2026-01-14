@@ -445,38 +445,84 @@ document.addEventListener('DOMContentLoaded', () => {
     function afficherMultiplesPronostics(list, dateStr) {
         const container = document.getElementById('pronoResult');
         const listContainer = document.getElementById('pronoList');
+
         container.classList.remove('d-none');
         document.getElementById('pronoDate').textContent = new Date(dateStr).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
         listContainer.innerHTML = '';
 
+        // --- 1. TRI INTELLIGENT (NOUVEAU) ---
+        // On trie la liste pour mettre les meilleures grilles en premier
+        list.sort((a, b) => {
+            const getPriorite = (type) => {
+                if (!type) return 1; // Par défaut considéré comme Optimal
+                if (type.includes('HASARD') || type.includes('🎲')) return 3; // En dernier
+                if (type.includes('⚠️') || type.includes('Flexible')) return 2; // Au milieu
+                return 1; // IA Optimal en premier
+            };
+
+            const prioA = getPriorite(a.typeAlgo);
+            const prioB = getPriorite(b.typeAlgo);
+
+            // Si la priorité est différente, on trie par priorité
+            if (prioA !== prioB) {
+                return prioA - prioB;
+            }
+            // Si c'est la même priorité (ex: deux "IA Optimal"), on trie par le score global (le plus haut en premier)
+            return b.scoreGlobal - a.scoreGlobal;
+        });
+
+        // --- 2. AFFICHAGE ---
         list.forEach((grid, index) => {
             const pctDuo = Math.min(grid.maxRatioDuo * 50, 100);
             const colorDuo = grid.maxRatioDuo > 1.2 ? 'bg-danger' : 'bg-success';
 
+            // Logique du Badge
+            let badgeHtml = '';
+            const type = grid.typeAlgo || '';
+
+            if (type.includes('⚠️')) {
+                badgeHtml = '<span class="badge bg-warning text-dark border shadow-sm"><i class="bi bi-exclamation-triangle-fill me-1"></i>IA Flexible</span>';
+            } else if (type.includes('HASARD') || type.includes('🎲')) {
+                badgeHtml = '<span class="badge bg-secondary border shadow-sm"><i class="bi bi-dice-5-fill me-1"></i>Hasard</span>';
+            } else {
+                badgeHtml = '<span class="badge bg-primary shadow-sm"><i class="bi bi-cpu-fill me-1"></i>IA Optimal</span>';
+            }
+
             const col = document.createElement('div');
-            col.className = 'col-md-6 col-lg-4';
+            col.className = 'col-md-6 col-lg-4 animate-up';
+            col.style.animationDelay = (index * 0.1) + 's';
+
             col.innerHTML = `
                 <div class="card h-100 shadow-sm border-${grid.dejaSortie ? 'danger' : 'light'}">
                     <div class="card-body p-3">
                         <div class="d-flex justify-content-between align-items-center mb-3">
-                            <span class="badge bg-secondary">Grille #${index + 1}</span>
-                            ${grid.dejaSortie ? '<span class="badge bg-danger">⚠️ DÉJÀ SORTIE</span>' : '<span class="badge bg-light text-success border border-success">✨ Inédite</span>'}
+                            <span class="badge bg-light text-muted border">#${index + 1}</span>
+                            ${badgeHtml}
                         </div>
+                        
                         <div class="d-flex justify-content-center gap-1 mb-3">
-                            ${grid.boules.map(b => `<span class="badge rounded-circle bg-primary fs-6 d-flex align-items-center justify-content-center" style="width:32px; height:32px;">${b}</span>`).join('')}
-                            <span class="badge rounded-circle bg-danger fs-6 d-flex align-items-center justify-content-center" style="width:32px; height:32px;">${grid.numeroChance}</span>
+                            ${grid.boules.map(b => `<span class="badge rounded-circle bg-dark fs-6 d-flex align-items-center justify-content-center shadow-sm" style="width:32px; height:32px;">${b}</span>`).join('')}
+                            <div style="width:1px;height:25px;background:#ddd;align-self:center;"></div>
+                            <span class="badge rounded-circle bg-danger fs-6 d-flex align-items-center justify-content-center shadow-sm" style="width:32px; height:32px;">${grid.numeroChance}</span>
                         </div>
-                        <div class="small text-muted mb-3">
-                            <div class="d-flex justify-content-between mb-1"><span>Force Duo</span><span class="fw-bold">${grid.maxRatioDuo}x</span></div>
-                            <div class="progress" style="height: 4px;"><div class="progress-bar ${colorDuo}" style="width: ${pctDuo}%"></div></div>
+                        
+                        <div class="small text-muted mb-3 bg-light p-2 rounded">
+                            <div class="d-flex justify-content-between mb-1">
+                                <span><i class="bi bi-graph-up me-1"></i>Score IA</span>
+                                <span class="fw-bold text-dark">${grid.scoreGlobal}</span>
+                            </div>
+                            <div class="progress" style="height: 4px;">
+                                <div class="progress-bar ${colorDuo}" style="width: ${pctDuo}%"></div>
+                            </div>
                         </div>
+
                         <div class="d-flex gap-2">
-                            <button class="btn btn-outline-dark btn-sm flex-grow-1 btn-copier" data-nums="${grid.boules.join(',')}" data-chance="${grid.numeroChance}">
-                                <i class="bi bi-eye"></i> Analyser
+                            <button class="btn btn-outline-secondary btn-sm flex-grow-1 btn-copier" data-nums="${grid.boules.join(',')}" data-chance="${grid.numeroChance}">
+                                <i class="bi bi-eye"></i> Voir
                             </button>
-                            <button type="button" class="btn btn-success btn-sm flex-grow-1 fw-bold"
+                            <button type="button" class="btn btn-primary btn-sm flex-grow-1 fw-bold shadow-sm"
                                     onclick="preparerGrille(${grid.boules[0]}, ${grid.boules[1]}, ${grid.boules[2]}, ${grid.boules[3]}, ${grid.boules[4]}, ${grid.numeroChance})">
-                                <i class="bi bi-plus-circle me-1"></i> Jouer
+                                Jouer <i class="bi bi-arrow-right"></i>
                             </button>
                         </div>
                     </div>
@@ -484,6 +530,7 @@ document.addEventListener('DOMContentLoaded', () => {
             listContainer.appendChild(col);
         });
 
+        // Réattacher les écouteurs
         document.querySelectorAll('.btn-copier').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 const nums = e.target.getAttribute('data-nums').split(',');

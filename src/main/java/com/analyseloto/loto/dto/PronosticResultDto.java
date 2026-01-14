@@ -14,4 +14,5 @@ public class PronosticResultDto {
     private double maxRatioDuo; // La perf de la meilleure paire
     private double maxRatioTrio; // La perf du meilleur trio
     private boolean dejaSortie; // Est-ce que la grille complète existe déjà ?
+    private String typeAlgo; // ex: "OPTIMAL", "FLEXIBLE", "HASARD"
 }
