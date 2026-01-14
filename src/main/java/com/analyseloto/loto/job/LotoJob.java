@@ -80,6 +80,7 @@ public class LotoJob {
                     .filter(r -> r.getRankNumber() == 1)
                     .findFirst();
 
+            // Log si le jackpot a été remporté
             if (jackpot.isPresent() && jackpot.get().getWinners() > 0) {
                 log.info("💰 WOW ! Le JACKPOT a été remporté par {} personne(s) !", jackpot.get().getWinners());
             } else {
@@ -91,7 +92,12 @@ public class LotoJob {
 
             // Notification aux admins (sans user IA)
             List<User> admins = userRepository.findByRole("ADMIN").stream().
-                    filter(a -> !Objects.equals(a.getEmail(), mailUserIa)).toList();
+                    filter(user -> !user.isSystemAccount()).toList();
+
+            if (admins.isEmpty()) {
+                log.warn("Aucun administrateur éligible pour recevoir la notification.");
+            }
+
             // Envoi mail à chaque admin
             for (User admin : admins) {
                 emailService.sendAdminNotification(admin.getEmail(), tirage);
@@ -249,6 +255,9 @@ public class LotoJob {
         int countAlerts = 0;
 
         for (User user : users) {
+            // On saute ceux qui ont désactivé les notifs (si vous avez géré ce champ).
+            if (!user.isSubscribeToEmails()) continue;
+
             // 1. Récupérer les paris de la semaine dernière uniquement
             List<UserBet> weeklyBets = betRepository.findByUser(user).stream()
                     .filter(b -> b.getDateJeu().isAfter(oneWeekAgo) && b.getDateJeu().isBefore(today.plusDays(1)))

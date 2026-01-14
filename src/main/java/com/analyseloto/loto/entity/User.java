@@ -51,6 +51,9 @@ public class User {
     @Column(name = "last_login")
     private LocalDateTime lastLogin;
 
+    @Column(columnDefinition = "boolean default false")
+    private boolean isSystemAccount;
+
     /**
      * Méthode pour savoir si l'utilisateur est bloqué ou non
      * @return

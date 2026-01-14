@@ -25,9 +25,10 @@ import java.util.List;
 @RequestMapping("/bets")
 @RequiredArgsConstructor
 public class BetController {
-
+    // Repositories
     private final UserBetRepository betRepository;
     private final UserRepository userRepository;
+    // Services
     private final PdfService pdfService;
 
     /**
@@ -70,8 +71,8 @@ public class BetController {
             betRepository.save(bet);
 
             log.info("Grille sauvegardée avec succès ID={}", bet.getId());
-            return "redirect:/?betAdded";
 
+            return "redirect:/?betAdded";
         } catch (Exception e) {
             log.error("Erreur lors de l'ajout de la grille sur OVH : ", e);
             return "redirect:/?error=saveFailed";
@@ -85,10 +86,10 @@ public class BetController {
      * @param rawCodes codes forme text
      * @return redirection
      */
-    @PostMapping("/add-codes") // Attention au "s" final pour matcher le formulaire HTML
+    @PostMapping("/add-codes")
     public String addCodes(Principal principal,
             @RequestParam LocalDate dateJeu,
-            @RequestParam String rawCodes) { // On reçoit tout le bloc de texte
+            @RequestParam String rawCodes) {
         try {
             // 1. Récupération utilisateur
             User user = userRepository.findByEmail(principal.getName())
@@ -189,7 +190,8 @@ public class BetController {
     public ResponseEntity<byte[]> exportBetsToPdf(Principal principal) throws IOException {
         // Récupération de l'utilisateur et de ses grilles
         User user = userRepository.findByEmail(principal.getName()).orElseThrow();
-        List<UserBet> bets = betRepository.findByUserOrderByDateJeuDesc(user);
+        List<UserBet> bets = betRepository.findByUserOrderByDateJeuDesc(user).stream()
+                .filter(b -> b.getType() == BetType.GRILLE).toList();
 
         // Génération du PDF avec headers
         byte[] pdfContent = pdfService.generateBetPdf(bets, user.getFirstName());

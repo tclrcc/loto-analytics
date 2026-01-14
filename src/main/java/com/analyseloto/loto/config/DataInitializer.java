@@ -61,6 +61,7 @@ public class DataInitializer implements CommandLineRunner {
 
         // Autres champs obligatoires selon ton Entité
          aiUser.setRole("ADMIN");
+         aiUser.setSystemAccount(true);
          aiUser.setSubscribeToEmails(false); // L'IA n'a pas besoin de mails
          aiUser.setBirthDate(LocalDate.now());
 

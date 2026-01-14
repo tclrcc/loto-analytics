@@ -364,6 +364,9 @@
                 <a th:href="@{/bets/export/pdf}" class="btn btn-sm btn-outline-danger shadow-sm" target="_blank" title="Imprimer">
                     <i class="bi bi-file-earmark-pdf-fill"></i>
                 </a>
+                <button class="btn btn-sm btn-outline-secondary shadow-sm" id="btnExportTxt" title="Télécharger (TXT)">
+                    <i class="bi bi-file-earmark-text-fill"></i>
+                </button>
                 <div class="btn-group shadow-sm">
                     <button class="btn btn-sm btn-dark" data-bs-toggle="modal" data-bs-target="#modalAddBet">
                         <i class="bi bi-grid-3x3 me-1"></i>Grille
@@ -845,6 +848,105 @@
                 animateValue(counter, 0, finalValue, 1500); // Durée 1.5s
             }
         });
+    });
+</script>
+
+<script>
+    document.getElementById('btnExportTxt').addEventListener('click', function() {
+        // --- 1. FONCTIONS DE FORMATAGE ---
+        // Permet d'aligner le texte (ex: "Lundi" devient "Lundi     ")
+        const pad = (str, length) => (str + " ".repeat(length)).slice(0, length);
+        const center = (str, length) => {
+            const spaces = length - str.length;
+            return " ".repeat(Math.floor(spaces / 2)) + str + " ".repeat(Math.ceil(spaces / 2));
+        };
+
+        // --- 2. EN-TÊTE DU FICHIER ---
+        const width = 60; // Largeur du ticket
+        let content = "";
+        content += "╔" + "═".repeat(width - 2) + "╗\n";
+        content += "║" + center("LOTO MASTER AI - MES JEUX", width - 2) + "║\n";
+        content += "╠" + "═".repeat(width - 2) + "╣\n";
+        content += "║ Export généré le : " + pad(new Date().toLocaleDateString('fr-FR'), width - 23) + "║\n";
+        content += "╚" + "═".repeat(width - 2) + "╝\n\n";
+
+        let count = 0;
+        let currentTotalCost = 0.0;
+
+        // --- 3. PARCOURS DES DONNÉES ---
+        const rows = document.querySelectorAll("#betsTable tbody tr");
+
+        rows.forEach(row => {
+            const statusCell = row.cells[2];
+            const statusText = statusCell.innerText.trim();
+
+            // On ne garde que les grilles "En attente"
+            if (statusText.includes("En attente")) {
+                count++;
+
+                // Récupération Date
+                let dateRaw = row.cells[0].innerText.replace(/\n/g, ' ').trim();
+                // Nettoyage des espaces multiples
+                dateRaw = dateRaw.replace(/\s+/g, ' ');
+
+                // Récupération Combinaison
+                const comboCell = row.cells[1];
+                let line1 = "";
+                let line2 = "";
+
+                // -> CAS CODE LOTO
+                if (comboCell.innerText.includes("CODE")) {
+                    const code = comboCell.querySelector(".font-monospace").innerText;
+                    line1 = `🎫 CODE LOTO`;
+                    line2 = `   ${code}`;
+                }
+                // -> CAS GRILLE CLASSIQUE
+                else {
+                    const boules = [];
+                    comboCell.querySelectorAll(".loto-badge").forEach((badge, index) => {
+                        // On ajoute un 0 devant les chiffres < 10 pour l'alignement (ex: 05)
+                        if (index < 5) boules.push(badge.innerText.padStart(2, '0'));
+                    });
+                    const chance = comboCell.querySelector(".loto-badge:last-child").innerText;
+
+                    line1 = `🎱 GRILLE SIMPLE`;
+                    line2 = `   [ ${boules.join(' - ')} ]   ⭐ Chance: ${chance}`;
+                    currentTotalCost += 2.20; // Coût théorique
+                }
+
+                // Construction du bloc pour ce jeu
+                content += "┌────────────────────────────────────────────────────────┐\n";
+                content += `│ 📅 ${pad(dateRaw, 52)}│\n`; // Date
+                content += "├────────────────────────────────────────────────────────┤\n";
+                content += `│ ${pad(line1, 54)} │\n`; // Type
+                content += `│ ${pad(line2, 54)} │\n`; // Numéros
+                content += "└────────────────────────────────────────────────────────┘\n";
+                content += "\n"; // Espace entre les tickets
+            }
+        });
+
+        if (count === 0) {
+            alert("Aucune grille 'En attente' à exporter !");
+            return;
+        }
+
+        // --- 4. PIED DE PAGE (RÉSUMÉ) ---
+        content += "==========================================================\n";
+        content += ` NOMBRE DE JEUX : ${count}\n`;
+        content += ` COÛT ESTIMÉ    : ${currentTotalCost.toFixed(2)} €\n`;
+        content += "==========================================================\n";
+        content += "\nBonne chance ! 🍀\n";
+        content += "Généré par votre Assistant Loto Master AI.";
+
+        // --- 5. TÉLÉCHARGEMENT (UTF-8 pour les émojis) ---
+        // Le \uFEFF est le BOM (Byte Order Mark) pour aider Excel/Windows à lire l'UTF-8 correctement
+        const blob = new Blob(["\uFEFF" + content], { type: 'text/plain;charset=utf-8' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `mes_grilles_${new Date().toISOString().slice(0,10)}.txt`;
+        a.click();
+        window.URL.revokeObjectURL(url);
     });
 </script>
 
