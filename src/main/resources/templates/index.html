@@ -906,15 +906,17 @@
 <script>
     document.getElementById('btnExportTxt').addEventListener('click', function() {
         // --- 1. FONCTIONS DE FORMATAGE ---
-        // Permet d'aligner le texte (ex: "Lundi" devient "Lundi     ")
+        // Ajoute des espaces pour aligner le texte
         const pad = (str, length) => (str + " ".repeat(length)).slice(0, length);
+
+        // Centre le texte
         const center = (str, length) => {
             const spaces = length - str.length;
             return " ".repeat(Math.floor(spaces / 2)) + str + " ".repeat(Math.ceil(spaces / 2));
         };
 
         // --- 2. EN-TÊTE DU FICHIER ---
-        const width = 60; // Largeur du ticket
+        const width = 60;
         let content = "";
         content += "╔" + "═".repeat(width - 2) + "╗\n";
         content += "║" + center("LOTO MASTER AI - MES JEUX", width - 2) + "║\n";
@@ -925,55 +927,72 @@
         let count = 0;
         let currentTotalCost = 0.0;
 
-        // --- 3. PARCOURS DES DONNÉES ---
-        const rows = document.querySelectorAll("#betsTable tbody tr");
+        // --- 3. PARCOURS INTELLIGENT DATATABLES ---
+        const table = $('#betsTable').DataTable();
 
-        rows.forEach(row => {
+        // On récupère les nœuds HTML gérés par DataTables (y compris pages masquées)
+        const allRows = table.rows({ search: 'applied' }).nodes();
+
+        Array.from(allRows).forEach(row => {
+            // On vérifie le statut (3ème colonne, index 2)
+            // On utilise textContent pour lire même si caché, et on nettoie
             const statusCell = row.cells[2];
-            const statusText = statusCell.innerText.trim();
+            const statusText = statusCell.textContent || statusCell.innerText;
 
-            // On ne garde que les grilles "En attente"
             if (statusText.includes("En attente")) {
                 count++;
 
-                // Récupération Date
-                let dateRaw = row.cells[0].innerText.replace(/\n/g, ' ').trim();
-                // Nettoyage des espaces multiples
-                dateRaw = dateRaw.replace(/\s+/g, ' ');
+                // --- A. RÉCUPÉRATION PROPRE DE LA DATE ---
+                // La date est composée de deux spans (date + jour). On les cherche pour mettre un espace.
+                const dateCell = row.cells[0];
+                let dateStr = "";
 
-                // Récupération Combinaison
+                // On essaie de trouver les sous-éléments pour éviter la concaténation "12JanvLundi"
+                const datePart = dateCell.querySelector('.fw-bold');
+                const dayPart = dateCell.querySelector('.text-muted');
+
+                if (datePart && dayPart) {
+                    dateStr = datePart.textContent.trim() + " " + dayPart.textContent.trim();
+                } else {
+                    // Fallback si structure différente
+                    dateStr = dateCell.textContent.replace(/\s+/g, ' ').trim();
+                }
+
+                // --- B. RÉCUPÉRATION PROPRE DE LA COMBINAISON ---
                 const comboCell = row.cells[1];
                 let line1 = "";
                 let line2 = "";
 
-                // -> CAS CODE LOTO
-                if (comboCell.innerText.includes("CODE")) {
-                    const code = comboCell.querySelector(".font-monospace").innerText;
+                // Cas 1 : C'est un CODE LOTO
+                const codeElement = comboCell.querySelector(".font-monospace");
+                if (codeElement) {
+                    const code = codeElement.textContent.trim();
                     line1 = `🎫 CODE LOTO`;
                     line2 = `   ${code}`;
                 }
-                // -> CAS GRILLE CLASSIQUE
+                // Cas 2 : C'est une GRILLE CLASSIQUE
                 else {
-                    const boules = [];
-                    comboCell.querySelectorAll(".loto-badge").forEach((badge, index) => {
-                        // On ajoute un 0 devant les chiffres < 10 pour l'alignement (ex: 05)
-                        if (index < 5) boules.push(badge.innerText.padStart(2, '0'));
-                    });
-                    const chance = comboCell.querySelector(".loto-badge:last-child").innerText;
+                    // On cherche spécifiquement les badges pour éviter de tout coller
+                    const badges = Array.from(comboCell.querySelectorAll(".loto-badge"));
 
-                    line1 = `🎱 GRILLE SIMPLE`;
-                    line2 = `   [ ${boules.join(' - ')} ]   ⭐ Chance: ${chance}`;
-                    currentTotalCost += 2.20; // Coût théorique
+                    if (badges.length >= 6) { // 5 boules + 1 chance
+                        const boules = badges.slice(0, 5).map(b => b.textContent.trim().padStart(2, '0'));
+                        const chance = badges[5].textContent.trim(); // Le dernier est la chance
+
+                        line1 = `🎱 GRILLE SIMPLE`;
+                        line2 = `   [ ${boules.join(' - ')} ]   ⭐ Chance: ${chance}`;
+                        currentTotalCost += 2.20;
+                    }
                 }
 
-                // Construction du bloc pour ce jeu
+                // --- C. CONSTRUCTION DU BLOC TEXTE ---
                 content += "┌────────────────────────────────────────────────────────┐\n";
-                content += `│ 📅 ${pad(dateRaw, 52)}│\n`; // Date
+                content += `│ 📅 ${pad(dateStr, 52)}│\n`;
                 content += "├────────────────────────────────────────────────────────┤\n";
-                content += `│ ${pad(line1, 54)} │\n`; // Type
-                content += `│ ${pad(line2, 54)} │\n`; // Numéros
+                content += `│ ${pad(line1, 54)} │\n`;
+                content += `│ ${pad(line2, 54)} │\n`;
                 content += "└────────────────────────────────────────────────────────┘\n";
-                content += "\n"; // Espace entre les tickets
+                content += "\n";
             }
         });
 
@@ -982,7 +1001,7 @@
             return;
         }
 
-        // --- 4. PIED DE PAGE (RÉSUMÉ) ---
+        // --- 4. PIED DE PAGE ---
         content += "==========================================================\n";
         content += ` NOMBRE DE JEUX : ${count}\n`;
         content += ` COÛT ESTIMÉ    : ${currentTotalCost.toFixed(2)} €\n`;
@@ -990,8 +1009,7 @@
         content += "\nBonne chance ! 🍀\n";
         content += "Généré par votre Assistant Loto Master AI.";
 
-        // --- 5. TÉLÉCHARGEMENT (UTF-8 pour les émojis) ---
-        // Le \uFEFF est le BOM (Byte Order Mark) pour aider Excel/Windows à lire l'UTF-8 correctement
+        // --- 5. TÉLÉCHARGEMENT ---
         const blob = new Blob(["\uFEFF" + content], { type: 'text/plain;charset=utf-8' });
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
