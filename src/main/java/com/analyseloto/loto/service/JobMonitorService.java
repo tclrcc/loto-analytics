@@ -4,6 +4,7 @@ import com.analyseloto.loto.entity.JobLog;
 import com.analyseloto.loto.repository.JobLogRepository;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.support.CronExpression;
 import org.springframework.stereotype.Service;
@@ -15,6 +16,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class JobMonitorService {
@@ -43,6 +45,14 @@ public class JobMonitorService {
         jobs.sort(Comparator.comparing(JobScheduleDto::getNextExecution));
 
         return jobs;
+    }
+
+    public List<JobLog> getRecentJobs(int hours) {
+        // Définition date début = 48h avant
+        LocalDateTime since = LocalDateTime.now().minusHours(hours);
+
+        // retourne les jobs depuis cette date
+        return jobLogRepository.findByStartTimeAfterOrderByStartTimeDesc(since);
     }
 
     private JobScheduleDto createJob(String name, String cron) {
@@ -102,8 +112,8 @@ public class JobMonitorService {
      * Renvoie liste des 50 derniers jobs
      * @return liste jobs
      */
-    public List<JobLog> getHistory50Jobs() {
-        return jobLogRepository.findTop50ByOrderByStartTimeDesc();
+    public List<JobLog> getHistory() {
+        return jobLogRepository.findAll();
     }
 
 

@@ -188,19 +188,22 @@
             <div class="d-flex justify-content-between align-items-end mb-3">
                 <div>
                     <h4 class="fw-bold text-dark mb-1">Historique d'exécution</h4>
-                    <p class="text-muted small mb-0">Historique des 50 derniers jobs exécutés par le serveur.</p>
+                    <p class="text-muted small mb-0">Activités récentes (48h).</p>
                 </div>
                 <div class="btn-group shadow-sm">
+                    <button type="button" class="btn btn-outline-primary bg-white btn-sm" id="btnLoadAllHistory">
+                        <i class="bi bi-plus-circle me-1"></i> Voir tout l'historique
+                    </button>
                     <button type="button" class="btn btn-outline-dark bg-white btn-sm" onclick="window.location.reload()">
-                        <i class="bi bi-arrow-clockwise me-1"></i> Actualiser
+                        <i class="bi bi-arrow-clockwise"></i>
                     </button>
                 </div>
             </div>
 
             <div class="card shadow-sm table-card border-0">
-                <div class="table-responsive">
+                <div class="table-responsive" style="max-height: 600px; overflow-y: auto;">
                     <table class="table table-hover align-middle mb-0">
-                        <thead class="bg-light">
+                        <thead class="bg-light sticky-top" style="z-index: 10;">
                         <tr>
                             <th class="ps-4 py-3 text-secondary text-uppercase small border-0">Horodatage</th>
                             <th class="text-secondary text-uppercase small border-0">Nom du Job</th>
@@ -209,8 +212,8 @@
                             <th class="pe-4 text-secondary text-uppercase small border-0">Message</th>
                         </tr>
                         </thead>
-                        <tbody>
-                        <tr th:each="log : ${jobLogs}">
+                        <tbody id="jobsTableBody">
+                        <tr th:each="log : ${jobLogs}" class="fade-in-row">
                             <td class="ps-4">
                                 <div class="d-flex align-items-center">
                                     <i class="bi bi-calendar3 me-2 text-muted"></i>
@@ -218,49 +221,25 @@
                                     <span class="text-muted ms-2 small" th:text="${#temporals.format(log.startTime, 'HH:mm:ss')}"></span>
                                 </div>
                             </td>
-
-                            <td>
-                                <span class="fw-bold text-primary" th:text="${log.jobName}">JOB_NAME</span>
-                            </td>
-
+                            <td><span class="fw-bold text-primary" th:text="${log.jobName}"></span></td>
+                            <td class="text-center"><span class="badge bg-light text-dark border" th:text="${log.durationInSeconds} + 's'"></span></td>
                             <td class="text-center">
-                                <span class="badge bg-light text-dark border">
-                                    <i class="bi bi-stopwatch me-1"></i>
-                                    <span th:text="${log.durationInSeconds}">0</span>s
-                                </span>
+                                <span th:if="${log.status == 'SUCCESS'}" class="badge bg-success bg-opacity-10 text-success border border-success status-badge">SUCCÈS</span>
+                                <span th:if="${log.status == 'FAILURE'}" class="badge bg-danger bg-opacity-10 text-danger border border-danger status-badge">ÉCHEC</span>
+                                <span th:if="${log.status == 'RUNNING'}" class="badge bg-warning bg-opacity-10 text-warning border border-warning status-badge">EN COURS</span>
                             </td>
-
-                            <td class="text-center">
-                                <span th:if="${log.status == 'SUCCESS'}" class="badge bg-success bg-opacity-10 text-success border border-success status-badge">
-                                    <i class="bi bi-check-circle-fill me-1"></i> SUCCÈS
-                                </span>
-                                <span th:if="${log.status == 'FAILURE'}" class="badge bg-danger bg-opacity-10 text-danger border border-danger status-badge">
-                                    <i class="bi bi-x-circle-fill me-1"></i> ÉCHEC
-                                </span>
-                                <span th:if="${log.status == 'RUNNING'}" class="badge bg-warning bg-opacity-10 text-warning border border-warning status-badge">
-                                    <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span> EN COURS
-                                </span>
-                            </td>
-
-                            <td class="pe-4">
-                                <div class="text-truncate" style="max-width: 300px;"
-                                     th:text="${log.message}"
-                                     th:title="${log.message}"
-                                     th:classappend="${log.status == 'FAILURE'} ? 'text-danger fw-bold' : 'text-muted small'">
-                                </div>
-                            </td>
+                            <td class="pe-4"><small class="text-muted" th:text="${log.message}"></small></td>
                         </tr>
 
                         <tr th:if="${#lists.isEmpty(jobLogs)}">
-                            <td colspan="5" class="text-center py-5">
-                                <div class="text-muted opacity-50">
-                                    <i class="bi bi-hdd-stack display-4"></i>
-                                    <p class="mt-2">Aucun historique de job pour le moment.</p>
-                                </div>
-                            </td>
+                            <td colspan="5" class="text-center py-4 text-muted small">Aucune activité récente.</td>
                         </tr>
                         </tbody>
                     </table>
+                </div>
+                <div id="historyLoader" class="text-center py-3 d-none">
+                    <div class="spinner-border text-primary spinner-border-sm" role="status"></div>
+                    <span class="small text-muted ms-2">Chargement des archives...</span>
                 </div>
             </div>
         </div>
@@ -409,6 +388,69 @@
             .finally(() => {
                 btn.innerHTML = originalText;
                 btn.disabled = false;
+            });
+    });
+
+    // 5. Gestion de l'HISTORIQUE COMPLET
+    document.getElementById('btnLoadAllHistory').addEventListener('click', function() {
+        const btn = this;
+        const loader = document.getElementById('historyLoader');
+        const tbody = document.getElementById('jobsTableBody');
+
+        // UI Feedback
+        btn.disabled = true;
+        loader.classList.remove('d-none');
+
+        fetch('/admin/history/all')
+            .then(response => response.json())
+            .then(data => {
+                // On vide le tableau pour éviter les doublons (ou on pourrait juste ajouter la suite)
+                tbody.innerHTML = '';
+
+                if (data.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="5" class="text-center py-3">Aucun historique.</td></tr>';
+                    return;
+                }
+
+                // Génération des lignes HTML via JS (Template Strings)
+                data.forEach(log => {
+                    const date = new Date(log.startTime);
+                    const formattedDate = date.toLocaleDateString('fr-FR');
+                    const formattedTime = date.toLocaleTimeString('fr-FR');
+
+                    let statusBadge = '';
+                    if(log.status === 'SUCCESS') statusBadge = '<span class="badge bg-success bg-opacity-10 text-success border border-success status-badge">SUCCÈS</span>';
+                    else if(log.status === 'FAILURE') statusBadge = '<span class="badge bg-danger bg-opacity-10 text-danger border border-danger status-badge">ÉCHEC</span>';
+                    else statusBadge = '<span class="badge bg-warning bg-opacity-10 text-warning border border-warning status-badge">EN COURS</span>';
+
+                    const row = `
+                        <tr class="fade-in-row">
+                            <td class="ps-4">
+                                <div class="d-flex align-items-center">
+                                    <i class="bi bi-calendar3 me-2 text-muted"></i>
+                                    <span class="fw-bold text-dark">${formattedDate}</span>
+                                    <span class="text-muted ms-2 small">${formattedTime}</span>
+                                </div>
+                            </td>
+                            <td><span class="fw-bold text-primary">${log.jobName}</span></td>
+                            <td class="text-center"><span class="badge bg-light text-dark border">${log.durationInSeconds}s</span></td>
+                            <td class="text-center">${statusBadge}</td>
+                            <td class="pe-4"><small class="text-muted text-truncate d-block" style="max-width:300px" title="${log.message}">${log.message}</small></td>
+                        </tr>
+                    `;
+                    tbody.insertAdjacentHTML('beforeend', row);
+                });
+
+                // On cache le bouton car tout est chargé
+                btn.style.display = 'none';
+            })
+            .catch(err => {
+                console.error(err);
+                alert("Erreur chargement historique.");
+                btn.disabled = false;
+            })
+            .finally(() => {
+                loader.classList.add('d-none');
             });
     });
 </script>
