@@ -11,6 +11,7 @@ import com.analyseloto.loto.repository.UserRepository;
 import com.analyseloto.loto.service.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -18,6 +19,7 @@ import org.springframework.stereotype.Component;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 
 @Slf4j
@@ -34,8 +36,9 @@ public class LotoJob {
     private final UserBetRepository betRepository;
     // Event
     private final ApplicationEventPublisher eventPublisher;
-    // Email de l'utilisateur "ROBOT" qui stockera les pronostics de référence
-    private static final String EMAIL_IA_SYSTEM = "ai@loto.com";
+    /* Email de l'utilisateur ia */
+    @Value("${user.ia.mail}")
+    private String mailUserIa;
 
     /**
      * POINT D'ENTRÉE AUTOMATIQUE (CRON)
@@ -49,9 +52,7 @@ public class LotoJob {
     }
 
     /**
-     * POINT D'ENTRÉE MANUEL (Via API Admin)
-     * Appelé par votre AdminController.
-     * Elle appelle la logique métier avec "true".
+     * Appel manuel du job de récupération des résultats FDJ (via API admin)
      */
     public void triggerRecupererResultatsFdj() {
         // On appelle la méthode logique avec "true" car c'est manuel
@@ -61,16 +62,15 @@ public class LotoJob {
     /**
      * Contient tout le code. Elle prend le paramètre mais n'est PAS @Scheduled.
      */
-    private void executerRecuperationFdj(boolean manuel) {
-        String mode = manuel ? "MANUEL" : "AUTO";
+    private void executerRecuperationFdj(boolean force) {
+        String mode = force ? "MANUEL" : "AUTO";
         log.info("🤖 Job {} : Vérification FDJ...", mode);
 
         // Enregistrement début job
-        // On peut préciser dans le nom du job si c'est manuel ou non pour les logs
         JobLog jobLog = jobMonitorService.startJob("RECUPERER_DERNIER_TIRAGE_" + mode);
 
-        // Appel de la méthode de récupération en passant le paramètre
-        Optional<LotoTirage> newTirage = fdjService.recupererDernierTirage(manuel);
+        // Appel de la méthode de récupération
+        Optional<LotoTirage> newTirage = fdjService.recupererDernierTirage(force);
 
         if (newTirage.isPresent()) {
             log.info("✅ Base mise à jour avec le dernier tirage !");
@@ -89,8 +89,10 @@ public class LotoJob {
             // Déclenchement de l'événement pour calculer les gains
             eventPublisher.publishEvent(new NouveauTirageEvent(this, tirage));
 
-            // Notification aux admins
-            List<User> admins = userRepository.findByRole("ADMIN");
+            // Notification aux admins (sans user IA)
+            List<User> admins = userRepository.findByRole("ADMIN").stream().
+                    filter(a -> !Objects.equals(a.getEmail(), mailUserIa)).toList();
+            // Envoi mail à chaque admin
             for (User admin : admins) {
                 emailService.sendAdminNotification(admin.getEmail(), tirage);
                 log.info("\uD83D\uDCE7 Notification envoyée à l'admin : {}", admin.getEmail());
@@ -115,8 +117,8 @@ public class LotoJob {
 
         try {
             // 1. Récupérer l'utilisateur "IA"
-            User aiUser = userRepository.findByEmail(EMAIL_IA_SYSTEM)
-                    .orElseThrow(() -> new RuntimeException("Utilisateur IA (" + EMAIL_IA_SYSTEM + ") introuvable en base !"));
+            User aiUser = userRepository.findByEmail(mailUserIa)
+                    .orElseThrow(() -> new RuntimeException("Utilisateur IA (" + mailUserIa + ") introuvable en base !"));
 
             // 2. Vérifier si on n'a pas déjà généré pour aujourd'hui (pour éviter les doublons si restart)
             List<UserBet> existants = betRepository.findByUser(aiUser).stream()
@@ -225,7 +227,7 @@ public class LotoJob {
             }
         }
         // Enregistrement log
-        jobMonitorService.endJob(jobLog, JobExecutionStatus.SUCCESS.getCode(), "Nettoyage terminé.");
+        jobMonitorService.endJob(jobLog, JobExecutionStatus.SUCCESS.getCode(), "Envoi pronostics terminé.");
         log.info("🏁 Fin du Job d'envoi massif.");
     }
 

@@ -76,8 +76,8 @@ public class LotoService {
 
     private List<PronosticResultDto> genererPronosticAvecConfig(LocalDate dateCible, int nombreGrilles, AstroProfileDto profilAstro, AlgoConfig config) {
         List<PronosticResultDto> resultats = new ArrayList<>();
-        // On limite à 10 grilles max pour éviter les timeouts
-        int n = Math.min(Math.max(1, nombreGrilles), 10);
+        // On force entre 1 et 20 grilles
+        int n = Math.min(Math.max(1, nombreGrilles), 20);
 
         List<LotoTirage> history = repository.findAll();
         if (history.isEmpty()) return new ArrayList<>();
@@ -86,7 +86,7 @@ public class LotoService {
         if (profilAstro != null) graine += profilAstro.getVille().toLowerCase().hashCode();
         Random rng = new Random(graine);
 
-        // --- 1. PRÉPARATIONS STATIQUES (Fait une seule fois pour gagner du temps) ---
+        // --- 1. PRÉPARATIONS ---
         Set<Integer> hotFinales = detecterFinalesChaudes(history);
         List<Integer> boostNumbers = (profilAstro != null) ? astroService.getLuckyNumbersOnly(profilAstro) : Collections.emptyList();
 
@@ -94,34 +94,42 @@ public class LotoService {
         sortedHistory.sort(Comparator.comparing(LotoTirage::getDateTirage).reversed());
         List<Integer> dernierTirageConnu = sortedHistory.isEmpty() ? new ArrayList<>() : sortedHistory.get(0).getBoules();
 
+        // Matrices
         Map<Integer, Map<Integer, Integer>> matriceMarkov = construireMatriceMarkov(history);
         Map<Integer, Map<Integer, Integer>> matriceAffinitesMain = construireMatriceAffinitesPonderee(history, dateCible.getDayOfWeek());
         Map<Integer, Map<Integer, Integer>> matriceAffinitesChance = construireMatriceAffinitesChancePonderee(history, dateCible.getDayOfWeek());
 
-        // Scores de base (Calculés une seule fois)
+        // Scores de base
         Map<Integer, Double> scoresBase = calculerScores(history, 49, dateCible.getDayOfWeek(), false, boostNumbers, hotFinales, config, dernierTirageConnu, matriceMarkov);
         Map<Integer, Double> scoresChance = calculerScores(history, 10, dateCible.getDayOfWeek(), true, boostNumbers, Collections.emptySet(), config, null, null);
 
-        // --- 2. GESTION DE LA GÉNÉRATION (Boucle Optimisée) ---
+        // --- 2. BOUCLE DE GÉNÉRATION ROBUSTE ---
         Set<List<Integer>> grillesDejaGenerees = new HashSet<>();
         Set<Integer> numDejaJouesGlobalement = new HashSet<>();
 
         int grillesValidees = 0;
-
-        // Sécurité globale : on ne boucle pas plus de 5 fois le nombre demandé (ex: 50 tours pour 10 grilles)
         int tentativesGlobales = 0;
-        int maxTentativesGlobales = n * 5;
+        // On laisse beaucoup de temps au système (100 essais par grille demandée)
+        int maxTentativesGlobales = n * 100;
 
         while (grillesValidees < n && tentativesGlobales < maxTentativesGlobales) {
             tentativesGlobales++;
 
-            // A. Logique de Diversification "Intelligente"
-            // Si on galère (écart > 3 entre tentatives et réussites), on désactive le mode strict
-            // pour permettre à l'algo de réutiliser des numéros forts sans malus.
-            boolean modeStrict = (tentativesGlobales - grillesValidees) <= 3;
+            // --- GESTION DYNAMIQUE DE LA DIFFICULTÉ ---
+            // Niveau 1 : Strict + Diversifié
+            // Niveau 2 : Strict (mais on réutilise les numéros forts)
+            // Niveau 3 : Survie (On lève les contraintes Delta et Anti-Répétition pour finir le job)
 
+            int difficulte = 1;
+
+            // Si on a fait trop d'essais par rapport au nombre de grilles trouvées, on baisse le niveau
+            // Exemple : Si on cherche la 3ème grille mais qu'on en est à 100 tentatives, on passe en mode souple.
+            if (tentativesGlobales > (grillesValidees * 20) + 50) difficulte = 2;
+            if (tentativesGlobales > (grillesValidees * 20) + 150) difficulte = 3;
+
+            // 1. Préparation des scores (Diversification uniquement en niveau 1)
             Map<Integer, Double> scoresCourants = new HashMap<>(scoresBase);
-            if (modeStrict) {
+            if (difficulte == 1) {
                 for (Integer dejaJoue : numDejaJouesGlobalement) {
                     scoresCourants.merge(dejaJoue, -3.0, Double::sum);
                 }
@@ -130,17 +138,34 @@ public class LotoService {
             Map<String, List<Integer>> buckets = creerBuckets(scoresCourants);
             List<Integer> boules = new ArrayList<>();
 
-            // B. Génération Candidate
+            // 2. Génération
             if (config.isUtiliserGenetique()) {
                 boules = genererGrilleGenetique(scoresCourants, matriceAffinitesMain, history, rng, dernierTirageConnu);
             } else {
-                // On réduit les tentatives internes pour échouer vite et passer à la suite si bloqué
                 int essaisMax = 200;
                 int essais = 0;
                 while (essais < essaisMax) {
                     List<Integer> candidat = genererGrilleParAffinite(buckets, matriceAffinitesMain, dernierTirageConnu, history, rng);
-                    // Validation structurelle
-                    if (estGrilleCoherente(candidat, dernierTirageConnu) && validerDeltaSystem(candidat)) {
+
+                    boolean valide = false;
+
+                    if (difficulte <= 2) {
+                        // VALIDATION STRICTE
+                        // On veut une structure parfaite et pas de répétition abusive du dernier tirage
+                        if (estGrilleCoherente(candidat, dernierTirageConnu) && validerDeltaSystem(candidat)) {
+                            valide = true;
+                        }
+                    } else {
+                        // MODE SURVIE (Niveau 3)
+                        // On accepte tout ce qui est "Cohérent" (Somme, Parité).
+                        // On passe 'null' au lieu de dernierTirageConnu pour désactiver l'anti-répétition stricte
+                        // On ne vérifie pas le DeltaSystem
+                        if (estGrilleCoherente(candidat, null)) {
+                            valide = true;
+                        }
+                    }
+
+                    if (valide) {
                         boules = candidat;
                         break;
                     }
@@ -148,21 +173,20 @@ public class LotoService {
                 }
             }
 
-            // Si échec de génération interne, on recommence la boucle principale
+            // Si malgré tout on a rien (très rare en mode survie), on continue la boucle
             if (boules == null || boules.size() != 5) continue;
 
-            // C. Vérification Unicité
+            // 3. Unicité (Toujours active, on ne veut pas de doublons exacts)
             Collections.sort(boules);
             if (grillesDejaGenerees.contains(boules)) continue;
 
-            // D. Succès : Enregistrement
+            // 4. Succès
             grillesDejaGenerees.add(boules);
-            numDejaJouesGlobalement.addAll(boules); // On ajoute pour le malus futur (si mode strict actif)
+            numDejaJouesGlobalement.addAll(boules);
 
-            // Sélection optimisée du Chance pour cette grille précise
             int chance = selectionnerChanceOptimisee(boules, scoresChance, matriceAffinitesChance, rng);
 
-            // Simulation Rapide pour stats
+            // Simulation
             SimulationResultDto simu = simulerGrilleDetaillee(boules, dateCible, history);
             double maxDuo = simu.getPairs().stream().mapToDouble(MatchGroup::getRatio).max().orElse(0.0);
             double maxTrio = simu.getTrios().stream().mapToDouble(MatchGroup::getRatio).max().orElse(0.0);
@@ -174,7 +198,7 @@ public class LotoService {
             grillesValidees++;
         }
 
-        // Tri final par score théorique
+        // Tri final : les meilleures grilles (générées en mode strict) seront probablement en haut grâce au score
         resultats.sort((a, b) -> Double.compare(b.getScoreGlobal(), a.getScoreGlobal()));
         return resultats;
     }

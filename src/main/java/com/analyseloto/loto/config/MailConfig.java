@@ -19,7 +19,7 @@ public class MailConfig {
 
     @Bean
     public JavaMailSender javaMailSender() {
-        // 1. CORRECTIF SYSTEME : On force Java à utiliser le format Linux (JKS)
+        // 1. On force Java à utiliser le format Linux (JKS)
         // Cela empêche l'erreur "WINDOWS-ROOT not available" à la racine
         System.setProperty("javax.net.ssl.trustStoreType", "JKS");
 
