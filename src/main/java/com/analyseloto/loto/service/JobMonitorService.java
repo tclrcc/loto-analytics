@@ -109,11 +109,11 @@ public class JobMonitorService {
     }
 
     /**
-     * Renvoie liste des 50 derniers jobs
+     * Renvoie liste de tous les jobs
      * @return liste jobs
      */
     public List<JobLog> getHistory() {
-        return jobLogRepository.findAll();
+        return jobLogRepository.findAllOrderByStartTimeDesc();
     }
 
 
