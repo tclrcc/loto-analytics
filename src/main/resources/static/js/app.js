@@ -6,11 +6,15 @@ document.addEventListener('DOMContentLoaded', () => {
     let rawData = [];
     let activeTab = 'main';
 
+    // NOUVEAU : Variables pour la sélection multiple
+    let selectedGrids = new Set();
+    let currentGridsData = [];
+
     // --- Initialisation ---
     setupEventListeners();
 
-    // --- Initialisation des Popovers (Bulles d'aide) ---
-    var popoverTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="popover"]'))
+    // --- Initialisation des Popovers ---
+    var popoverTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="popover"]'));
     var popoverList = popoverTriggerList.map(function (popoverTriggerEl) {
         return new bootstrap.Popover(popoverTriggerEl)
     });
@@ -33,8 +37,6 @@ document.addEventListener('DOMContentLoaded', () => {
             localStorage.setItem('mesFavorisLoto', JSON.stringify(favoris));
 
             chargerFavoris();
-
-            // Petit effet visuel
             confetti({ particleCount: 30, spread: 50, origin: { y: 0.6 } });
         });
     }
@@ -64,7 +66,7 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         });
 
-        // 5. Algorithme Hybride (Astro + Stats)
+        // 5. Algorithme Hybride
         const btnHybrid = document.getElementById('btnHybridAlgo');
         if (btnHybrid) {
             btnHybrid.addEventListener('click', async () => {
@@ -97,6 +99,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     if(!res.ok) throw new Error();
                     const data = await res.json();
 
+                    // On stocke les données pour la sélection multiple
+                    currentGridsData = data;
+
                     const modalEl = document.getElementById('modalAstro');
                     const modal = bootstrap.Modal.getInstance(modalEl);
                     modal.hide();
@@ -118,7 +123,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const formManuel = document.getElementById('formManuel');
         if (formManuel) formManuel.addEventListener('submit', ajouterTirageManuel);
 
-        // 7. Astro Simple
+        // 7. Astro Simple & Copy
         const formAstro = document.getElementById('formAstro');
         const btnCopyAstro = document.getElementById('btnCopyAstro');
 
@@ -138,20 +143,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 try {
                     const res = await fetch('/api/loto/astro', {
-                        method: 'POST',
-                        headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify(payload)
+                        method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload)
                     });
                     if(!res.ok) throw new Error("Erreur serveur");
                     const data = await res.json();
                     afficherResultatAstro(data);
-                } catch(err) {
-                    console.error(err);
-                    alert("Impossible de calculer le profil astral.");
-                } finally {
-                    btn.innerHTML = originalText;
-                    btn.disabled = false;
-                }
+                } catch(err) { console.error(err); alert("Erreur Astro."); } finally { btn.innerHTML = originalText; btn.disabled = false; }
             });
         }
 
@@ -167,7 +164,7 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
 
-        // 8. Onglets (Chart vs Heatmap)
+        // 8. Onglets
         const tabs = document.querySelectorAll('#graphTabs button');
         const searchContainerMain = document.getElementById('searchContainerMain');
         const searchContainerChance = document.getElementById('searchContainerChance');
@@ -198,7 +195,7 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         });
 
-        // 9. Recherche
+        // 9. Recherche & Graphique
         const searchInput = document.getElementById('searchNum');
         const searchChanceInput = document.getElementById('searchChance');
         const resetButtons = document.querySelectorAll('.btn-reset');
@@ -214,13 +211,72 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         });
 
-        // 10. Correction Bug Affichage Graphique dans l'Accordéon
         const statsCollapse = document.getElementById('collapseStats');
         if (statsCollapse) {
             statsCollapse.addEventListener('shown.bs.collapse', function () {
-                // Force le redimensionnement du graphique une fois l'animation terminée
-                if (currentChart) {
-                    currentChart.resize();
+                if (currentChart) currentChart.resize();
+            });
+        }
+
+        // 10. GESTION DU "TOUT JOUER" (BULK)
+
+        // Bouton Ouvrir Modal
+        const btnOpenBulk = document.getElementById('btnOpenBulkModal');
+        if(btnOpenBulk) {
+            btnOpenBulk.addEventListener('click', () => {
+                const count = selectedGrids.size;
+                const dateSimu = document.getElementById('simDate').value;
+                document.getElementById('modalBulkCount').textContent = count;
+                document.getElementById('bulkCostInput').value = (count * 2.20).toFixed(2);
+
+                // Init flatpickr sur le champ date de la modal
+                const fp = flatpickr("#bulkDateInput", { "locale": "fr", "dateFormat": "Y-m-d", "altInput": true, "altFormat": "j F Y" });
+                fp.setDate(dateSimu, true);
+
+                const modal = new bootstrap.Modal(document.getElementById('modalBulkBet'));
+                modal.show();
+            });
+        }
+
+        // Bouton Confirmer
+        const btnConfirmBulk = document.getElementById('btnConfirmBulk');
+        if(btnConfirmBulk) {
+            btnConfirmBulk.addEventListener('click', async () => {
+                const btn = btnConfirmBulk;
+                const originalText = btn.innerHTML;
+                const dateJeu = document.getElementById('bulkDateInput').value;
+
+                const gridsToSend = [];
+                selectedGrids.forEach(index => {
+                    const g = currentGridsData[index];
+                    const line = [...g.boules, g.numeroChance];
+                    gridsToSend.push(line);
+                });
+
+                const payload = { dateJeu: dateJeu, grilles: gridsToSend };
+
+                btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Envoi...';
+                btn.disabled = true;
+
+                try {
+                    const res = await fetch('/bets/add-bulk', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    if (res.ok) {
+                        bootstrap.Modal.getInstance(document.getElementById('modalBulkBet')).hide();
+                        confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
+                        setTimeout(() => window.location.reload(), 1500);
+                    } else {
+                        throw new Error("Erreur serveur");
+                    }
+                } catch(e) {
+                    alert("Erreur : " + e.message);
+                } finally {
+                    btn.innerHTML = originalText;
+                    btn.disabled = false;
                 }
             });
         }
@@ -229,12 +285,11 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- FONCTIONNALITÉS ---
 
     function chargerFavoris() {
+        // ... (votre code existant, inchangé) ...
         const container = document.getElementById('favList');
         if(!container) return;
-
         container.innerHTML = '';
         let favoris = JSON.parse(localStorage.getItem('mesFavorisLoto') || "[]");
-
         favoris.forEach((nums, index) => {
             const badge = document.createElement('span');
             badge.className = "badge bg-white text-dark border cursor-pointer p-2 shadow-sm";
@@ -243,26 +298,23 @@ document.addEventListener('DOMContentLoaded', () => {
                 const inputs = document.querySelectorAll('.sim-input');
                 nums.forEach((n, i) => { if(inputs[i]) inputs[i].value = n; });
             };
-
-            // Double clic pour supprimer
             badge.ondblclick = () => {
                 favoris.splice(index, 1);
                 localStorage.setItem('mesFavorisLoto', JSON.stringify(favoris));
                 chargerFavoris();
             };
-
             container.appendChild(badge);
         });
     }
 
     function afficherResultatAstro(data) {
+        // ... (votre code existant, inchangé) ...
         const resDiv = document.getElementById('astroResult');
         resDiv.classList.remove('d-none');
         document.getElementById('astroTitle').textContent = `Profil ${data.signeSolaire}`;
         document.getElementById('astroPath').textContent = data.cheminDeVie;
         document.getElementById('astroElement').textContent = data.element;
         document.getElementById('astroPhrase').textContent = `"${data.phraseHoroscope}"`;
-
         const ballsDiv = document.getElementById('astroBalls');
         ballsDiv.innerHTML = '';
         data.luckyNumbers.forEach(n => {
@@ -283,17 +335,13 @@ document.addEventListener('DOMContentLoaded', () => {
         const inputs = document.querySelectorAll('.sim-input');
         const boules = Array.from(inputs).map(i => i.value ? parseInt(i.value) : null).filter(val => val !== null && !isNaN(val));
         const dateSimu = document.getElementById('simDate').value;
-
         if (!dateSimu) { alert("Veuillez choisir une date."); return; }
         if (boules.length < 2) { alert("Veuillez entrer au moins 2 numéros."); return; }
         if (new Set(boules).size !== boules.length) { alert("Doublons interdits."); return; }
-
         const payload = { boules: boules, date: dateSimu };
         try {
             const res = await fetch('/api/loto/simuler', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
             });
             if(!res.ok) throw new Error();
             const data = await res.json();
@@ -304,48 +352,33 @@ document.addEventListener('DOMContentLoaded', () => {
     function afficherResultatsSimulation(data, nbBoulesJouees) {
         const container = document.getElementById('simResult');
         container.classList.remove('d-none');
-
-        // --- 1. CALCULS STATISTIQUES ---
+        // ... (votre code d'analyse existant, inchangé) ...
         const inputs = document.querySelectorAll('.sim-input');
         const numerosJoues = Array.from(inputs).map(i => i.value ? parseInt(i.value) : 0).filter(n => n > 0);
-
-        // A. La Somme
         let somme = numerosJoues.reduce((a, b) => a + b, 0);
-
-        // B. Parité
         let pairs = numerosJoues.filter(n => n % 2 === 0).length;
         let impairs = numerosJoues.length - pairs;
-
-        // C. Ratio Global
         let maxRatio = 0;
         if (data.quintuplets && data.quintuplets.length > 0) maxRatio = data.quintuplets[0].ratio;
         else if (data.quartets && data.quartets.length > 0) maxRatio = data.quartets[0].ratio;
-
         let freqPourcent = maxRatio > 0 ? (maxRatio).toFixed(2) + 'x' : '-';
-
-        // --- 2. CONSTRUCTION DU HTML ---
         let tabsHtml = '';
         let contentHtml = '';
         const startActive = nbBoulesJouees;
-
         [5, 4, 3, 2].forEach(size => {
             if (size <= nbBoulesJouees) {
                 const isActive = (size === startActive);
                 const items = (size === 5 ? data.quintuplets : size === 4 ? data.quartets : size === 3 ? data.trios : data.pairs);
                 const count = items ? items.length : 0;
-
                 tabsHtml += `
                     <li class="nav-item" role="presentation">
                         <button class="nav-link ${isActive ? 'active' : ''}" id="pills-${size}-tab" data-bs-toggle="pill" data-bs-target="#pills-${size}" type="button">
                             ${size} Num <span class="badge bg-white text-primary ms-1 shadow-sm">${count}</span>
                         </button>
                     </li>`;
-
                 contentHtml += generateTabPane(`pills-${size}`, items, isActive);
             }
         });
-
-        // Le HTML Final
         container.innerHTML = `
             <div class="card border-0 shadow-sm animate-up mt-3">
                 <div class="card-header bg-white border-bottom-0 py-3 d-flex justify-content-between align-items-center">
@@ -381,9 +414,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     <div class="tab-content" id="pills-tabContent">${contentHtml}</div>
                 </div>
                 <div class="card-footer bg-white border-top-0 text-center py-2">
-                    <small class="text-muted fst-italic" style="font-size: 0.75rem;">
-                        Conseil : Une somme entre 120 et 180 est statistiquement la plus fréquente.
-                    </small>
+                    <small class="text-muted fst-italic" style="font-size: 0.75rem;">Conseil : Une somme entre 120 et 180 est statistiquement la plus fréquente.</small>
                 </div>
             </div>`;
     }
@@ -399,7 +430,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (item.dates.length > 5) datesStr += ` ... (+${item.dates.length - 5})`;
                 let barColor = item.ratio > 1.5 ? 'bg-danger' : item.ratio > 1.1 ? 'bg-warning' : item.ratio < 0.6 ? 'bg-info' : 'bg-success';
                 let width = Math.min(item.ratio * 50, 100);
-
                 content += `
                     <div class="list-group-item">
                         <div class="d-flex justify-content-between align-items-center mb-1">
@@ -422,6 +452,8 @@ document.addEventListener('DOMContentLoaded', () => {
         return `<div class="tab-pane fade ${isActive ? 'show active' : ''}" id="${id}">${content}</div>`;
     }
 
+    // --- GÉNÉRATION PRONOSTICS (MODIFIÉE) ---
+
     async function genererPronostic() {
         const dateInput = document.getElementById('simDate');
         const countInput = document.getElementById('pronoCount');
@@ -429,12 +461,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const btn = document.getElementById('btnMagic');
         const originalText = btn.innerHTML;
-        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+
+        // Reset Sélection
+        selectedGrids.clear();
+        updateBulkBar();
+
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Calcul IA...';
         btn.disabled = true;
 
         try {
             const res = await fetch(`/api/loto/generate?date=${dateInput.value}&count=${countInput.value}`);
             const data = await res.json();
+
+            currentGridsData = data; // Stockage important pour la sélection
+
             afficherMultiplesPronostics(data, dateInput.value);
         } catch (e) { alert("Erreur pronostics."); } finally {
             btn.innerHTML = originalText;
@@ -450,60 +490,50 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('pronoDate').textContent = new Date(dateStr).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
         listContainer.innerHTML = '';
 
-        // --- 1. TRI INTELLIGENT (NOUVEAU) ---
-        // On trie la liste pour mettre les meilleures grilles en premier
+        // --- 1. TRI INTELLIGENT ---
         list.sort((a, b) => {
             const getPriorite = (type) => {
-                if (!type) return 1; // Par défaut considéré comme Optimal
-                if (type.includes('HASARD') || type.includes('🎲')) return 3; // En dernier
-                if (type.includes('⚠️') || type.includes('Flexible')) return 2; // Au milieu
-                return 1; // IA Optimal en premier
+                if (!type) return 1;
+                if (type.includes('HASARD') || type.includes('🎲')) return 3;
+                if (type.includes('⚠️') || type.includes('Flexible')) return 2;
+                return 1;
             };
-
             const prioA = getPriorite(a.typeAlgo);
             const prioB = getPriorite(b.typeAlgo);
-
-            // Si la priorité est différente, on trie par priorité
-            if (prioA !== prioB) {
-                return prioA - prioB;
-            }
-            // Si c'est la même priorité (ex: deux "IA Optimal"), on trie par le score global (le plus haut en premier)
+            if (prioA !== prioB) return prioA - prioB;
             return b.scoreGlobal - a.scoreGlobal;
         });
 
-        // --- 2. AFFICHAGE ---
+        // --- 2. AFFICHAGE AVEC CHECKBOX ---
         list.forEach((grid, index) => {
             const pctDuo = Math.min(grid.maxRatioDuo * 50, 100);
             const colorDuo = grid.maxRatioDuo > 1.2 ? 'bg-danger' : 'bg-success';
 
-            // Logique du Badge
             let badgeHtml = '';
             const type = grid.typeAlgo || '';
-
-            if (type.includes('⚠️')) {
-                badgeHtml = '<span class="badge bg-warning text-dark border shadow-sm"><i class="bi bi-exclamation-triangle-fill me-1"></i>IA Flexible</span>';
-            } else if (type.includes('HASARD') || type.includes('🎲')) {
-                badgeHtml = '<span class="badge bg-secondary border shadow-sm"><i class="bi bi-dice-5-fill me-1"></i>Hasard</span>';
-            } else {
-                badgeHtml = '<span class="badge bg-primary shadow-sm"><i class="bi bi-cpu-fill me-1"></i>IA Optimal</span>';
-            }
+            if (type.includes('⚠️')) badgeHtml = '<span class="badge bg-warning text-dark border"><i class="bi bi-exclamation-triangle-fill"></i> IA Flexible</span>';
+            else if (type.includes('HASARD') || type.includes('🎲')) badgeHtml = '<span class="badge bg-secondary border"><i class="bi bi-dice-5-fill"></i> Hasard</span>';
+            else badgeHtml = '<span class="badge bg-primary"><i class="bi bi-cpu-fill"></i> IA Optimal</span>';
 
             const col = document.createElement('div');
             col.className = 'col-md-6 col-lg-4 animate-up';
             col.style.animationDelay = (index * 0.1) + 's';
 
             col.innerHTML = `
-                <div class="card h-100 shadow-sm border-${grid.dejaSortie ? 'danger' : 'light'}">
-                    <div class="card-body p-3">
-                        <div class="d-flex justify-content-between align-items-center mb-3">
+                <div class="card h-100 shadow-sm border-light grid-card cursor-pointer" id="grid-card-${index}">
+                    <div class="card-body p-3 position-relative">
+                        <div class="position-absolute top-0 end-0 p-2">
+                            <input type="checkbox" class="form-check-input fs-5" id="check-${index}" style="pointer-events: none;"> 
+                        </div>
+
+                        <div class="d-flex align-items-center mb-2 gap-2">
                             <span class="badge bg-light text-muted border">#${index + 1}</span>
                             ${badgeHtml}
                         </div>
                         
-                        <div class="d-flex justify-content-center gap-1 mb-3">
-                            ${grid.boules.map(b => `<span class="badge rounded-circle bg-dark fs-6 d-flex align-items-center justify-content-center shadow-sm" style="width:32px; height:32px;">${b}</span>`).join('')}
-                            <div style="width:1px;height:25px;background:#ddd;align-self:center;"></div>
-                            <span class="badge rounded-circle bg-danger fs-6 d-flex align-items-center justify-content-center shadow-sm" style="width:32px; height:32px;">${grid.numeroChance}</span>
+                        <div class="d-flex justify-content-center gap-1 mb-2">
+                            ${grid.boules.map(b => `<span class="badge rounded-circle bg-dark fs-6 d-flex align-items-center justify-content-center" style="width:32px; height:32px;">${b}</span>`).join('')}
+                            <span class="badge rounded-circle bg-danger fs-6 d-flex align-items-center justify-content-center" style="width:32px; height:32px;">${grid.numeroChance}</span>
                         </div>
                         
                         <div class="small text-muted mb-3 bg-light p-2 rounded">
@@ -527,10 +557,19 @@ document.addEventListener('DOMContentLoaded', () => {
                         </div>
                     </div>
                 </div>`;
+
             listContainer.appendChild(col);
+
+            // Attacher l'événement click sur la carte
+            const cardEl = document.getElementById(`grid-card-${index}`);
+            cardEl.addEventListener('click', function(e) {
+                // On ne déclenche pas la sélection si on clique sur un bouton
+                if(e.target.closest('button')) return;
+                toggleGridSelection(index, this);
+            });
         });
 
-        // Réattacher les écouteurs
+        // Réattacher les écouteurs "Voir"
         document.querySelectorAll('.btn-copier').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 const nums = e.target.getAttribute('data-nums').split(',');
@@ -541,36 +580,38 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // --- IMPORT & MANUEL ---
+    // --- LOGIQUE DE SÉLECTION MULTIPLE ---
 
-    async function ajouterTirageManuel(e) {
-        e.preventDefault();
-        const boules = [1,2,3,4,5].map(i => parseInt(document.getElementById('mB'+i).value));
-        const chance = parseInt(document.getElementById('mChance').value);
-        const date = document.getElementById('mDate').value;
-        if(!date || isNaN(chance)) return alert("Champs invalides");
-        try {
-            await fetch('/api/loto/add-result', {
-                method:'POST', headers:{'Content-Type':'application/json'},
-                body:JSON.stringify({dateTirage:date, boule1:boules[0], boule2:boules[1], boule3:boules[2], boule4:boules[3], boule5:boules[4], numeroChance:chance})
-            });
-            alert('Ajouté !'); document.getElementById('formManuel').reset(); chargerStats();
-        } catch(err) { console.error(err); }
+    function toggleGridSelection(index, cardElement) {
+        const checkbox = document.getElementById(`check-${index}`);
+
+        if (selectedGrids.has(index)) {
+            selectedGrids.delete(index);
+            cardElement.classList.remove('border-primary', 'bg-primary', 'bg-opacity-10');
+            cardElement.classList.add('border-light');
+            checkbox.checked = false;
+        } else {
+            selectedGrids.add(index);
+            cardElement.classList.remove('border-light');
+            cardElement.classList.add('border-primary', 'bg-primary', 'bg-opacity-10');
+            checkbox.checked = true;
+        }
+        updateBulkBar();
     }
 
-    async function uploadCsv() {
-        const fileInput = document.getElementById('csvFile');
-        if (!fileInput.files[0]) return alert("Fichier requis");
-        const btn = document.getElementById('btnImport');
-        btn.disabled = true; btn.innerText = 'Importation...';
-        const formData = new FormData(); formData.append('file', fileInput.files[0]);
-        try {
-            const res = await fetch('/api/loto/import', { method:'POST', body: formData });
-            if(res.ok) { alert('Import réussi !'); chargerStats(); } else alert('Erreur import');
-        } catch(e) { console.error(e); } finally { btn.disabled = false; btn.innerText='Importer'; }
+    function updateBulkBar() {
+        const bar = document.getElementById('bulkActionBar');
+        const count = selectedGrids.size;
+        if (count > 0) {
+            bar.classList.remove('d-none');
+            document.getElementById('bulkCountBadge').textContent = count;
+            document.getElementById('bulkTotalCost').textContent = (count * 2.20).toFixed(2);
+        } else {
+            bar.classList.add('d-none');
+        }
     }
 
-    // --- DATA FETCH & CHARTS ---
+    // --- DATA FETCH & CHARTS (inchangé) ---
 
     async function chargerStats(jour = '') {
         let url = '/api/loto/stats';
@@ -605,7 +646,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         updateDashboard(mainNumbers, chanceNumbers);
-
         updateRadar(mainNumbers);
 
         if (activeTab === 'main') updateChart(mainNumbers, false);
@@ -690,7 +730,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function checkWinEffect() {
         const urlParams = new URLSearchParams(window.location.search);
-
         if (urlParams.has('win')) {
             lancerConfettis();
             const toastEl = document.getElementById('winToast');
@@ -707,9 +746,7 @@ document.addEventListener('DOMContentLoaded', () => {
         var duration = 3 * 1000;
         var animationEnd = Date.now() + duration;
         var defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 10000 };
-
         function randomInRange(min, max) { return Math.random() * (max - min) + min; }
-
         var interval = setInterval(function() {
             var timeLeft = animationEnd - Date.now();
             if (timeLeft <= 0) return clearInterval(interval);
@@ -721,25 +758,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function updateRadar(data) {
         const recentData = data.slice(0, 50);
-
         let totalPairs = 0;
         let totalHigh = 0;
         let totalSum = 0;
-
         recentData.forEach(d => {
             if (d.numero % 2 === 0) totalPairs += d.frequence;
             if (d.numero > 25) totalHigh += d.frequence;
             totalSum += (d.numero * d.frequence);
         });
-
         const totalSorties = recentData.reduce((acc, val) => acc + val.frequence, 0);
-
         const pctPair = Math.round((totalPairs / totalSorties) * 100);
         const pctHigh = Math.round((totalHigh / totalSorties) * 100);
-
         const ctx = document.getElementById('radarChart').getContext('2d');
         if (radarChart) radarChart.destroy();
-
         radarChart = new Chart(ctx, {
             type: 'radar',
             data: {
@@ -747,35 +778,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 datasets: [{
                     label: 'Tendance Actuelle',
                     data: [pctPair, pctHigh, 60, 55, 45],
-                    fill: true,
-                    backgroundColor: 'rgba(79, 70, 229, 0.2)',
-                    borderColor: '#4F46E5',
-                    pointBackgroundColor: '#4F46E5',
-                    pointBorderColor: '#fff',
-                    pointHoverBackgroundColor: '#fff',
-                    pointHoverBorderColor: '#4F46E5'
+                    fill: true, backgroundColor: 'rgba(79, 70, 229, 0.2)', borderColor: '#4F46E5', pointBackgroundColor: '#4F46E5', pointBorderColor: '#fff', pointHoverBackgroundColor: '#fff', pointHoverBorderColor: '#4F46E5'
                 }, {
-                    label: 'Équilibre Théorique',
-                    data: [50, 50, 50, 50, 50],
-                    fill: true,
-                    backgroundColor: 'rgba(200, 200, 200, 0.1)',
-                    borderColor: 'rgba(200, 200, 200, 0.5)',
-                    pointRadius: 0
+                    label: 'Équilibre Théorique', data: [50, 50, 50, 50, 50], fill: true, backgroundColor: 'rgba(200, 200, 200, 0.1)', borderColor: 'rgba(200, 200, 200, 0.5)', pointRadius: 0
                 }]
             },
             options: {
                 elements: { line: { tension: 0.3 } },
-                scales: {
-                    r: {
-                        angleLines: { display: true, color: '#eee' },
-                        suggestedMin: 30,
-                        suggestedMax: 70,
-                        pointLabels: { font: { size: 12, family: "'Poppins', sans-serif" } }
-                    }
-                }
+                scales: { r: { angleLines: { display: true, color: '#eee' }, suggestedMin: 30, suggestedMax: 70, pointLabels: { font: { size: 12, family: "'Poppins', sans-serif" } } } }
             }
         });
-
         const conseilDiv = document.getElementById('radarAnalysis');
         if(conseilDiv) {
             let analyse = [];
@@ -783,12 +795,8 @@ document.addEventListener('DOMContentLoaded', () => {
             if (pctPair < 45) analyse.push("Les <strong>Impairs</strong> dominent");
             if (pctHigh > 55) analyse.push("Les <strong>Gros numéros</strong> (>25) sont fréquents");
             if (pctHigh < 45) analyse.push("Les <strong>Petits numéros</strong> (≤25) sont fréquents");
-
-            if (analyse.length === 0) {
-                conseilDiv.innerHTML = '<span class="text-success"><i class="bi bi-check-circle me-1"></i> Équilibre parfait. Le hasard fait bien les choses.</span>';
-            } else {
-                conseilDiv.innerHTML = '<span class="text-primary"><i class="bi bi-lightbulb me-1"></i> Tendance : ' + analyse.join(" et ") + '.</span>';
-            }
+            if (analyse.length === 0) conseilDiv.innerHTML = '<span class="text-success"><i class="bi bi-check-circle me-1"></i> Équilibre parfait. Le hasard fait bien les choses.</span>';
+            else conseilDiv.innerHTML = '<span class="text-primary"><i class="bi bi-lightbulb me-1"></i> Tendance : ' + analyse.join(" et ") + '.</span>';
         }
     }
 });

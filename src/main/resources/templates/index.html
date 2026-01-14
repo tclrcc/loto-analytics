@@ -576,6 +576,58 @@
     </div>
 </div>
 
+<div id="bulkActionBar" class="fixed-bottom bg-white border-top shadow p-3 d-none animate-up" style="z-index: 1040;">
+    <div class="container">
+        <div class="d-flex justify-content-between align-items-center">
+            <div class="d-flex align-items-center gap-3">
+                <span class="badge bg-primary fs-6" id="bulkCountBadge">0</span>
+                <div class="d-flex flex-column">
+                    <span class="fw-bold text-dark">Grilles sélectionnées</span>
+                    <small class="text-muted">Total estimé : <span id="bulkTotalCost" class="fw-bold text-success">0.00</span> €</small>
+                </div>
+            </div>
+            <button class="btn btn-success fw-bold shadow-sm" id="btnOpenBulkModal">
+                <i class="bi bi-check-circle-fill me-2"></i>Tout Jouer
+            </button>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="modalBulkBet" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title"><i class="bi bi-layers-fill me-2"></i>Validation Groupée</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-light border mb-3">
+                    Vous allez enregistrer <strong id="modalBulkCount">0</strong> grilles.
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label small fw-bold text-muted">Date du jeu</label>
+                    <input type="date" id="bulkDateInput" class="form-control fw-bold" required>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label small fw-bold text-muted">Coût Total Théorique</label>
+                    <div class="input-group">
+                        <input type="text" id="bulkCostInput" class="form-control text-success fw-bold" readonly>
+                        <span class="input-group-text">€</span>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                <button type="button" class="btn btn-success fw-bold" id="btnConfirmBulk">
+                    <i class="bi bi-save me-2"></i>Confirmer
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <footer class="footer mt-auto">
     <div class="container">
         <div class="row align-items-center">

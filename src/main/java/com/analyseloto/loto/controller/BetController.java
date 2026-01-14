@@ -6,6 +6,7 @@ import com.analyseloto.loto.enums.BetType;
 import com.analyseloto.loto.repository.UserBetRepository;
 import com.analyseloto.loto.repository.UserRepository;
 import com.analyseloto.loto.service.PdfService;
+import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpHeaders;
@@ -178,6 +179,45 @@ public class BetController {
 
         // Redirection
         return "redirect:/?betDeleted";
+    }
+
+    // DTO interne pour la réception (vous pouvez le mettre dans le même fichier ou à part)
+    @Data
+    public static class BulkBetRequest {
+        private LocalDate dateJeu;
+        private List<List<Integer>> grilles; // Liste de listes [b1, b2, b3, b4, b5, chance]
+    }
+
+    @PostMapping("/add-bulk")
+    @ResponseBody // On répond en JSON pour que le JS gère la redirection ou l'alerte
+    public ResponseEntity<String> addBulk(@RequestBody BulkBetRequest request, Principal principal) {
+        try {
+            User user = userRepository.findByEmail(principal.getName()).orElseThrow();
+
+            int count = 0;
+            for (List<Integer> numbers : request.getGrilles()) {
+                if (numbers.size() == 6) { // 5 boules + 1 chance
+                    UserBet bet = new UserBet();
+                    bet.setUser(user);
+                    bet.setDateJeu(request.getDateJeu());
+                    bet.setMise(2.20); // Prix fixe par grille
+                    bet.setType(BetType.GRILLE);
+
+                    bet.setB1(numbers.get(0));
+                    bet.setB2(numbers.get(1));
+                    bet.setB3(numbers.get(2));
+                    bet.setB4(numbers.get(3));
+                    bet.setB5(numbers.get(4));
+                    bet.setChance(numbers.get(5));
+
+                    betRepository.save(bet);
+                    count++;
+                }
+            }
+            return ResponseEntity.ok("Succès : " + count + " grilles enregistrées !");
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Erreur : " + e.getMessage());
+        }
     }
 
     /**
