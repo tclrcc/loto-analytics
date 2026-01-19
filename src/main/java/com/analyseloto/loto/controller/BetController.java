@@ -231,7 +231,7 @@ public class BetController {
         // Récupération de l'utilisateur et de ses grilles
         User user = userRepository.findByEmail(principal.getName()).orElseThrow();
         List<UserBet> bets = betRepository.findByUserOrderByDateJeuDesc(user).stream()
-                .filter(b -> b.getType() == BetType.GRILLE).toList();
+                .filter(b -> b.getType() != null && b.getType() == BetType.GRILLE).toList();
 
         // Génération du PDF avec headers
         byte[] pdfContent = pdfService.generateBetPdf(bets, user.getFirstName());

@@ -82,7 +82,8 @@ public class UserBetService {
 
                 // Nombre de grilles gagnantes (gain > 0)
                 long aiNbGagnants = allAiBets.stream()
-                        .filter(b -> b.getGain() != null && b.getGain() > 0 && b.getType().equals(BetType.GRILLE))
+                        .filter(b -> b.getGain() != null && b.getGain() > 0
+                                && b.getType() != null && b.getType().equals(BetType.GRILLE))
                         .count();
 
                 // ROI (Retour sur investissement) en %
@@ -110,11 +111,11 @@ public class UserBetService {
 
         // Somme des dépenses totales et des gains totaux (grilles terminées)
         double totalDepense = bets.stream()
-                .filter(b -> b.getGain() != null && b.getType().equals(BetType.GRILLE))
+                .filter(b -> b.getGain() != null && b.getType() != null &&  b.getType().equals(BetType.GRILLE))
                 .mapToDouble(UserBet::getMise)
                 .sum();
         double totalGains = bets.stream()
-                .filter(b -> b.getGain() != null  && b.getType().equals(BetType.GRILLE))
+                .filter(b -> b.getGain() != null && b.getType() != null && b.getType().equals(BetType.GRILLE))
                 .mapToDouble(UserBet::getGain)
                 .sum();
         // Calcul du solde

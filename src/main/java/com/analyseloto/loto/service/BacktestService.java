@@ -51,12 +51,13 @@ public class BacktestService {
                     );
 
                     // On teste cette config sur les 20 derniers tirages (Simulation)
-                    double roi = simulerSurHistorique(configTest, historiqueComplet, 20);
+                    double bilanNet = simulerSurHistorique(configTest, historiqueComplet, 20);
 
-                    if (roi > maxROI) {
-                        maxROI = roi;
+                    if (bilanNet > maxROI) {
+                        maxROI = bilanNet;
                         bestConfig = configTest;
-                        log.info("🚀 Nouveau record trouvé ! ROI: {}% avec Config: {}", String.format("%.2f", roi), configTest);
+                        log.info("🚀 Nouveau record ! Bilan: {} € (au lieu de ROI %) avec Config: ...",
+                                String.format("%.2f", bilanNet));
                     }
                 }
             }
@@ -70,37 +71,28 @@ public class BacktestService {
         double depense = 0;
         double gain = 0;
 
-        // On remonte dans le temps
-        // history.size() - 1 est le plus récent.
-        // On commence à (size - nbTiragesTest) et on avance.
-
         // Sécurité
-        if (historiqueComplet.size() < nbTiragesTest + 50) return 0.0;
+        if (historiqueComplet.size() < nbTiragesTest + 100) return 0.0;
 
         for (int i = 0; i < nbTiragesTest; i++) {
-            // L'index du tirage "cible" qu'on essaie de deviner
             int targetIndex = i;
-
-            // Le tirage qu'on doit trouver
             LotoTirage tirageReel = historiqueComplet.get(targetIndex);
 
-            // L'historique connu À CE MOMENT LÀ (tout ce qui est APRÈS dans la liste, car trié DESC)
-            List<LotoTirage> historiqueConnu = historiqueComplet.subList(targetIndex + 1, historiqueComplet.size());
+            // --- OPTIMISATION ---
+            // On ne prend que les 300 tirages précédant le tirage cible pour l'analyse
+            // Cela accélère énormément les streams et boules dans LotoService
+            int endSubList = Math.min(targetIndex + 300, historiqueComplet.size());
+            List<LotoTirage> historiqueConnu = historiqueComplet.subList(targetIndex + 1, endSubList);
+            // --------------------
 
-            // On demande à LotoService de générer 5 grilles avec cet historique tronqué
-            // ATTENTION : Il faut adapter LotoService pour accepter un historique externe (voir modif ci-dessous)
-            // Pour l'instant, on simule l'appel :
             List<List<Integer>> grillesGenerees = lotoService.genererGrillesPourSimulation(historiqueConnu, config, 5);
 
             depense += (grillesGenerees.size() * 2.20);
 
-            // Vérification des gains
             for (List<Integer> g : grillesGenerees) {
-                // On simplifie le calcul des gains pour la simulation (Rang 1 à 6 approximé)
                 gain += calculerGainRapide(g, tirageReel);
             }
         }
-
         return gain - depense;
     }
 
