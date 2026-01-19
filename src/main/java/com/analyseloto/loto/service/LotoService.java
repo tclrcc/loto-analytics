@@ -1,11 +1,9 @@
 package com.analyseloto.loto.service;
 
 import com.analyseloto.loto.dto.*;
-import com.analyseloto.loto.entity.LotoTirage;
-import com.analyseloto.loto.entity.LotoTirageRank;
-import com.analyseloto.loto.entity.User;
-import com.analyseloto.loto.entity.UserBet;
+import com.analyseloto.loto.entity.*;
 import com.analyseloto.loto.repository.LotoTirageRepository;
+import com.analyseloto.loto.repository.StrategyConfigRepostiroy;
 import com.analyseloto.loto.repository.UserBetRepository;
 import com.analyseloto.loto.util.Constantes;
 import lombok.AllArgsConstructor;
@@ -22,6 +20,7 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.TextStyle;
 import java.time.temporal.ChronoUnit;
@@ -35,6 +34,7 @@ public class LotoService {
     // Repositories
     private final LotoTirageRepository repository;
     private final UserBetRepository betRepository;
+    private final StrategyConfigRepostiroy strategyConfigRepostiroy;
     // Services
     private final AstroService astroService;
     private final BacktestService backtestService;
@@ -1298,23 +1298,66 @@ public class LotoService {
         return resultats;
     }
 
+    @jakarta.annotation.PostConstruct
+    public void initConfigFromDb() {
+        log.info("🔌 Démarrage : Recherche d'une stratégie existante en base...");
+
+        strategyConfigRepostiroy.findTopByOrderByDateCalculDesc().ifPresentOrElse(
+                lastStrategy -> {
+                    // On convertit l'entité BDD en objet de config RAM
+                    this.cachedBestConfig = new AlgoConfig(
+                            lastStrategy.getNomStrategie(),
+                            lastStrategy.getPoidsFreqJour(),
+                            lastStrategy.getPoidsForme(),
+                            lastStrategy.getPoidsEcart(),
+                            lastStrategy.getPoidsTension(),
+                            lastStrategy.getPoidsMarkov(),
+                            lastStrategy.getPoidsAffinite(),
+                            false
+                    );
+                    // On considère que le cache est valide pour aujourd'hui
+                    this.lastBacktestDate = lastStrategy.getDateCalcul().toLocalDate();
+                    log.info("✅ Stratégie chargée depuis la BDD (Date: {}). Prêt immédiat !", lastStrategy.getDateCalcul());
+                },
+                () -> log.warn("⚠️ Aucune stratégie en base. Le premier utilisateur déclenchera le calcul.")
+        );
+    }
+
     /**
      * Méthode appelée par le scheduler pour forcer l'optimisation quotidienne
      */
     public void forceDailyOptimization() {
         log.info("🌙 [CRON] Optimisation et Nettoyage des caches...");
 
-        // 1. Vidage des caches pour forcer le recalcul avec les nouvelles données
+        // 1. Vidage des caches
         this.cachedGlobalStats = null;
-        this.cachedDailyPronos = null; // Important : les pronos seront régénérés avec la nouvelle config
+        this.cachedDailyPronos = null;
 
+        long start = System.currentTimeMillis();
         List<LotoTirage> history = repository.findAll(Sort.by(Sort.Direction.DESC, "dateTirage"));
 
         if (!history.isEmpty()) {
+            // 2. Calcul de la meilleure configuration
             AlgoConfig newConfig = backtestService.trouverMeilleureConfig(history);
+
+            // 3. Mise à jour RAM (Immédiat)
             this.cachedBestConfig = newConfig;
             this.lastBacktestDate = LocalDate.now();
-            log.info("✅ [CRON] Stratégie mise à jour. Caches vidés.");
+
+            // 4. SAUVEGARDE BDD (Pour le futur/redémarrage)
+            StrategyConfig entity = new StrategyConfig();
+            entity.setDateCalcul(LocalDateTime.now());
+            entity.setNomStrategie(newConfig.getNomStrategie());
+            entity.setPoidsForme(newConfig.getPoidsForme());
+            entity.setPoidsEcart(newConfig.getPoidsEcart());
+            entity.setPoidsAffinite(newConfig.getPoidsAffinite());
+            entity.setPoidsMarkov(newConfig.getPoidsMarkov());
+            entity.setPoidsTension(newConfig.getPoidsTension());
+            entity.setPoidsFreqJour(newConfig.getPoidsFreqJour());
+
+            strategyConfigRepostiroy.save(entity);
+
+            log.info("✅ [CRON] Stratégie sauvegardée en BDD et RAM en {} ms.", (System.currentTimeMillis() - start));
         }
     }
 
