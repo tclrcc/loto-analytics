@@ -41,6 +41,11 @@ public class LotoService {
     // Variable de classe pour stocker la meilleure config en mémoire (Cache simple)
     private AlgoConfig cachedBestConfig = null;
     private LocalDate lastBacktestDate = null;
+    // Cache pour les Stats Globales
+    private StatsReponse cachedGlobalStats = null;
+    // Cache pour les Pronostics du Jour
+    private List<PronosticResultDto> cachedDailyPronos = null;
+    private LocalDate dateCachedPronos = null;
 
     /**
      * Configuration dynamique de l'algorithme de génération
@@ -93,7 +98,22 @@ public class LotoService {
      * @return liste des pronostics
      */
     public List<PronosticResultDto> genererMultiplesPronostics(LocalDate dateCible, int nombreGrilles) {
-        return genererPronosticAvecConfig(dateCible, nombreGrilles, null);
+        // Si on demande les pronos pour la date déjà en cache, on renvoie le cache !
+        if (cachedDailyPronos != null && dateCible.equals(dateCachedPronos) && cachedDailyPronos.size() >= nombreGrilles) {
+            log.debug("🚀 [CACHE] Retour des pronostics en mémoire (pas de recalcul)");
+            // On renvoie une copie ou une sous-liste si on en veut moins
+            return cachedDailyPronos.subList(0, nombreGrilles);
+        }
+
+        // Sinon, on calcule (c'est le cas lent, une seule fois par jour)
+        log.info("⚙️ [CALCUL] Génération fraîche des pronostics pour le {}", dateCible);
+        List<PronosticResultDto> newsPronos = genererPronosticAvecConfig(dateCible, nombreGrilles, null);
+
+        // On met en cache
+        this.cachedDailyPronos = newsPronos;
+        this.dateCachedPronos = dateCible;
+
+        return newsPronos;
     }
 
     /**
@@ -966,11 +986,26 @@ public class LotoService {
     }
 
     public StatsReponse getStats(String jourFiltre) {
-        List<LotoTirage> all = repository.findAll();
-        if (jourFiltre != null && !jourFiltre.isEmpty()) {
-            try { all = all.stream().filter(t -> t.getDateTirage().getDayOfWeek() == DayOfWeek.valueOf(jourFiltre.toUpperCase())).toList(); } catch (Exception e) {}
+        // Si pas de filtre jour (cas de la page d'accueil) et cache dispo
+        if (jourFiltre == null && cachedGlobalStats != null) {
+            return cachedGlobalStats;
         }
+
+        // Récupération des tirages triés par ordre décroissant de date
+        List<LotoTirage> all = repository.findAll(Sort.by(Sort.Direction.DESC, "dateTirage"));
+
+        if (jourFiltre != null && !jourFiltre.isEmpty()) {
+            try {
+                DayOfWeek d = DayOfWeek.valueOf(jourFiltre.toUpperCase());
+                all = all.stream().filter(t -> t.getDateTirage().getDayOfWeek() == d).toList();
+            } catch (Exception e) {
+                log.error("Erreur filtre jour: {}", jourFiltre);
+                throw new RuntimeException(e);
+            }
+        }
+
         if (all.isEmpty()) return new StatsReponse(new ArrayList<>(), "-", "-", 0);
+
         LocalDate minDate = all.stream().map(LotoTirage::getDateTirage).min(LocalDate::compareTo).orElse(LocalDate.now());
         LocalDate maxDate = all.stream().map(LotoTirage::getDateTirage).max(LocalDate::compareTo).orElse(LocalDate.now());
         DateTimeFormatter fmt = DateTimeFormatter.ofPattern("dd/MM/yyyy");
@@ -997,7 +1032,15 @@ public class LotoService {
             StatPoint s = new StatPoint(); s.setNumero(i); s.setFrequence(freqChance.getOrDefault(i, 0)); s.setChance(true);
             LocalDate last = lastSeenChance.get(i); s.setEcart(last == null ? 999 : (int) ChronoUnit.DAYS.between(last, maxDate)); stats.add(s);
         }
-        return new StatsReponse(stats, minDate.format(fmt), maxDate.format(fmt), all.size());
+
+        // Construction de l'objet contenant la réponse des stats
+        StatsReponse response = new StatsReponse(stats, minDate.format(fmt), maxDate.format(fmt), all.size());
+
+        // Si c'était le calcul global (sans filtre), on le garde en mémoire !
+        if (jourFiltre == null) {
+            this.cachedGlobalStats = response;
+        }
+        return response;
     }
 
     public UserStatsDto calculerStatistiquesJoueur(User user) {
@@ -1259,22 +1302,19 @@ public class LotoService {
      * Méthode appelée par le scheduler pour forcer l'optimisation quotidienne
      */
     public void forceDailyOptimization() {
-        log.info("🌙 [CRON] Lancement de l'optimisation nocturne des poids...");
-        long start = System.currentTimeMillis();
+        log.info("🌙 [CRON] Optimisation et Nettoyage des caches...");
 
-        // On récupère l'historique complet
+        // 1. Vidage des caches pour forcer le recalcul avec les nouvelles données
+        this.cachedGlobalStats = null;
+        this.cachedDailyPronos = null; // Important : les pronos seront régénérés avec la nouvelle config
+
         List<LotoTirage> history = repository.findAll(Sort.by(Sort.Direction.DESC, "dateTirage"));
 
         if (!history.isEmpty()) {
-            // Calcul lourd
             AlgoConfig newConfig = backtestService.trouverMeilleureConfig(history);
-
-            // Mise à jour atomique (thread-safe)
             this.cachedBestConfig = newConfig;
             this.lastBacktestDate = LocalDate.now();
-
-            log.info("✅ [CRON] Stratégie mise à jour en {} ms ! Nouvelle Config : {}",
-                    (System.currentTimeMillis() - start), newConfig);
+            log.info("✅ [CRON] Stratégie mise à jour. Caches vidés.");
         }
     }
 

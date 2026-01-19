@@ -338,7 +338,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 btn.disabled = true;
 
                 try {
-                    const res = await fetch('/api/bets/add-bulk', { // Vérifiez bien le chemin (/api/ ou /)
+                    const res = await fetch('/bets/add-bulk', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(payload)
