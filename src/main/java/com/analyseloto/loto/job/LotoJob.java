@@ -260,7 +260,8 @@ public class LotoJob {
 
             // 1. Récupérer les paris de la semaine dernière uniquement
             List<UserBet> weeklyBets = betRepository.findByUser(user).stream()
-                    .filter(b -> b.getDateJeu().isAfter(oneWeekAgo) && b.getDateJeu().isBefore(today.plusDays(1)))
+                    .filter(b -> b.getType().equals(BetType.GRILLE) &&
+                            b.getDateJeu().isAfter(oneWeekAgo) && b.getDateJeu().isBefore(today.plusDays(1)))
                     .toList();
 
             if (weeklyBets.isEmpty()) continue;

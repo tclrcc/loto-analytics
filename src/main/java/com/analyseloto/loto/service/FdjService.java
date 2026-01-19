@@ -18,6 +18,7 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 import java.time.LocalDate;
+import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.regex.Pattern;
@@ -47,9 +48,10 @@ public class FdjService {
         try {
             RestTemplate restTemplate = new RestTemplate();
             HttpHeaders headers = new HttpHeaders();
-            headers.set("User-Agent", "PostmanRuntime/7.32.0");
+            // User-Agent standard pour éviter d'être bloqué
+            headers.set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
 
-            // On demande une plage de 0 à 3 pour avoir du choix (les 4 derniers tirages)
+            // On demande les 4 derniers tirages
             String urlComplete = UriComponentsBuilder.fromUriString(fdjApiUrl)
                     .queryParam("include", "results,ranks")
                     .queryParam("range", "0-3")
@@ -59,8 +61,9 @@ public class FdjService {
                     urlComplete, HttpMethod.GET, new HttpEntity<>(headers), String.class
             );
 
+            // Vérification réponse
             if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null) {
-                log.warn("⚠️ API FDJ a répondu avec le statut : {}", response.getStatusCode());
+                log.warn("⚠️ API FDJ erreur : {}", response.getStatusCode());
                 return Optional.empty();
             }
 
@@ -68,53 +71,60 @@ public class FdjService {
             JsonNode root = mapper.readTree(response.getBody());
 
             if (root.isArray() && !root.isEmpty()) {
-                // 1. On transforme le JsonNode (Array) en Stream Java pour pouvoir filtrer/trier
+                // 1. Filtrage et Recherche du plus récent
                 Optional<JsonNode> meilleurTirageOpt = StreamSupport.stream(root.spliterator(), false)
-                        .filter(node -> {
-                            // Filtre 1 : On vérifie qu'il y a bien une date
-                            return node.has("drawn_at");
+                        .filter(node -> node.has("drawn_at")) // Doit avoir une date
+                        .sorted((n1, n2) -> {
+                            // Tri DESCENDANT (plus récent en premier)
+                            String d1 = n1.get("drawn_at").asText();
+                            String d2 = n2.get("drawn_at").asText();
+                            return d2.compareTo(d1);
                         })
                         .filter(node -> {
-                            // Filtre 2 : On exclut les tirages dans le futur (bug FDJ ou erreur d'horloge)
-                            String dateStr = node.get("drawn_at").asText().substring(0, 10);
-                            LocalDate date = LocalDate.parse(dateStr, DateTimeFormatter.ofPattern("yyyy-MM-dd"));
-                            return !date.isAfter(LocalDate.now());
+                            // Filtre anti-futur (avec ZonedDateTime pour être précis)
+                            String dateStr = node.get("drawn_at").asText();
+                            ZonedDateTime drawnAt = ZonedDateTime.parse(dateStr);
+                            // On ajoute une marge de 1h au cas où les horloges diffèrent légèrement
+                            return drawnAt.isBefore(ZonedDateTime.now().plusHours(1));
                         })
-                        // Tri : On prend la date la plus récente parmi celles qui restent
-                        .max(Comparator.comparing(node -> node.get("drawn_at").asText()));
+                        .findFirst(); // On prend le premier (donc le plus récent valide)
 
                 if (meilleurTirageOpt.isEmpty()) {
-                    log.warn("⚠️ Aucun tirage valide trouvé dans le JSON reçu.");
+                    log.warn("⚠️ Aucun tirage valide trouvé (tous rejetés par les filtres).");
                     return Optional.empty();
                 }
 
                 JsonNode tirageCibleJson = meilleurTirageOpt.get();
-                String dateStr = tirageCibleJson.get("drawn_at").asText().substring(0, 10);
-                LocalDate dateTirage = LocalDate.parse(dateStr, DateTimeFormatter.ofPattern("yyyy-MM-dd"));
 
-                log.info("🔎 Tirage le plus pertinent trouvé dans l'API : {}", dateTirage);
+                // Parsing propre de la date pour l'affichage et le contrôle
+                String dateStrFull = tirageCibleJson.get("drawn_at").asText();
+                ZonedDateTime zdt = ZonedDateTime.parse(dateStrFull);
+                LocalDate dateTirage = zdt.toLocalDate();
 
-                // 2. Vérification de date (POUR LE JOB AUTOMATIQUE SEULEMENT)
-                // Si c'est le CRON de 21h15, on exige que le tirage soit celui d'AUJOURD'HUI.
+                log.info("🔎 Tirage candidat : {} (Reçu: {})", dateTirage, dateStrFull);
+
+                // 2. Vérification de date pour le CRON (Automatique)
                 if (!manuel) {
-                    if (!dateTirage.equals(LocalDate.now())) {
-                        log.warn("⏳ Le tirage récupéré date du {}, or nous sommes le {}. La FDJ n'a pas encore publié le résultat du jour. (API Cache ou Retard)", dateTirage, LocalDate.now());
-                        return Optional.empty(); // On ne fait rien, on réessaiera plus tard ou au prochain cron
+                    LocalDate aujourdhui = LocalDate.now();
+                    if (!dateTirage.equals(aujourdhui)) {
+                        log.warn("⏳ Le dernier tirage dispo date du {}, mais on est le {}. Résultat pas encore publié.", dateTirage, aujourdhui);
+                        return Optional.empty();
                     }
                 }
 
-                // 3. Traitement et Sauvegarde
-                // La méthode traiterJsonTirage gère déjà le check "existsByDateTirage"
+                // 3. Conversion et Sauvegarde
+                // La méthode traiterJsonTirage doit gérer l'idempotence (vérifier si existe déjà)
                 LotoTirage tirage = traiterJsonTirage(tirageCibleJson);
 
+                // Si traiterJsonTirage renvoie null (ex: existe déjà), on gère
                 return Optional.ofNullable(tirage);
 
             } else {
-                log.warn("⚠️ Le JSON reçu est vide ou mal formé.");
+                log.warn("⚠️ JSON vide ou pas un tableau.");
             }
 
         } catch (Exception e) {
-            log.error("❌ Erreur récupération FDJ", e);
+            log.error("❌ Erreur critique FDJ", e);
         }
 
         return Optional.empty();
