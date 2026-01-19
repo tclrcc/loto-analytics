@@ -42,7 +42,7 @@ public class LotoController {
             @RequestBody AstroProfileDto profil
     ) {
         LocalDate date = LocalDate.parse(dateStr);
-        return ResponseEntity.ok(service.genererPronosticsHybrides(date, count, profil, false));
+        return ResponseEntity.ok(service.genererPronosticsHybrides(date, count, profil));
     }
 
     @GetMapping("/graph-data")
@@ -100,7 +100,7 @@ public class LotoController {
             @RequestParam(value = "count", defaultValue = "1") int count) {
 
         LocalDate date = LocalDate.parse(dateStr);
-        return ResponseEntity.ok(service.genererMultiplesPronostics(date, count, false));
+        return ResponseEntity.ok(service.genererMultiplesPronostics(date, count));
     }
 
     @PostMapping("/add-result")

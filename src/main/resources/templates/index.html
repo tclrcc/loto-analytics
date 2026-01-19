@@ -171,19 +171,26 @@
         </div>
     </div>
 
-    <div th:if="${!#lists.isEmpty(aiBets)}" class="card border-0 shadow-sm mb-4 animate-up delay-1">
+    <div th:if="${!#lists.isEmpty(aiBetsDernierTirage)}" class="card border-0 shadow-sm mb-4 animate-up delay-1">
         <div class="card-header bg-white py-3 border-bottom-0 d-flex align-items-center justify-content-between">
-            <h5 class="mb-0 fw-bold text-primary">
-                <i class="bi bi-robot me-2"></i>Pronostics de l'IA
-                <small class="text-muted fw-normal ms-2" style="font-size: 0.75rem;">
-                    pour le <span class="fw-bold text-dark" th:text="${#temporals.format(lastDraw.dateTirage, 'EEEE d MMMM')}">Lundi 12 Janvier</span>
+            <div>
+                <h5 class="mb-0 fw-bold text-primary">
+                    <i class="bi bi-robot me-2"></i>Pronostics de l'IA
+                </h5>
+                <small class="text-muted fw-normal" style="font-size: 0.75rem;">
+                    pour le <span class="fw-bold text-dark" th:text="${#temporals.format(nextDrawDate, 'EEEE d MMMM')}">...</span>
                 </small>
-            </h5>
-            <span class="badge bg-primary bg-opacity-10 text-primary"><span th:text="${aiBets.size()}">5</span> grilles jouées</span>
+            </div>
+
+            <button class="btn btn-sm btn-primary shadow-sm animate-up"
+                    id="btnSelectAllAi"
+                    th:onclick="ajouterAuPanier([[${aiBets}]])">
+                <i class="bi bi-cart-plus-fill me-1"></i> Tout Sélectionner
+            </button>
         </div>
         <div class="card-body bg-light rounded-bottom-4">
             <div class="row g-3">
-                <div class="col-md-6 col-lg-4" th:each="bet, iter : ${aiBets}">
+                <div class="col-md-6 col-lg-4" th:each="bet, iter : ${aiBetsDernierTirage}">
                     <div class="bg-white p-2 rounded shadow-sm border glass-hover d-flex justify-content-between align-items-center position-relative overflow-hidden"
                          th:classappend="${bet.gain != null && bet.gain > 0} ? 'border-start border-4 border-success ps-1' : ''">
                         <div class="d-flex align-items-center">
@@ -341,12 +348,42 @@
                 </div>
             </form>
 
-            <div id="pronoResult" class="mt-4 d-none fade-in">
+            <div id="pronoResult" class="mt-4 fade-in" th:classappend="${#lists.isEmpty(aiBets)} ? 'd-none' : ''">
+
                 <div class="d-flex justify-content-between align-items-center mb-3 border-bottom pb-2">
-                    <h6 class="text-primary fw-bold mb-0">🔮 Pronostics IA pour <span id="pronoDate"></span></h6>
-                    <button class="btn btn-sm btn-link text-decoration-none text-muted" onclick="document.getElementById('pronoResult').classList.add('d-none')">Fermer</button>
+                    <h6 class="text-primary fw-bold mb-0">
+                        🔮 Pronostics IA pour <span id="pronoDate" th:text="${nextDrawDate}"></span>
+                    </h6>
+                    <button th:if="${!#lists.isEmpty(aiBets)}"
+                            class="btn btn-sm btn-success shadow-sm"
+                            th:onclick="ajouterAuPanier([[${aiBets}]])">
+                        <i class="bi bi-cart-plus me-1"></i> Tout prendre
+                    </button>
                 </div>
-                <div id="pronoList" class="row g-3"></div>
+
+                <div id="pronoList" class="row g-3">
+
+                    <div class="col-md-6" th:each="bet : ${aiBets}">
+                        <div class="p-2 border rounded bg-white shadow-sm d-flex justify-content-between align-items-center">
+
+                            <div class="d-flex gap-1">
+                                <span class="badge bg-dark fs-6 shadow-sm" th:each="b : ${bet.boules}" th:text="${b}"></span>
+                                <span class="badge bg-danger fs-6 shadow-sm" th:text="${bet.numeroChance}"></span>
+                            </div>
+
+                            <div class="d-flex align-items-center gap-2">
+                                <small class="text-muted fw-bold" style="font-size: 0.7rem;">
+                                    <i class="bi bi-graph-up me-1"></i><span th:text="${bet.scoreGlobal}"></span>%
+                                </small>
+                                <button class="btn btn-sm btn-outline-primary border-0"
+                                        th:onclick="preparerGrille([[${bet.boules[0]}]], [[${bet.boules[1]}]], [[${bet.boules[2]}]], [[${bet.boules[3]}]], [[${bet.boules[4]}]], [[${bet.numeroChance}]])">
+                                    <i class="bi bi-plus-lg"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
             </div>
 
             <div id="simResult" class="mt-4 d-none fade-in"></div>
@@ -660,6 +697,130 @@
     function setBetId(id) {
         document.getElementById('gainBetId').value = id;
     }
+</script>
+
+<script th:inline="javascript">
+    // --- GESTION DU PANIER (BULK) ---
+    let panierGrilles = [];
+
+    // 1. Fonction appelée par le bouton "Tout Sélectionner"
+    function ajouterAuPanier(listeGrillesDto) {
+        if (!listeGrillesDto || listeGrillesDto.length === 0) return;
+
+        // On vide le panier précédent ou on cumule (ici on remplace pour être propre)
+        panierGrilles = [];
+
+        // Conversion des DTO Java en format simple pour le panier
+        listeGrillesDto.forEach(dto => {
+            // On reconstruit la liste [b1, b2, b3, b4, b5, chance]
+            let grille = [...dto.boules]; // Copie des 5 boules
+            grille.push(dto.chance);      // Ajout chance à la fin
+            panierGrilles.push(grille);
+        });
+
+        updateBulkUI();
+
+        // Petit effet visuel (Confettis ou Scroll)
+        window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+
+        // Feedback visuel sur le bouton
+        const btn = document.getElementById('btnSelectAllAi');
+        const originalHtml = btn.innerHTML;
+        btn.innerHTML = '<i class="bi bi-check-lg"></i> Ajouté !';
+        btn.classList.remove('btn-primary');
+        btn.classList.add('btn-success');
+        setTimeout(() => {
+            btn.innerHTML = originalHtml;
+            btn.classList.add('btn-primary');
+            btn.classList.remove('btn-success');
+        }, 2000);
+    }
+
+    // 2. Mise à jour de l'interface (Barre du bas)
+    function updateBulkUI() {
+        const bar = document.getElementById('bulkActionBar');
+        const countBadge = document.getElementById('bulkCountBadge');
+        const costSpan = document.getElementById('bulkTotalCost');
+        const modalCount = document.getElementById('modalBulkCount');
+        const modalCost = document.getElementById('bulkCostInput');
+        const dateInput = document.getElementById('bulkDateInput');
+
+        if (panierGrilles.length > 0) {
+            bar.classList.remove('d-none');
+            countBadge.textContent = panierGrilles.length;
+
+            let total = panierGrilles.length * 2.20;
+            costSpan.textContent = total.toFixed(2);
+
+            // Mise à jour de la modale aussi
+            modalCount.textContent = panierGrilles.length;
+            modalCost.value = total.toFixed(2);
+
+            // Pré-remplir la date de la modale avec la date du prochain tirage (depuis Thymeleaf)
+            /*[+
+            let nextDate = [[${#temporals.format(nextDrawDate, 'yyyy-MM-dd')}]];
+            if(dateInput) dateInput.value = nextDate;
+            +]*/
+
+        } else {
+            bar.classList.add('d-none');
+        }
+    }
+
+    // 3. Ouvrir la modale
+    document.getElementById('btnOpenBulkModal').addEventListener('click', function() {
+        const modal = new bootstrap.Modal(document.getElementById('modalBulkBet'));
+        modal.show();
+    });
+
+    // 4. CONFIRMATION FINALE (Envoi au serveur)
+    document.getElementById('btnConfirmBulk').addEventListener('click', function() {
+        const dateJeu = document.getElementById('bulkDateInput').value;
+        if (!dateJeu) { alert("Veuillez choisir une date."); return; }
+
+        const btn = this;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Envoi...';
+
+        // Construction du payload pour BetController
+        const payload = {
+            dateJeu: dateJeu,
+            grilles: panierGrilles // Liste de listes d'entiers [[1,2,3,4,5,9], ...]
+        };
+
+        fetch('/api/bets/add-bulk', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                // Si vous avez Spring Security avec CSRF, décommentez :
+                // 'X-CSRF-TOKEN': document.querySelector('meta[name="_csrf"]').content
+            },
+            body: JSON.stringify(payload)
+        })
+            .then(response => {
+                if (response.ok) return response.text();
+                throw new Error('Erreur réseau');
+            })
+            .then(data => {
+                // Succès
+                const modalEl = document.getElementById('modalBulkBet');
+                const modal = bootstrap.Modal.getInstance(modalEl);
+                modal.hide();
+
+                // Reset
+                panierGrilles = [];
+                updateBulkUI();
+
+                // Toast & Reload
+                alert("✅ " + data); // Ou un joli Toast
+                window.location.reload();
+            })
+            .catch(error => {
+                alert("❌ Erreur : " + error);
+                btn.disabled = false;
+                btn.innerHTML = '<i class="bi bi-save me-2"></i>Confirmer';
+            });
+    });
 </script>
 
 <script th:inline="none">

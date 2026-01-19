@@ -1,13 +1,14 @@
 package com.analyseloto.loto.controller;
 
+import com.analyseloto.loto.dto.PronosticResultDto;
 import com.analyseloto.loto.dto.StatsReponse;
 import com.analyseloto.loto.entity.LotoTirage;
 import com.analyseloto.loto.entity.User;
 import com.analyseloto.loto.entity.UserBet;
 import com.analyseloto.loto.repository.LotoTirageRepository;
-import com.analyseloto.loto.repository.UserBetRepository;
 import com.analyseloto.loto.repository.UserRepository;
 import com.analyseloto.loto.service.LotoService;
+import com.analyseloto.loto.service.UserBetService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -24,16 +25,16 @@ import java.util.stream.Collectors;
 public class HomeController {
     // Repositories
     private final UserRepository userRepository;
-    private final UserBetRepository betRepository;
     private final LotoTirageRepository lotoTirageRepository;
     // Services
     private final LotoService lotoService;
+    private final UserBetService userBetService;
 
     /**
      * Affichage de la page d'accueil
      * @param model model
      * @param principal utilisateur
-     * @return
+     * @return Page d'accueil
      */
     @GetMapping("/")
     public String home(Model model, Principal principal) {
@@ -50,80 +51,45 @@ public class HomeController {
         StatsReponse globalStats = lotoService.getStats(null);
         model.addAttribute("globalStats", globalStats);
 
+        // Pré-génération des pronostics du prochain tirage
+        try {
+            // 1. Calculer la date du prochain tirage
+            LocalDate nextDrawDate = lotoService.recupererDateProchainTirage();
+
+            // 2. Générer CINQ grilles optimisées
+            // Comme le WarmUp a tourné au démarrage, ce sera instantané !
+            List<PronosticResultDto> aiBets = lotoService.genererMultiplesPronostics(nextDrawDate, 5);
+
+            model.addAttribute("aiBets", aiBets);
+            model.addAttribute("nextDrawDate", nextDrawDate); // Pour afficher la date en front
+
+        } catch (Exception e) {
+            // Si l'IA est en train de calculer ou erreur, on ne bloque pas la page
+            model.addAttribute("aiBets", new ArrayList<>());
+        }
+
         // Récupération des grilles du joueur
-        List<UserBet> rawBets = betRepository.findByUser(user);
-        // On trie cette grille selon la date puis grilles classiques / code loto
-        List<UserBet> bets = rawBets.stream()
-                .sorted(
-                        Comparator.comparing(UserBet::getDateJeu).reversed()
-                            .thenComparing(bet -> bet.getCodeLoto() != null)
-                )
-                .collect(Collectors.toList());
-        model.addAttribute("bets", bets);
+        List<UserBet> userBets = userBetService.recupererGrillesUtilisateurTriees(user);
+        model.addAttribute("bets", userBets);
+
+        // Remplissage du bilan IA de l'utilisateur
+        userBetService.remplirBilanUser(userBets, model);
 
         // On récupère toutes les dates uniques jouées par l'utilisateur
-        Set<LocalDate> datesJouees = bets.stream()
+        Set<LocalDate> datesJouees = userBets.stream()
                 .map(UserBet::getDateJeu)
                 .collect(Collectors.toSet());
 
         // On recherche les résultats officiels pour ces dates
         List<LotoTirage> tiragesOfficiels = lotoTirageRepository.findByDateTirageIn(datesJouees);
-
-        // Récupération du dernier tirage
-        lotoTirageRepository.findTopByOrderByDateTirageDesc().ifPresent(tirage -> {
-            model.addAttribute("lastDraw", tirage);
-            // On cherche l'utilisateur IA
-            User aiUser = userRepository.findByEmail("ai@loto.com").orElse(null);
-            if (aiUser != null) {
-                // On récupère ses jeux (pronostics) pour la date du dernier tirage
-                List<UserBet> aiBets = betRepository.findByUserAndDateJeu(aiUser, tirage.getDateTirage());
-                model.addAttribute("aiBets", aiBets);
-
-                // Récupération de toutes les grilles de l'IA pour faire le bilan complet
-                List<UserBet> allAiBets = betRepository.findByUser(aiUser);
-                double aiTotalDepense = allAiBets.stream().mapToDouble(UserBet::getMise).sum();
-                double aiTotalGains = allAiBets.stream()
-                        .filter(b -> b.getGain() != null) // On ne compte que les tirages passés
-                        .mapToDouble(UserBet::getGain)
-                        .sum();
-                double aiSolde = aiTotalGains - aiTotalDepense;
-
-                // Nombre de grilles gagnantes (gain > 0)
-                long aiNbGagnants = allAiBets.stream()
-                        .filter(b -> b.getGain() != null && b.getGain() > 0)
-                        .count();
-
-                // ROI (Retour sur investissement) en %
-                double aiRoi = (aiTotalDepense > 0) ? ((aiTotalGains - aiTotalDepense) / aiTotalDepense) * 100 : 0.0;
-
-                // Injection dans le modèle
-                model.addAttribute("aiTotalGrids", allAiBets.size());
-                model.addAttribute("aiNbGagnants", aiNbGagnants);
-                model.addAttribute("aiTotalGains", aiTotalGains);
-                model.addAttribute("aiSolde", aiSolde);
-                model.addAttribute("aiRoi", aiRoi);
-            } else {
-                model.addAttribute("aiBets", new ArrayList<>());
-            }
-        });
-
         // On transforme la liste en Map
         Map<LocalDate, LotoTirage> resultsMap = tiragesOfficiels.stream()
                 .collect(Collectors.toMap(LotoTirage::getDateTirage, Function.identity()));
+        // Ajout de map au modèle
         model.addAttribute("draws", resultsMap);
 
-        // Calculs Financiers
-        double totalDepense = bets.stream().mapToDouble(UserBet::getMise).sum();
-        double totalGains = bets.stream()
-                .filter(b -> b.getGain() != null)
-                .mapToDouble(UserBet::getGain)
-                .sum();
-        double solde = totalGains - totalDepense;
-
-        // Données pour le bilan financier
-        model.addAttribute("totalDepense", totalDepense);
-        model.addAttribute("totalGains", totalGains);
-        model.addAttribute("solde", solde);
+        // Remplissage du bilan IA
+        userBetService.remplirBilanUserIa(model);
 
         // Données pour le pré-remplissage Astro
         model.addAttribute("birthDate", user.getBirthDate());

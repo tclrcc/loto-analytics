@@ -144,7 +144,7 @@ public class LotoJob {
             }
 
             // 3. Générer les 10 via l'algorithme (Sans profil astro = Config par défaut)
-            List<PronosticResultDto> pronostics = lotoService.genererMultiplesPronostics(today, 10, true);
+            List<PronosticResultDto> pronostics = lotoService.genererMultiplesPronostics(today, 10);
 
             // 4. Sauvegarder en base
             for (PronosticResultDto prono : pronostics) {
@@ -215,7 +215,7 @@ public class LotoJob {
                 );
 
                 // B. Génération des pronostics HYBRIDES (Spécifiques à LUI)
-                List<PronosticResultDto> pronostics = lotoService.genererPronosticsHybrides(today, 5, profil, true);
+                List<PronosticResultDto> pronostics = lotoService.genererPronosticsHybrides(today, 10, profil);
 
                 // C. Construction du mail personnalisé
                 String subject = "🎱 " + user.getFirstName() + ", vos numéros chance pour ce soir !";
@@ -294,5 +294,18 @@ public class LotoJob {
         // Enregistrement log
         jobMonitorService.endJob(jobLog, JobExecutionStatus.SUCCESS.getCode(), "Alerte budget hebdo terminé.");
         log.info("🏁 Fin du Coach Budgétaire. {} alertes envoyées.", countAlerts);
+    }
+
+    /**
+     * Optimisation quotidienne de l'IA à 4h du matin
+     */
+    @Scheduled(cron = "${loto.jobs.cron.optimisation-ia}", zone = "Europe/Paris")
+    public void optimisationQuotidienne() {
+        log.info("⏰ Réveil du Job d'Optimisation IA...");
+        try {
+            lotoService.forceDailyOptimization();
+        } catch (Exception e) {
+            log.error("❌ Echec de l'optimisation nocturne", e);
+        }
     }
 }

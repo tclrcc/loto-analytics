@@ -457,26 +457,35 @@ document.addEventListener('DOMContentLoaded', () => {
     async function genererPronostic() {
         const dateInput = document.getElementById('simDate');
         const countInput = document.getElementById('pronoCount');
+        const resultDiv = document.getElementById('pronoResult');
+        const listDiv = document.getElementById('pronoList');
+
         if (!dateInput.value) dateInput.valueAsDate = new Date();
 
         const btn = document.getElementById('btnMagic');
         const originalText = btn.innerHTML;
 
-        // Reset Sélection
-        selectedGrids.clear();
-        updateBulkBar();
-
-        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Calcul IA...';
+        // 1. UI Loading
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Calcul...';
         btn.disabled = true;
 
+        resultDiv.classList.remove('d-none');
+        listDiv.innerHTML = '<div class="text-center py-3"><div class="spinner-border text-primary"></div><div class="small mt-2 text-muted">L\'IA optimise les combinaisons...</div></div>';
+
         try {
+            // 2. Appel API
             const res = await fetch(`/api/loto/generate?date=${dateInput.value}&count=${countInput.value}`);
+            if(!res.ok) throw new Error("Erreur API");
+
             const data = await res.json();
 
-            currentGridsData = data; // Stockage important pour la sélection
-
+            // 3. Affichage
             afficherMultiplesPronostics(data, dateInput.value);
-        } catch (e) { alert("Erreur pronostics."); } finally {
+
+        } catch (e) {
+            console.error(e);
+            listDiv.innerHTML = '<div class="alert alert-danger py-2 small"><i class="bi bi-exclamation-triangle me-2"></i>Erreur lors de la génération.</div>';
+        } finally {
             btn.innerHTML = originalText;
             btn.disabled = false;
         }
@@ -485,98 +494,64 @@ document.addEventListener('DOMContentLoaded', () => {
     function afficherMultiplesPronostics(list, dateStr) {
         const container = document.getElementById('pronoResult');
         const listContainer = document.getElementById('pronoList');
+        const dateLabel = document.getElementById('pronoDate');
 
+        // 1. Mise à jour de la date et affichage container
         container.classList.remove('d-none');
-        document.getElementById('pronoDate').textContent = new Date(dateStr).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
+        if(dateLabel) {
+            const d = new Date(dateStr);
+            dateLabel.textContent = d.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
+        }
+
+        // 2. Mise à jour dynamique du bouton "Tout prendre" (Header)
+        // On cherche le header de la div resultat
+        const headerDiv = container.querySelector('.d-flex.justify-content-between');
+
+        // On supprime l'ancien bouton s'il existe pour éviter les doublons/conflits d'events
+        const oldBtn = headerDiv.querySelector('.btn-success');
+        if(oldBtn) oldBtn.remove();
+
+        // On crée le nouveau bouton lié aux nouvelles données
+        if(list.length > 0) {
+            const btnAll = document.createElement('button');
+            btnAll.className = 'btn btn-sm btn-success shadow-sm fade-in';
+            btnAll.innerHTML = '<i class="bi bi-cart-plus me-1"></i> Tout prendre';
+            // MAGIE : On lie le clic à la fonction globale définie dans le HTML
+            btnAll.onclick = function() {
+                if(window.ajouterAuPanier) window.ajouterAuPanier(list);
+            };
+            headerDiv.appendChild(btnAll);
+        }
+
+        // 3. Génération de la liste (Design Compact)
         listContainer.innerHTML = '';
 
-        // --- 1. TRI INTELLIGENT ---
-        list.sort((a, b) => {
-            const getPriorite = (type) => {
-                if (!type) return 1;
-                if (type.includes('HASARD') || type.includes('🎲')) return 3;
-                if (type.includes('⚠️') || type.includes('Flexible')) return 2;
-                return 1;
-            };
-            const prioA = getPriorite(a.typeAlgo);
-            const prioB = getPriorite(b.typeAlgo);
-            if (prioA !== prioB) return prioA - prioB;
-            return b.scoreGlobal - a.scoreGlobal;
-        });
-
-        // --- 2. AFFICHAGE AVEC CHECKBOX ---
-        list.forEach((grid, index) => {
-            const pctDuo = Math.min(grid.maxRatioDuo * 50, 100);
-            const colorDuo = grid.maxRatioDuo > 1.2 ? 'bg-danger' : 'bg-success';
-
-            let badgeHtml = '';
-            const type = grid.typeAlgo || '';
-            if (type.includes('⚠️')) badgeHtml = '<span class="badge bg-warning text-dark border"><i class="bi bi-exclamation-triangle-fill"></i> IA Flexible</span>';
-            else if (type.includes('HASARD') || type.includes('🎲')) badgeHtml = '<span class="badge bg-secondary border"><i class="bi bi-dice-5-fill"></i> Hasard</span>';
-            else badgeHtml = '<span class="badge bg-primary"><i class="bi bi-cpu-fill"></i> IA Optimal</span>';
-
+        list.forEach((bet, index) => {
             const col = document.createElement('div');
-            col.className = 'col-md-6 col-lg-4 animate-up';
-            col.style.animationDelay = (index * 0.1) + 's';
+            col.className = 'col-md-6 fade-in';
+            // Petit délai pour l'animation cascade
+            col.style.animationDelay = (index * 0.05) + 's';
 
             col.innerHTML = `
-                <div class="card h-100 shadow-sm border-light grid-card cursor-pointer" id="grid-card-${index}">
-                    <div class="card-body p-3 position-relative">
-                        <div class="position-absolute top-0 end-0 p-2">
-                            <input type="checkbox" class="form-check-input fs-5" id="check-${index}" style="pointer-events: none;"> 
-                        </div>
-
-                        <div class="d-flex align-items-center mb-2 gap-2">
-                            <span class="badge bg-light text-muted border">#${index + 1}</span>
-                            ${badgeHtml}
-                        </div>
-                        
-                        <div class="d-flex justify-content-center gap-1 mb-2">
-                            ${grid.boules.map(b => `<span class="badge rounded-circle bg-dark fs-6 d-flex align-items-center justify-content-center" style="width:32px; height:32px;">${b}</span>`).join('')}
-                            <span class="badge rounded-circle bg-danger fs-6 d-flex align-items-center justify-content-center" style="width:32px; height:32px;">${grid.numeroChance}</span>
-                        </div>
-                        
-                        <div class="small text-muted mb-3 bg-light p-2 rounded">
-                            <div class="d-flex justify-content-between mb-1">
-                                <span><i class="bi bi-graph-up me-1"></i>Score IA</span>
-                                <span class="fw-bold text-dark">${grid.scoreGlobal}</span>
-                            </div>
-                            <div class="progress" style="height: 4px;">
-                                <div class="progress-bar ${colorDuo}" style="width: ${pctDuo}%"></div>
-                            </div>
-                        </div>
-
-                        <div class="d-flex gap-2">
-                            <button class="btn btn-outline-secondary btn-sm flex-grow-1 btn-copier" data-nums="${grid.boules.join(',')}" data-chance="${grid.numeroChance}">
-                                <i class="bi bi-eye"></i> Voir
-                            </button>
-                            <button type="button" class="btn btn-primary btn-sm flex-grow-1 fw-bold shadow-sm"
-                                    onclick="preparerGrille(${grid.boules[0]}, ${grid.boules[1]}, ${grid.boules[2]}, ${grid.boules[3]}, ${grid.boules[4]}, ${grid.numeroChance})">
-                                Jouer <i class="bi bi-arrow-right"></i>
-                            </button>
-                        </div>
+                <div class="p-2 border rounded bg-white shadow-sm d-flex justify-content-between align-items-center">
+                    <div class="d-flex gap-1">
+                        ${bet.boules.map(b => `<span class="badge bg-dark fs-6 shadow-sm">${b}</span>`).join('')}
+                        <span class="badge bg-danger fs-6 shadow-sm">${bet.chance}</span>
                     </div>
-                </div>`;
 
+                    <div class="d-flex align-items-center gap-2">
+                        <small class="text-muted fw-bold" style="font-size: 0.7rem;" title="Score de fiabilité IA">
+                            <i class="bi bi-graph-up me-1"></i>${bet.scoreGlobal}%
+                        </small>
+                        <button class="btn btn-sm btn-outline-primary border-0" 
+                                onclick="preparerGrille(${bet.boules[0]}, ${bet.boules[1]}, ${bet.boules[2]}, ${bet.boules[3]}, ${bet.boules[4]}, ${bet.chance})"
+                                title="Jouer cette grille seule">
+                            <i class="bi bi-plus-lg"></i>
+                        </button>
+                    </div>
+                </div>
+            `;
             listContainer.appendChild(col);
-
-            // Attacher l'événement click sur la carte
-            const cardEl = document.getElementById(`grid-card-${index}`);
-            cardEl.addEventListener('click', function(e) {
-                // On ne déclenche pas la sélection si on clique sur un bouton
-                if(e.target.closest('button')) return;
-                toggleGridSelection(index, this);
-            });
-        });
-
-        // Réattacher les écouteurs "Voir"
-        document.querySelectorAll('.btn-copier').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                const nums = e.target.getAttribute('data-nums').split(',');
-                const inputs = document.querySelectorAll('.sim-input');
-                inputs.forEach((inp, i) => { if(nums[i]) inp.value = nums[i]; });
-                document.getElementById('formSimulateur').scrollIntoView({behavior: 'smooth'});
-            });
         });
     }
 
