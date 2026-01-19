@@ -122,22 +122,26 @@ public class LotoService {
         List<Integer> dernierTirage = history.get(0).getBoules();
 
         // --- OPTIMISATION INTELLIGENTE (CACHE) ---
-        // On ne lance le backtest (lourd) que si on ne l'a pas fait aujourd'hui
-        if (cachedBestConfig == null || !LocalDate.now().equals(lastBacktestDate)) {
-            log.info("🔄 Lancement du Backtest quotidien pour trouver les meilleurs poids...");
-            cachedBestConfig = backtestService.trouverMeilleureConfig(history);
-            lastBacktestDate = LocalDate.now();
-        }
-        AlgoConfig configOptimisee = cachedBestConfig;
+        AlgoConfig configOptimisee;
 
-        // --- LOG STRATÉGIQUE : CONFIGURATION ---
-        log.info("🎯 [ALGO] Initialisation Stratégie pour le {}", dateCible);
-        if (cachedBestConfig != null) {
-            log.info("   ➤ Config Optimisée (Backtest) : Poids Forme={}, Poids Ecart={}, Poids Markov={}",
-                    configOptimisee.getPoidsForme(), configOptimisee.getPoidsEcart(), configOptimisee.getPoidsMarkov());
-        } else {
-            log.info("   ➤ Config Par Défaut (Standard)");
+        // 1. Si on a déjà une config du jour en cache, on l'utilise
+        if (cachedBestConfig != null && LocalDate.now().equals(lastBacktestDate)) {
+            configOptimisee = cachedBestConfig;
         }
+        // 2. Sinon, on utilise la config par défaut (pour ne pas bloquer l'utilisateur 10s)
+        else {
+            // Petit log pour dire qu'on est en mode dégradé temporaire
+            if (cachedBestConfig == null) {
+                log.info("⏳ [ALGO] Backtest en cours ou non démarré. Utilisation Config PAR DÉFAUT en attendant.");
+            } else {
+                log.info("⚠️ [ALGO] Config périmée (date différente). Utilisation Config PAR DÉFAUT en attendant le CRON.");
+                // Optionnel : on pourrait déclencher un refresh asynchrone ici si le CRON a raté
+            }
+            configOptimisee = AlgoConfig.defaut();
+        }
+
+        // --- LOG STRATÉGIQUE ---
+        log.info("🎯 [ALGO] Stratégie utilisée : {}", configOptimisee.getNomStrategie());
         log.info("   ➤ Dernier tirage connu : {} (Date : {})", dernierTirage, history.get(0).getDateTirage());
 
         // 2. Calcul des Scores (Avec la config optimisée par l'IA)
