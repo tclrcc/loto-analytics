@@ -29,8 +29,8 @@ public class BacktestService {
         // 1. On génère toutes les combinaisons possibles dans une liste
         List<LotoService.AlgoConfig> configsATester = new ArrayList<>();
 
-        double[] poidsFormeOpts = {10.0, 20.0, 30.0};
-        double[] poidsEcartOpts = {0.8, 1.2}; // Réduit un peu
+        double[] poidsFormeOpts = {10.0, 15.0, 20.0, 25.0, 30.0};
+        double[] poidsEcartOpts = {0.6, 0.8, 1.0, 1.2, 1.4};
         double[] poidsMarkovOpts = {0.0, 2.0};
         double[] poidsAffiniteOpts = {0.0, 1.0, 3.0};
 
@@ -59,8 +59,8 @@ public class BacktestService {
         // 3. TRAITEMENT PARALLÈLE (Le turbo !)
         configsATester.parallelStream().forEach(config -> {
 
-            // On réduit un peu la profondeur ici (25 tirages au lieu de 50 pour le scan rapide)
-            double bilan = simulerSurHistorique(config, historiqueComplet, 25);
+            // 50 tirages tests
+            double bilan = simulerSurHistorique(config, historiqueComplet, 50);
 
             // Bloc synchronisé pour mettre à jour le record
             synchronized (bestResultRef) {
@@ -99,8 +99,8 @@ public class BacktestService {
             List<LotoTirage> historiqueConnu = historiqueComplet.subList(targetIndex + 1, endSub);
             // --------------------
 
-            // OPTIMISATION MAJEURE ICI : on ne génère que 2 grilles par test
-            List<List<Integer>> grillesGenerees = lotoService.genererGrillesPourSimulation(historiqueConnu, config, 2);
+            // On génère 5 grilles par test
+            List<List<Integer>> grillesGenerees = lotoService.genererGrillesPourSimulation(historiqueConnu, config, 5);
 
             depense += (grillesGenerees.size() * 2.20);
             for (List<Integer> g : grillesGenerees) {
