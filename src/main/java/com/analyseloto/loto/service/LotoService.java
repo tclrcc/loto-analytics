@@ -54,12 +54,13 @@ public class LotoService {
         private double poidsForme;
         private double poidsEcart;
         private double poidsTension;
-        private double poidsMarkov;       // NOUVEAU : Poids des chaînes de Markov
+        private double poidsMarkov;
+        private double poidsAffinite;
         private boolean utiliserGenetique; // NOUVEAU : Activer l'algo génétique ?
 
         // 1. Standard (Mix équilibré)
         public static AlgoConfig defaut() {
-            return new AlgoConfig("1_STANDARD", 3.0, 15.0, 0.4, 12.0, 5.0, false);
+            return new AlgoConfig("1_STANDARD", 3.0, 15.0, 0.4, 12.0, 5.0, 1.0, false);
         }
     }
 
@@ -181,7 +182,7 @@ public class LotoService {
             if (estGrilleCoherente(boules, dernierTirage, contraintesDuJour)) {
 
                 int chance = selectionnerChanceOptimisee(boules, scoresChance, matriceChance, rng);
-                double fitness = calculerScoreFitness(boules, chance, scoresBoules, scoresChance, matriceAffinites, history, dernierTirage);
+                double fitness = calculerScoreFitness(boules, chance, scoresBoules, scoresChance, matriceAffinites, history, dernierTirage, configOptimisee.getPoidsAffinite());
 
                 population.add(new GrilleCandidate(boules, chance, fitness));
             }
@@ -333,7 +334,8 @@ public class LotoService {
             Map<Integer, Double> scoresChance,
             Map<Integer, Map<Integer, Integer>> affinites,
             List<LotoTirage> history,
-            List<Integer> dernierTirage) {
+            List<Integer> dernierTirage,
+            double poidsAffinite) {
         double score = 0.0;
 
         // 1. Somme des scores individuels
@@ -349,7 +351,9 @@ public class LotoService {
                 scoreAffinite += affinites.getOrDefault(boules.get(i), Map.of()).getOrDefault(boules.get(j), 0);
             }
         }
-        score += (scoreAffinite * 0.5);
+
+        // Mise à jour du score final avec pondération affinité
+        score += (scoreAffinite * poidsAffinite);
 
         // 3. BONUS / MALUS STRUCTURELS
 
@@ -767,7 +771,22 @@ public class LotoService {
             return communs < 2;
         }
 
-        return true;
+        // 5. Filtre des Dizaines (Répartition Spatiale)
+        // Une grille ne doit jamais avoir 4 numéros dans la même dizaine (ex: 10, 12, 15, 19, 45)
+        // C'est statistiquement rarissime.
+        int[] dizaines = new int[5];
+        for(int n : boules) dizaines[n/10]++;
+        for(int d : dizaines) if(d >= 4) return false; // REJET IMMÉDIAT
+
+        // 6. Filtre du "Grand Ecart"
+        // La différence entre le plus grand et le plus petit numéro est souvent > 20
+        if ((boules.get(4) - boules.get(0)) < 15) return false; // Trop compact
+
+        // 7. Filtre "Somme des Finales"
+        // La somme des derniers chiffres (ex: 12 -> 2, 45 -> 5) est souvent entre 15 et 35
+        int sommeFinales = boules.stream().mapToInt(n -> n % 10).sum();
+
+        return sommeFinales >= 10 && sommeFinales <= 40;
     }
 
     // ==================================================================================

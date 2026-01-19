@@ -26,38 +26,48 @@ public class BacktestService {
         log.info("🧪 Démarrage de l'optimisation génétique des poids...");
 
         LotoService.AlgoConfig bestConfig = LotoService.AlgoConfig.defaut();
-        double maxROI = -Double.MAX_VALUE;
+        double maxBilan = -Double.MAX_VALUE;
 
-        // Définition des plages de test (Grid Search simplifié)
-        // On teste des variations raisonnables autour des valeurs par défaut
-        double[] poidsFormeOpts = {10.0, 15.0, 25.0, 40.0};
-        double[] poidsEcartOpts = {0.1, 0.5, 1.0};
-        double[] poidsMarkovOpts = {0.0, 5.0, 15.0};
+        // Définition des plages de tests
+        double[] poidsFormeOpts = {8.0, 12.0, 16.0, 20.0, 24.0};
+        double[] poidsEcartOpts = {0.8, 1.0, 1.2, 1.5};
+        double[] poidsMarkovOpts = {0.0, 2.0};
+        double[] poidsAffiniteOpts = {0.0, 1.0, 3.0};
 
         int iterations = 0;
+        int totalCombinaisons = poidsFormeOpts.length * poidsEcartOpts.length * poidsMarkovOpts.length * poidsAffiniteOpts.length;
+
+        log.info("📊 Analyse de {} combinaisons stratégiques...", totalCombinaisons);
 
         for (double pForme : poidsFormeOpts) {
             for (double pEcart : poidsEcartOpts) {
                 for (double pMarkov : poidsMarkovOpts) {
 
-                    LotoService.AlgoConfig configTest = new LotoService.AlgoConfig(
-                            "TEST_" + iterations++,
-                            3.0, // FreqJour fixe
-                            pForme,
-                            pEcart,
-                            12.0, // Tension fixe
-                            pMarkov,
-                            false
-                    );
+                    // --- NOUVELLE BOUCLE POUR L'AFFINITÉ ---
+                    for (double pAffinite : poidsAffiniteOpts) {
 
-                    // On teste cette config sur les 20 derniers tirages (Simulation)
-                    double bilanNet = simulerSurHistorique(configTest, historiqueComplet, 20);
+                        LotoService.AlgoConfig configTest = new LotoService.AlgoConfig(
+                                "TEST_" + iterations++,
+                                3.0, // FreqJour fixe (valeur sûre)
+                                pForme,
+                                pEcart,
+                                12.0, // Tension fixe
+                                pMarkov,
+                                pAffinite, // <--- Injection du paramètre variable
+                                false
+                        );
 
-                    if (bilanNet > maxROI) {
-                        maxROI = bilanNet;
-                        bestConfig = configTest;
-                        log.info("🚀 Nouveau record ! Bilan: {} € (au lieu de ROI %) avec Config: ...",
-                                String.format("%.2f", bilanNet));
+                        // On teste cette config sur les 50 derniers tirages
+                        double bilanNet = simulerSurHistorique(configTest, historiqueComplet, 50);
+
+                        if (bilanNet > maxBilan) {
+                            maxBilan = bilanNet;
+                            bestConfig = configTest;
+
+                            log.info("🚀 Record ! Bilan: {} € | Config: Forme={}, Ecart={}, Markov={}, Affinité={}",
+                                    String.format("%.2f", bilanNet),
+                                    pForme, pEcart, pMarkov, pAffinite);
+                        }
                     }
                 }
             }

@@ -351,38 +351,57 @@
             <div id="pronoResult" class="mt-4 fade-in" th:classappend="${#lists.isEmpty(aiBets)} ? 'd-none' : ''">
 
                 <div class="d-flex justify-content-between align-items-center mb-3 border-bottom pb-2">
-                    <h6 class="text-primary fw-bold mb-0">
-                        🔮 Pronostics IA pour <span id="pronoDate" th:text="${nextDrawDate}"></span>
-                    </h6>
-                    <button th:if="${!#lists.isEmpty(aiBets)}"
-                            class="btn btn-sm btn-success shadow-sm"
-                            th:onclick="ajouterAuPanier([[${aiBets}]])">
-                        <i class="bi bi-cart-plus me-1"></i> Tout prendre
-                    </button>
+                    <div>
+                        <h6 class="text-primary fw-bold mb-0">
+                            🔮 Pronostics IA pour <span id="pronoDate" th:text="${nextDrawDate}"></span>
+                        </h6>
+                        <small class="text-muted" style="font-size: 0.75rem;">Cochez les grilles pour les jouer</small>
+                    </div>
+
+                    <div class="btn-group">
+                        <button class="btn btn-sm btn-outline-secondary" onclick="toggleAllGrids()">
+                            <i class="bi bi-check-all"></i> Tout
+                        </button>
+                    </div>
                 </div>
 
                 <div id="pronoList" class="row g-3">
+                    <div class="col-md-6 col-lg-4" th:each="bet, iter : ${aiBets}">
+                        <div class="card h-100 shadow-sm border-light grid-card cursor-pointer position-relative animate-up"
+                             th:id="'grid-card-' + ${iter.index}"
+                             th:onclick="'toggleGridSelection(' + ${iter.index} + ', this)'"
+                             th:style="'animation-delay: ' + ${iter.index * 0.1} + 's'">
 
-                    <div class="col-md-6" th:each="bet : ${aiBets}">
-                        <div class="p-2 border rounded bg-white shadow-sm d-flex justify-content-between align-items-center">
-
-                            <div class="d-flex gap-1">
-                                <span class="badge bg-dark fs-6 shadow-sm" th:each="b : ${bet.boules}" th:text="${b}"></span>
-                                <span class="badge bg-danger fs-6 shadow-sm" th:text="${bet.numeroChance}"></span>
+                            <div class="position-absolute top-0 end-0 p-2">
+                                <input type="checkbox" class="form-check-input fs-5"
+                                       th:id="'check-' + ${iter.index}" style="pointer-events: none;">
                             </div>
 
-                            <div class="d-flex align-items-center gap-2">
-                                <small class="text-muted fw-bold" style="font-size: 0.7rem;">
-                                    <i class="bi bi-graph-up me-1"></i><span th:text="${bet.scoreGlobal}"></span>%
-                                </small>
-                                <button class="btn btn-sm btn-outline-primary border-0"
-                                        th:onclick="preparerGrille([[${bet.boules[0]}]], [[${bet.boules[1]}]], [[${bet.boules[2]}]], [[${bet.boules[3]}]], [[${bet.boules[4]}]], [[${bet.numeroChance}]])">
-                                    <i class="bi bi-plus-lg"></i>
-                                </button>
+                            <div class="card-body p-3">
+                                <div class="d-flex align-items-center mb-2 gap-2">
+                                    <span class="badge bg-light text-muted border" th:text="'#' + ${iter.count}">#1</span>
+                                    <span th:if="${#strings.contains(bet.typeAlgo, 'GENETIQUE')}" class="badge bg-primary bg-opacity-10 text-primary border border-primary"><i class="bi bi-cpu-fill"></i> IA Optimal</span>
+                                    <span th:if="${#strings.contains(bet.typeAlgo, 'FLEXIBLE')}" class="badge bg-warning bg-opacity-10 text-dark border border-warning"><i class="bi bi-exclamation-triangle"></i> IA Flexible</span>
+                                    <span th:if="${#strings.contains(bet.typeAlgo, 'HASARD')}" class="badge bg-secondary bg-opacity-10 text-dark border"><i class="bi bi-dice-5-fill"></i> Hasard</span>
+                                </div>
+
+                                <div class="d-flex justify-content-center gap-1 mb-3">
+                                    <span class="badge rounded-circle bg-dark fs-6 d-flex align-items-center justify-content-center shadow-sm" style="width:32px; height:32px;" th:each="b : ${bet.boules}" th:text="${b}"></span>
+                                    <span class="badge rounded-circle bg-danger fs-6 d-flex align-items-center justify-content-center shadow-sm" style="width:32px; height:32px;" th:text="${bet.numeroChance}"></span>
+                                </div>
+
+                                <div class="small text-muted bg-light p-2 rounded mb-0 d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <i class="bi bi-graph-up me-1"></i>Score: <strong th:text="${bet.scoreGlobal}"></strong>
+                                    </div>
+                                    <button class="btn btn-xs btn-link text-decoration-none p-0"
+                                            th:onclick="'event.stopPropagation(); preparerGrille(' + ${bet.boules[0]} + ',' + ${bet.boules[1]} + ',' + ${bet.boules[2]} + ',' + ${bet.boules[3]} + ',' + ${bet.boules[4]} + ',' + ${bet.numeroChance} + ')'">
+                                        Jouer seul
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>
-
                 </div>
             </div>
 
@@ -1179,6 +1198,29 @@
         a.click();
         window.URL.revokeObjectURL(url);
     });
+</script>
+
+<script th:inline="javascript">
+    /*<![CDATA[*/
+    // On injecte les données initiales du serveur dans la variable globale JS
+    // pour que la sélection fonctionne dès le chargement de la page.
+    window.initialServerBets = /*[[${aiBets}]]*/ [];
+
+    document.addEventListener('DOMContentLoaded', () => {
+        if(window.initialServerBets && window.initialServerBets.length > 0) {
+            // On initialise currentGridsData défini dans app.js
+            // Attention : app.js doit définir currentGridsData en global (window.currentGridsData = ...)
+            // Ou on utilise une fonction d'init si app.js est chargé après.
+
+            // Hack simple : on attend un peu que app.js soit chargé
+            setTimeout(() => {
+                if(typeof setCurrentGridsData === 'function') {
+                    setCurrentGridsData(window.initialServerBets);
+                }
+            }, 100);
+        }
+    });
+    /*]]>*/
 </script>
 
 </body>

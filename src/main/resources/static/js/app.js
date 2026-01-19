@@ -6,14 +6,87 @@ document.addEventListener('DOMContentLoaded', () => {
     let rawData = [];
     let activeTab = 'main';
 
-    // NOUVEAU : Variables pour la sélection multiple
+    // Variables pour la sélection multiple
     let selectedGrids = new Set();
     let currentGridsData = [];
 
-    // --- Initialisation ---
+    // --- FONCTIONS GLOBALES (Accessibles depuis le HTML) ---
+
+    // 1. Initialisation des données depuis le HTML (Thymeleaf)
+    window.setCurrentGridsData = function(data) {
+        currentGridsData = data;
+        selectedGrids.clear();
+        updateBulkBar();
+    };
+
+    // 2. Tout sélectionner / Désélectionner
+    window.toggleAllGrids = function() {
+        if (!currentGridsData || currentGridsData.length === 0) return;
+
+        const allSelected = (selectedGrids.size === currentGridsData.length);
+
+        if (allSelected) {
+            // Tout désélectionner
+            currentGridsData.forEach((_, index) => {
+                selectedGrids.delete(index);
+                updateCardStyle(index, false);
+            });
+        } else {
+            // Tout sélectionner
+            currentGridsData.forEach((_, index) => {
+                selectedGrids.add(index);
+                updateCardStyle(index, true);
+            });
+        }
+        updateBulkBar();
+    };
+
+    // 3. Sélectionner une grille unique (Click sur la carte)
+    window.toggleGridSelection = function(index, cardElement) {
+        if (selectedGrids.has(index)) {
+            selectedGrids.delete(index);
+            updateCardStyle(index, false);
+        } else {
+            selectedGrids.add(index);
+            updateCardStyle(index, true);
+        }
+        updateBulkBar();
+    };
+
+    // Helper de style
+    function updateCardStyle(index, isSelected) {
+        const card = document.getElementById(`grid-card-${index}`);
+        const checkbox = document.getElementById(`check-${index}`);
+        if(!card || !checkbox) return;
+
+        if(isSelected) {
+            card.classList.remove('border-light');
+            card.classList.add('border-primary', 'bg-primary', 'bg-opacity-10');
+            checkbox.checked = true;
+        } else {
+            card.classList.remove('border-primary', 'bg-primary', 'bg-opacity-10');
+            card.classList.add('border-light');
+            checkbox.checked = false;
+        }
+    }
+
+    // Mise à jour de la barre du bas
+    function updateBulkBar() {
+        const bar = document.getElementById('bulkActionBar');
+        const count = selectedGrids.size;
+        if (count > 0) {
+            bar.classList.remove('d-none');
+            document.getElementById('bulkCountBadge').textContent = count;
+            document.getElementById('bulkTotalCost').textContent = (count * 2.20).toFixed(2);
+        } else {
+            bar.classList.add('d-none');
+        }
+    }
+
+    // --- INITIALISATION AU CHARGEMENT ---
     setupEventListeners();
 
-    // --- Initialisation des Popovers ---
+    // Initialisation des Popovers Bootstrap
     var popoverTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="popover"]'));
     var popoverList = popoverTriggerList.map(function (popoverTriggerEl) {
         return new bootstrap.Popover(popoverTriggerEl)
@@ -41,7 +114,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // --- Gestionnaires d'événements ---
+    // --- GESTIONNAIRES D'ÉVÉNEMENTS ---
     function setupEventListeners() {
 
         // 1. Import CSV
@@ -99,8 +172,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     if(!res.ok) throw new Error();
                     const data = await res.json();
 
-                    // On stocke les données pour la sélection multiple
+                    // Mise à jour des données globales pour la sélection
                     currentGridsData = data;
+                    selectedGrids.clear();
+                    updateBulkBar();
 
                     const modalEl = document.getElementById('modalAstro');
                     const modal = bootstrap.Modal.getInstance(modalEl);
@@ -164,7 +239,7 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
 
-        // 8. Onglets
+        // 8. Onglets Graphiques
         const tabs = document.querySelectorAll('#graphTabs button');
         const searchContainerMain = document.getElementById('searchContainerMain');
         const searchContainerChance = document.getElementById('searchContainerChance');
@@ -195,7 +270,7 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         });
 
-        // 9. Recherche & Graphique
+        // 9. Recherche & Reset
         const searchInput = document.getElementById('searchNum');
         const searchChanceInput = document.getElementById('searchChance');
         const resetButtons = document.querySelectorAll('.btn-reset');
@@ -218,7 +293,7 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
 
-        // 10. GESTION DU "TOUT JOUER" (BULK)
+        // 10. GESTION DU "TOUT JOUER" (BULK) - MODALES & CONFIRMATION
 
         // Bouton Ouvrir Modal
         const btnOpenBulk = document.getElementById('btnOpenBulkModal');
@@ -238,7 +313,7 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
 
-        // Bouton Confirmer
+        // Bouton Confirmer Bulk
         const btnConfirmBulk = document.getElementById('btnConfirmBulk');
         if(btnConfirmBulk) {
             btnConfirmBulk.addEventListener('click', async () => {
@@ -246,10 +321,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 const originalText = btn.innerHTML;
                 const dateJeu = document.getElementById('bulkDateInput').value;
 
+                if (!dateJeu) { alert("Veuillez choisir une date."); return; }
+
                 const gridsToSend = [];
                 selectedGrids.forEach(index => {
                     const g = currentGridsData[index];
-                    const line = [...g.boules, g.numeroChance];
+                    // Gestion sécurisée du nom du champ chance (DTO vs Objet local)
+                    const chance = g.numeroChance !== undefined ? g.numeroChance : g.chance;
+                    const line = [...g.boules, chance];
                     gridsToSend.push(line);
                 });
 
@@ -259,7 +338,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 btn.disabled = true;
 
                 try {
-                    const res = await fetch('/bets/add-bulk', {
+                    const res = await fetch('/api/bets/add-bulk', { // Vérifiez bien le chemin (/api/ ou /)
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(payload)
@@ -270,7 +349,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
                         setTimeout(() => window.location.reload(), 1500);
                     } else {
-                        throw new Error("Erreur serveur");
+                        throw new Error("Erreur serveur lors de la sauvegarde.");
                     }
                 } catch(e) {
                     alert("Erreur : " + e.message);
@@ -282,10 +361,121 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // --- FONCTIONNALITÉS ---
+    // --- GÉNÉRATION PRONOSTICS (AJAX) ---
+
+    async function genererPronostic() {
+        const dateInput = document.getElementById('simDate');
+        const countInput = document.getElementById('pronoCount');
+        const resultDiv = document.getElementById('pronoResult');
+        const listDiv = document.getElementById('pronoList');
+
+        if (!dateInput.value) dateInput.valueAsDate = new Date();
+
+        const btn = document.getElementById('btnMagic');
+        const originalText = btn.innerHTML;
+
+        // UI Loading
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Calcul...';
+        btn.disabled = true;
+
+        resultDiv.classList.remove('d-none');
+        listDiv.innerHTML = '<div class="text-center py-3"><div class="spinner-border text-primary"></div><div class="small mt-2 text-muted">L\'IA optimise les combinaisons...</div></div>';
+
+        try {
+            // Appel API
+            const res = await fetch(`/api/loto/generate?date=${dateInput.value}&count=${countInput.value}`);
+            if(!res.ok) throw new Error("Erreur API");
+
+            const data = await res.json();
+
+            // Mise à jour des données globales pour la sélection
+            currentGridsData = data;
+            selectedGrids.clear();
+            updateBulkBar();
+
+            // Affichage
+            afficherMultiplesPronostics(data, dateInput.value);
+
+        } catch (e) {
+            console.error(e);
+            listDiv.innerHTML = '<div class="alert alert-danger py-2 small"><i class="bi bi-exclamation-triangle me-2"></i>Erreur lors de la génération.</div>';
+        } finally {
+            btn.innerHTML = originalText;
+            btn.disabled = false;
+        }
+    }
+
+    // --- AFFICHAGE DES CARTES (Design Modernisé) ---
+
+    function afficherMultiplesPronostics(list, dateStr) {
+        const container = document.getElementById('pronoResult');
+        const listContainer = document.getElementById('pronoList');
+        const dateLabel = document.getElementById('pronoDate');
+
+        container.classList.remove('d-none');
+        if(dateLabel) {
+            const d = new Date(dateStr);
+            dateLabel.textContent = d.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
+        }
+
+        listContainer.innerHTML = '';
+
+        list.forEach((bet, index) => {
+            // Badge Type Algo
+            let badgeHtml = '';
+            const type = bet.typeAlgo || '';
+            if (type.includes('GENETIQUE') || type.includes('OPTIMAL'))
+                badgeHtml = '<span class="badge bg-primary bg-opacity-10 text-primary border border-primary"><i class="bi bi-cpu-fill"></i> IA Optimal</span>';
+            else if (type.includes('FLEXIBLE'))
+                badgeHtml = '<span class="badge bg-warning bg-opacity-10 text-dark border border-warning"><i class="bi bi-exclamation-triangle"></i> IA Flexible</span>';
+            else
+                badgeHtml = '<span class="badge bg-secondary bg-opacity-10 text-dark border"><i class="bi bi-dice-5-fill"></i> Hasard</span>';
+
+            // Gestion numeroChance
+            const chanceNum = bet.numeroChance !== undefined ? bet.numeroChance : bet.chance;
+
+            const col = document.createElement('div');
+            col.className = 'col-md-6 col-lg-4 animate-up';
+            col.style.animationDelay = (index * 0.05) + 's';
+
+            col.innerHTML = `
+                <div class="card h-100 shadow-sm border-light grid-card cursor-pointer position-relative" 
+                     id="grid-card-${index}"
+                     onclick="toggleGridSelection(${index}, this)">
+                    
+                    <div class="position-absolute top-0 end-0 p-2">
+                        <input type="checkbox" class="form-check-input fs-5" id="check-${index}" style="pointer-events: none;">
+                    </div>
+
+                    <div class="card-body p-3">
+                        <div class="d-flex align-items-center mb-2 gap-2">
+                            <span class="badge bg-light text-muted border">#${index + 1}</span>
+                            ${badgeHtml}
+                        </div>
+                        
+                        <div class="d-flex justify-content-center gap-1 mb-3">
+                            ${bet.boules.map(b => `<span class="badge rounded-circle bg-dark fs-6 d-flex align-items-center justify-content-center shadow-sm" style="width:32px; height:32px;">${b}</span>`).join('')}
+                            <span class="badge rounded-circle bg-danger fs-6 d-flex align-items-center justify-content-center shadow-sm" style="width:32px; height:32px;">${chanceNum}</span>
+                        </div>
+                        
+                        <div class="small text-muted bg-light p-2 rounded mb-0 d-flex justify-content-between align-items-center">
+                            <div><i class="bi bi-graph-up me-1"></i>Score: <strong>${bet.scoreGlobal}</strong></div>
+                            <button class="btn btn-xs btn-link text-decoration-none p-0" 
+                                    onclick="event.stopPropagation(); preparerGrille(${bet.boules[0]}, ${bet.boules[1]}, ${bet.boules[2]}, ${bet.boules[3]}, ${bet.boules[4]}, ${chanceNum})"
+                                    title="Jouer cette grille seule">
+                                Jouer seul
+                            </button>
+                        </div>
+                    </div>
+                </div>`;
+
+            listContainer.appendChild(col);
+        });
+    }
+
+    // --- AUTRES FONCTIONS (Astro, Simulation, Charts...) ---
 
     function chargerFavoris() {
-        // ... (votre code existant, inchangé) ...
         const container = document.getElementById('favList');
         if(!container) return;
         container.innerHTML = '';
@@ -308,7 +498,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function afficherResultatAstro(data) {
-        // ... (votre code existant, inchangé) ...
         const resDiv = document.getElementById('astroResult');
         resDiv.classList.remove('d-none');
         document.getElementById('astroTitle').textContent = `Profil ${data.signeSolaire}`;
@@ -352,7 +541,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function afficherResultatsSimulation(data, nbBoulesJouees) {
         const container = document.getElementById('simResult');
         container.classList.remove('d-none');
-        // ... (votre code d'analyse existant, inchangé) ...
+
         const inputs = document.querySelectorAll('.sim-input');
         const numerosJoues = Array.from(inputs).map(i => i.value ? parseInt(i.value) : 0).filter(n => n > 0);
         let somme = numerosJoues.reduce((a, b) => a + b, 0);
@@ -452,250 +641,7 @@ document.addEventListener('DOMContentLoaded', () => {
         return `<div class="tab-pane fade ${isActive ? 'show active' : ''}" id="${id}">${content}</div>`;
     }
 
-    // --- GÉNÉRATION PRONOSTICS (MODIFIÉE) ---
-
-    async function genererPronostic() {
-        const dateInput = document.getElementById('simDate');
-        const countInput = document.getElementById('pronoCount');
-        const resultDiv = document.getElementById('pronoResult');
-        const listDiv = document.getElementById('pronoList');
-
-        if (!dateInput.value) dateInput.valueAsDate = new Date();
-
-        const btn = document.getElementById('btnMagic');
-        const originalText = btn.innerHTML;
-
-        // 1. UI Loading
-        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Calcul...';
-        btn.disabled = true;
-
-        resultDiv.classList.remove('d-none');
-        listDiv.innerHTML = '<div class="text-center py-3"><div class="spinner-border text-primary"></div><div class="small mt-2 text-muted">L\'IA optimise les combinaisons...</div></div>';
-
-        try {
-            // 2. Appel API
-            const res = await fetch(`/api/loto/generate?date=${dateInput.value}&count=${countInput.value}`);
-            if(!res.ok) throw new Error("Erreur API");
-
-            const data = await res.json();
-
-            // 3. Affichage
-            afficherMultiplesPronostics(data, dateInput.value);
-
-        } catch (e) {
-            console.error(e);
-            listDiv.innerHTML = '<div class="alert alert-danger py-2 small"><i class="bi bi-exclamation-triangle me-2"></i>Erreur lors de la génération.</div>';
-        } finally {
-            btn.innerHTML = originalText;
-            btn.disabled = false;
-        }
-    }
-
-    function afficherMultiplesPronostics(list, dateStr) {
-        const container = document.getElementById('pronoResult');
-        const listContainer = document.getElementById('pronoList');
-        const dateLabel = document.getElementById('pronoDate');
-
-        // 1. Mise à jour de la date et affichage container
-        container.classList.remove('d-none');
-        if(dateLabel) {
-            const d = new Date(dateStr);
-            dateLabel.textContent = d.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
-        }
-
-        // 2. Mise à jour dynamique du bouton "Tout prendre" (Header)
-        // On cherche le header de la div resultat
-        const headerDiv = container.querySelector('.d-flex.justify-content-between');
-
-        // On supprime l'ancien bouton s'il existe pour éviter les doublons/conflits d'events
-        const oldBtn = headerDiv.querySelector('.btn-success');
-        if(oldBtn) oldBtn.remove();
-
-        // On crée le nouveau bouton lié aux nouvelles données
-        if(list.length > 0) {
-            const btnAll = document.createElement('button');
-            btnAll.className = 'btn btn-sm btn-success shadow-sm fade-in';
-            btnAll.innerHTML = '<i class="bi bi-cart-plus me-1"></i> Tout prendre';
-            // MAGIE : On lie le clic à la fonction globale définie dans le HTML
-            btnAll.onclick = function() {
-                if(window.ajouterAuPanier) window.ajouterAuPanier(list);
-            };
-            headerDiv.appendChild(btnAll);
-        }
-
-        // 3. Génération de la liste (Design Compact)
-        listContainer.innerHTML = '';
-
-        list.forEach((bet, index) => {
-            const col = document.createElement('div');
-            col.className = 'col-md-6 fade-in';
-            // Petit délai pour l'animation cascade
-            col.style.animationDelay = (index * 0.05) + 's';
-
-            col.innerHTML = `
-                <div class="p-2 border rounded bg-white shadow-sm d-flex justify-content-between align-items-center">
-                    <div class="d-flex gap-1">
-                        ${bet.boules.map(b => `<span class="badge bg-dark fs-6 shadow-sm">${b}</span>`).join('')}
-                        <span class="badge bg-danger fs-6 shadow-sm">${bet.chance}</span>
-                    </div>
-
-                    <div class="d-flex align-items-center gap-2">
-                        <small class="text-muted fw-bold" style="font-size: 0.7rem;" title="Score de fiabilité IA">
-                            <i class="bi bi-graph-up me-1"></i>${bet.scoreGlobal}%
-                        </small>
-                        <button class="btn btn-sm btn-outline-primary border-0" 
-                                onclick="preparerGrille(${bet.boules[0]}, ${bet.boules[1]}, ${bet.boules[2]}, ${bet.boules[3]}, ${bet.boules[4]}, ${bet.chance})"
-                                title="Jouer cette grille seule">
-                            <i class="bi bi-plus-lg"></i>
-                        </button>
-                    </div>
-                </div>
-            `;
-            listContainer.appendChild(col);
-        });
-    }
-
-    // --- LOGIQUE DE SÉLECTION MULTIPLE ---
-
-    function toggleGridSelection(index, cardElement) {
-        const checkbox = document.getElementById(`check-${index}`);
-
-        if (selectedGrids.has(index)) {
-            selectedGrids.delete(index);
-            cardElement.classList.remove('border-primary', 'bg-primary', 'bg-opacity-10');
-            cardElement.classList.add('border-light');
-            checkbox.checked = false;
-        } else {
-            selectedGrids.add(index);
-            cardElement.classList.remove('border-light');
-            cardElement.classList.add('border-primary', 'bg-primary', 'bg-opacity-10');
-            checkbox.checked = true;
-        }
-        updateBulkBar();
-    }
-
-    function updateBulkBar() {
-        const bar = document.getElementById('bulkActionBar');
-        const count = selectedGrids.size;
-        if (count > 0) {
-            bar.classList.remove('d-none');
-            document.getElementById('bulkCountBadge').textContent = count;
-            document.getElementById('bulkTotalCost').textContent = (count * 2.20).toFixed(2);
-        } else {
-            bar.classList.add('d-none');
-        }
-    }
-
-    // --- DATA FETCH & CHARTS (inchangé) ---
-
-    async function chargerStats(jour = '') {
-        let url = '/api/loto/stats';
-        if (jour) url += `?jour=${jour}`;
-        try {
-            const res = await fetch(url);
-            const response = await res.json();
-            rawData = response.points;
-            if(document.getElementById('dateMin')) {
-                document.getElementById('dateMin').textContent = response.dateMin;
-                document.getElementById('dateMax').textContent = response.dateMax;
-                document.getElementById('nbTirages').textContent = response.nombreTirages;
-                document.getElementById('infoPeriode').style.display = 'flex';
-            }
-            filtrerEtAfficher();
-        } catch (e) { console.error(e); }
-    }
-
-    function filtrerEtAfficher() {
-        const termMain = document.getElementById('searchNum').value;
-        const termChance = document.getElementById('searchChance').value;
-        let mainNumbers = rawData.filter(d => !d.chance);
-        let chanceNumbers = rawData.filter(d => d.chance);
-
-        if (termMain.trim()) {
-            const nums = parseSearch(termMain);
-            if (nums.length > 0) mainNumbers = mainNumbers.filter(d => nums.includes(d.numero));
-        }
-        if (termChance.trim()) {
-            const nums = parseSearch(termChance);
-            if (nums.length > 0) chanceNumbers = chanceNumbers.filter(d => nums.includes(d.numero));
-        }
-
-        updateDashboard(mainNumbers, chanceNumbers);
-        updateRadar(mainNumbers);
-
-        if (activeTab === 'main') updateChart(mainNumbers, false);
-        else if (activeTab === 'chance') updateChart(chanceNumbers, true);
-        else if (activeTab === 'heat') updateHeatmap(mainNumbers);
-    }
-
-    function updateChart(data, isChanceMode) {
-        const ctx = document.getElementById('scatterChart').getContext('2d');
-        if (currentChart) currentChart.destroy();
-        const activeBtn = document.querySelector('.btn-filter.active');
-        const jourLabel = activeBtn ? activeBtn.getAttribute('data-jour') : '';
-        let pointColor = isChanceMode ? 'rgba(220, 53, 69, 0.7)' : getColorByDay(jourLabel);
-
-        currentChart = new Chart(ctx, {
-            type: 'scatter',
-            data: {
-                datasets: [{
-                    label: isChanceMode ? 'Chance' : 'Boules',
-                    data: data.map(d => ({ x: jitter(d.ecart), y: jitter(d.frequence), realX: d.ecart, realY: d.frequence, num: d.numero })),
-                    backgroundColor: pointColor,
-                    borderColor: 'white', borderWidth: 1, pointRadius: 6, pointHoverRadius: 10
-                }]
-            },
-            options: {
-                maintainAspectRatio: false,
-                plugins: { tooltip: { callbacks: { label: (ctx) => `N°${ctx.raw.num} : Sorti ${ctx.raw.realY}x (Retard: ${ctx.raw.realX}j)` } }, legend: {display: false} },
-                scales: { x: { title: {display: true, text: 'Écart (jours)'}, min: -1 }, y: { title: {display: true, text: 'Fréquence'} } }
-            }
-        });
-    }
-
-    function updateHeatmap(data) {
-        const grid = document.getElementById('heatmapGrid');
-        if (!grid) return;
-        grid.innerHTML = '';
-        if (data.length === 0) return;
-        const sortedData = [...data].sort((a, b) => a.numero - b.numero);
-        const maxFreq = Math.max(...data.map(d => d.frequence));
-        const minFreq = Math.min(...data.map(d => d.frequence));
-
-        sortedData.forEach(item => {
-            const el = document.createElement('div');
-            let ratio = (item.frequence - minFreq) / (maxFreq - minFreq || 1);
-            const hue = (1 - ratio) * 240;
-            el.className = 'heatmap-cell';
-            el.style.backgroundColor = `hsl(${hue}, 75%, 55%)`;
-            el.innerHTML = item.numero;
-            el.title = `N°${item.numero} (Freq: ${item.frequence})`;
-            grid.appendChild(el);
-        });
-    }
-
-    function updateDashboard(mainData, chanceData) {
-        fillSection('main', mainData);
-        fillSection('chance', chanceData);
-    }
-    function fillSection(prefix, data) {
-        const sortedFreq = [...data].sort((a, b) => b.frequence - a.frequence);
-        const sortedGap = [...data].sort((a, b) => b.ecart - a.ecart);
-        fillList(`${prefix}TopFreq`, sortedFreq.slice(0, 5), 'sorties');
-        fillList(`${prefix}TopGap`, sortedGap.slice(0, 5), 'jours', true);
-    }
-    function fillList(id, items, suffix, isGap) {
-        const list = document.getElementById(id);
-        if(!list) return; list.innerHTML = '';
-        items.forEach(item => {
-            const val = isGap ? item.ecart : item.frequence;
-            const li = document.createElement('li');
-            li.className = 'list-group-item d-flex justify-content-between px-0 py-1 border-0 bg-transparent';
-            li.innerHTML = `<span class="fw-bold">N° ${item.numero}</span><span class="badge bg-secondary bg-opacity-25 text-dark rounded-pill">${val} ${suffix}</span>`;
-            list.appendChild(li);
-        });
-    }
-
+    // --- CHARTS UTILS ---
     function jitter(val) { return val + (Math.random() - 0.5) * 0.7; }
     function parseSearch(str) { return str.split(/[\s,]+/).map(s => parseInt(s)).filter(n => !isNaN(n)); }
     function getColorByDay(j) {
