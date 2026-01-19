@@ -1,11 +1,11 @@
 package com.analyseloto.loto.service;
 
 import com.analyseloto.loto.entity.LotoTirage;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.List;
 
 @Service
@@ -23,63 +23,69 @@ public class BacktestService {
      * @return Meilleure configuration trouvée
      */
     public LotoService.AlgoConfig trouverMeilleureConfig(List<LotoTirage> historiqueComplet) {
-        log.info("🧪 Démarrage de l'optimisation génétique des poids...");
+        log.info("🧪 Démarrage de l'optimisation PARALLÈLE...");
+        long start = System.currentTimeMillis();
 
-        LotoService.AlgoConfig bestConfig = LotoService.AlgoConfig.defaut();
-        double maxBilan = -Double.MAX_VALUE;
+        // 1. On génère toutes les combinaisons possibles dans une liste
+        List<LotoService.AlgoConfig> configsATester = new ArrayList<>();
 
-        // Définition des plages de tests
-        double[] poidsFormeOpts = {8.0, 12.0, 16.0, 20.0, 24.0};
-        double[] poidsEcartOpts = {0.8, 1.0, 1.2, 1.5};
+        double[] poidsFormeOpts = {10.0, 20.0, 30.0};
+        double[] poidsEcartOpts = {0.8, 1.2}; // Réduit un peu
         double[] poidsMarkovOpts = {0.0, 2.0};
         double[] poidsAffiniteOpts = {0.0, 1.0, 3.0};
 
-        int iterations = 0;
-        int totalCombinaisons = poidsFormeOpts.length * poidsEcartOpts.length * poidsMarkovOpts.length * poidsAffiniteOpts.length;
-
-        log.info("📊 Analyse de {} combinaisons stratégiques...", totalCombinaisons);
-
+        int i = 0;
         for (double pForme : poidsFormeOpts) {
             for (double pEcart : poidsEcartOpts) {
                 for (double pMarkov : poidsMarkovOpts) {
-
-                    // --- NOUVELLE BOUCLE POUR L'AFFINITÉ ---
-                    for (double pAffinite : poidsAffiniteOpts) {
-
-                        LotoService.AlgoConfig configTest = new LotoService.AlgoConfig(
-                                "TEST_" + iterations++,
-                                3.0, // FreqJour fixe (valeur sûre)
-                                pForme,
-                                pEcart,
-                                12.0, // Tension fixe
-                                pMarkov,
-                                pAffinite, // <--- Injection du paramètre variable
-                                false
-                        );
-
-                        // On teste cette config sur les 50 derniers tirages
-                        double bilanNet = simulerSurHistorique(configTest, historiqueComplet, 50);
-
-                        if (bilanNet > maxBilan) {
-                            maxBilan = bilanNet;
-                            bestConfig = configTest;
-
-                            log.info("🚀 Record ! Bilan: {} € | Config: Forme={}, Ecart={}, Markov={}, Affinité={}",
-                                    String.format("%.2f", bilanNet),
-                                    pForme, pEcart, pMarkov, pAffinite);
-                        }
+                    for (double pAff : poidsAffiniteOpts) {
+                        configsATester.add(new LotoService.AlgoConfig(
+                                "TEST_" + i++, 3.0, pForme, pEcart, 12.0, pMarkov, pAff, false
+                        ));
                     }
                 }
             }
         }
 
-        log.info("🏁 Optimisation terminée. Meilleure Config retenue : {}", bestConfig);
-        return bestConfig;
+        log.info("📊 Analyse de {} stratégies sur tous les cœurs CPU...", configsATester.size());
+
+        // 2. Variable atomique pour gérer la concurrence (Thread-safe)
+        // On utilise un wrapper pour stocker le meilleur résultat
+        final var bestResultRef = new Object() {
+            LotoService.AlgoConfig config = LotoService.AlgoConfig.defaut();
+            double maxBilan = -Double.MAX_VALUE;
+        };
+
+        // 3. TRAITEMENT PARALLÈLE (Le turbo !)
+        configsATester.parallelStream().forEach(config -> {
+
+            // On réduit un peu la profondeur ici (25 tirages au lieu de 50 pour le scan rapide)
+            double bilan = simulerSurHistorique(config, historiqueComplet, 25);
+
+            // Bloc synchronisé pour mettre à jour le record
+            synchronized (bestResultRef) {
+                if (bilan > bestResultRef.maxBilan) {
+                    bestResultRef.maxBilan = bilan;
+                    bestResultRef.config = config;
+                    log.info("🚀 Record [Thread] ! Bilan: {} € | Config: F={}, E={}, M={}, A={}",
+                            String.format("%.2f", bilan), config.getPoidsForme(), config.getPoidsEcart(), config.getPoidsMarkov(), config.getPoidsAffinite());
+                }
+            }
+        });
+
+        long duration = System.currentTimeMillis() - start;
+        log.info("🏁 Optimisation terminée en {} ms.", duration);
+
+        return bestResultRef.config;
     }
 
     private double simulerSurHistorique(LotoService.AlgoConfig config, List<LotoTirage> historiqueComplet, int nbTiragesTest) {
         double depense = 0;
         double gain = 0;
+
+        // Optimisation : On limite l'historique passé à 200 tirages max pour les calculs de stats
+        // (Inutile de remonter à 2008 pour savoir qu'un numéro est en forme ce mois-ci)
+        int historyLimit = 200;
 
         // Sécurité
         if (historiqueComplet.size() < nbTiragesTest + 100) return 0.0;
@@ -88,17 +94,15 @@ public class BacktestService {
             int targetIndex = i;
             LotoTirage tirageReel = historiqueComplet.get(targetIndex);
 
-            // --- OPTIMISATION ---
-            // On ne prend que les 300 tirages précédant le tirage cible pour l'analyse
-            // Cela accélère énormément les streams et boules dans LotoService
-            int endSubList = Math.min(targetIndex + 300, historiqueComplet.size());
-            List<LotoTirage> historiqueConnu = historiqueComplet.subList(targetIndex + 1, endSubList);
+            // On coupe l'historique pour aller plus vite
+            int endSub = Math.min(targetIndex + 1 + historyLimit, historiqueComplet.size());
+            List<LotoTirage> historiqueConnu = historiqueComplet.subList(targetIndex + 1, endSub);
             // --------------------
 
-            List<List<Integer>> grillesGenerees = lotoService.genererGrillesPourSimulation(historiqueConnu, config, 5);
+            // OPTIMISATION MAJEURE ICI : on ne génère que 2 grilles par test
+            List<List<Integer>> grillesGenerees = lotoService.genererGrillesPourSimulation(historiqueConnu, config, 2);
 
             depense += (grillesGenerees.size() * 2.20);
-
             for (List<Integer> g : grillesGenerees) {
                 gain += calculerGainRapide(g, tirageReel);
             }
