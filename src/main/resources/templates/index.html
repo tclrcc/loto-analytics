@@ -140,31 +140,47 @@
         </div>
     </div>
 
-    <div th:if="${lastDraw != null}" class="card border-0 shadow mb-4 animate-up overflow-hidden text-white"
-         style="background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%);">
-        <div class="position-absolute end-0 top-50 translate-middle-y opacity-10 pe-3 d-none d-md-block">
-            <i class="bi bi-trophy-fill" style="font-size: 8rem;"></i>
-        </div>
-        <div class="card-body p-4 position-relative">
-            <div class="row align-items-center">
-                <div class="col-lg-4 text-center text-lg-start mb-3 mb-lg-0">
-                    <div class="card card-gradient-hero badge bg-white bg-opacity-25 mb-2 px-3 py-1 rounded-pill text-uppercase" style="font-size: 0.7rem; letter-spacing: 1px;">
-                        <i class="bi bi-megaphone-fill me-1"></i> Résultat Officiel
+    <div th:if="${lastDraw != null}" class="card border-0 shadow-lg mb-4 animate-up overflow-hidden"
+         style="background: linear-gradient(135deg, #4338ca 0%, #7c3aed 100%); position: relative;">
+
+        <div class="position-absolute top-0 end-0 bg-white opacity-10 rounded-circle"
+             style="width: 300px; height: 300px; transform: translate(30%, -30%); filter: blur(50px);"></div>
+
+        <div class="card-body p-4 p-lg-5 position-relative z-1">
+            <div class="row align-items-center gy-4">
+
+                <div class="col-lg-4 text-center text-lg-start">
+                    <div class="d-inline-flex align-items-center gap-2 px-3 py-1 rounded-pill bg-white bg-opacity-10 border border-white border-opacity-20 mb-3 shadow-sm">
+                        <span class="badge bg-success rounded-circle p-1"><i class="bi bi-check"></i></span>
+                        <span class="text-white small fw-bold text-uppercase" style="letter-spacing: 1px; font-size: 0.7rem;">Résultat Officiel</span>
                     </div>
-                    <h2 class="fw-bold mb-0 text-white">
+
+                    <h2 class="display-6 fw-bold text-white mb-1">
                         <span th:text="${#temporals.format(lastDraw.dateTirage, 'EEEE d MMMM')}">Lundi 1 Janvier</span>
                     </h2>
-                    <small class="text-white-50">Tirage FDJ</small>
+                    <p class="text-white-50 mb-0 small">Tirage certifié par la FDJ</p>
                 </div>
+
                 <div class="col-lg-8">
-                    <div class="d-flex justify-content-center align-items-center gap-2 gap-md-3 flex-wrap">
-                        <span class="ball-display shadow pop-in pop-delay-1" th:text="${lastDraw.boule1}">1</span>
-                        <span class="ball-display shadow pop-in pop-delay-2" th:text="${lastDraw.boule2}">2</span>
-                        <span class="ball-display shadow pop-in pop-delay-3" th:text="${lastDraw.boule3}">3</span>
-                        <span class="ball-display shadow pop-in pop-delay-4" th:text="${lastDraw.boule4}">4</span>
-                        <span class="ball-display shadow pop-in pop-delay-5" th:text="${lastDraw.boule5}">5</span>
-                        <div style="width: 1px; height: 40px; background: rgba(255,255,255,0.3);" class="mx-2 d-none d-md-block"></div>
-                        <span class="ball-display ball-chance shadow pulse-animation pop-in pop-delay-6" th:text="${lastDraw.numeroChance}">C</span>
+                    <div class="d-flex flex-wrap justify-content-center justify-content-lg-end align-items-center gap-3 gap-md-4">
+
+                        <div class="d-flex gap-2 gap-md-3">
+                            <span class="ball-hero shadow-lg pop-in pop-delay-1" th:text="${lastDraw.boule1}">1</span>
+                            <span class="ball-hero shadow-lg pop-in pop-delay-2" th:text="${lastDraw.boule2}">2</span>
+                            <span class="ball-hero shadow-lg pop-in pop-delay-3" th:text="${lastDraw.boule3}">3</span>
+                            <span class="ball-hero shadow-lg pop-in pop-delay-4" th:text="${lastDraw.boule4}">4</span>
+                            <span class="ball-hero shadow-lg pop-in pop-delay-5" th:text="${lastDraw.boule5}">5</span>
+                        </div>
+
+                        <div class="text-white opacity-50 d-none d-md-block">
+                            <i class="bi bi-plus-lg fs-4"></i>
+                        </div>
+
+                        <div class="d-flex flex-column align-items-center pop-in pop-delay-6">
+                            <span class="ball-hero ball-hero-chance shadow-lg pulse-animation" th:text="${lastDraw.numeroChance}">C</span>
+                            <span class="mt-2 text-white fw-bold small text-uppercase" style="font-size: 0.65rem; letter-spacing: 2px;">Chance</span>
+                        </div>
+
                     </div>
                 </div>
             </div>
@@ -867,26 +883,30 @@
             "language": {
                 "processing":     "Traitement en cours...",
                 "search":         "<i class='bi bi-search'></i>",
-                "lengthMenu":     "Afficher _MENU_ éléments",
-                "info":           "Affichage de l'élément _START_ à _END_ sur _TOTAL_ éléments",
-                "infoEmpty":      "Affichage de l'élément 0 à 0 sur 0 élément",
-                "infoFiltered":   "(filtré de _MAX_ éléments au total)",
-                "infoPostFix":    "",
-                "loadingRecords": "Chargement en cours...",
+                "lengthMenu":     "Afficher _MENU_ par page", // Texte du sélecteur
+                "info":           "Page _PAGE_ sur _PAGES_ (_TOTAL_ éléments)",
+                "infoEmpty":      "Aucun élément",
+                "infoFiltered":   "(filtré de _MAX_ éléments)",
+                "loadingRecords": "Chargement...",
                 "zeroRecords":    "<div class='py-4 text-muted'><i class='bi bi-search display-6 mb-2'></i><br>Aucune grille trouvée.</div>",
                 "emptyTable":     "<div class='py-5 text-muted d-flex flex-column align-items-center'><i class='bi bi-ticket-perforated display-4 mb-3 opacity-25'></i><p class='mb-0'>Aucune grille enregistrée.</p><button class='btn btn-sm btn-outline-primary mt-2' data-bs-toggle='modal' data-bs-target='#modalAddBet'>Ajouter ma première grille</button></div>",
                 "paginate": {
-                    "first":      "Premier",
+                    "first":      "Début",
                     "previous":   "<i class='bi bi-chevron-left'></i>",
                     "next":       "<i class='bi bi-chevron-right'></i>",
-                    "last":       "Dernier"
+                    "last":       "Fin"
                 }
             },
-            "order": [[ 0, "desc" ]], // Tri par date décroissante
-            "pageLength": 5,
-            "lengthChange": false,
+            "order": [[ 0, "desc" ]],
+            "pageLength": 5, // Valeur par défaut
+            "lengthChange": true, // Permet de changer le nombre de page
+            "lengthMenu": [ [5, 10, 25, -1], [5, 10, 25, "Tout"] ], // Les options du menu
             "searching": true,
-            "dom": 'rt<"d-flex flex-column align-items-center mt-3"ip>'
+            // DOM Modifié pour inclure 'l' (length) et bien aligner le tout
+            // l = length changing input control
+            // i = information summary
+            // p = pagination control
+            "dom": 'rt<"d-flex flex-wrap justify-content-between align-items-center mt-3 px-3 gap-3"<"d-flex align-items-center"li>p>'
         });
 
         // --- 2. CONFIGURATION DATEPICKER (FLATPICKR) ---

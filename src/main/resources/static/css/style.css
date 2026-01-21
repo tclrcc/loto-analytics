@@ -438,3 +438,51 @@ a { text-decoration: none; }
     .ball-display { width: 40px; height: 40px; font-size: 1.1rem; }
     .card-body { padding: 1rem; }
 }
+
+/* --- BOULES HERO (Affichage Principal) --- */
+
+.ball-hero {
+    width: 60px;
+    height: 60px;
+    background: radial-gradient(circle at 35% 35%, #ffffff, #e2e8f0);
+    color: #1e293b; /* Bleu nuit très foncé pour le contraste */
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.75rem;
+    font-weight: 800;
+    font-family: 'Poppins', sans-serif;
+    /* Ombre portée réaliste */
+    box-shadow:
+            inset -5px -5px 10px rgba(0,0,0,0.1), /* Ombre interne */
+            0 10px 20px rgba(0,0,0,0.3); /* Ombre externe */
+    border: 2px solid rgba(255, 255, 255, 0.4);
+    position: relative;
+    z-index: 10;
+}
+
+/* Boule Chance Spéciale */
+.ball-hero-chance {
+    width: 64px; /* Légèrement plus grande */
+    height: 64px;
+    background: radial-gradient(circle at 30% 30%, #ff4d4d, #dc2626);
+    color: white;
+    border: 3px solid rgba(255, 255, 255, 0.3);
+    text-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    /* Lueur rouge autour */
+    box-shadow: 0 0 25px rgba(220, 38, 38, 0.6);
+}
+
+/* Responsive Mobile : On réduit la taille */
+@media (max-width: 576px) {
+    .ball-hero {
+        width: 45px;
+        height: 45px;
+        font-size: 1.2rem;
+    }
+    .ball-hero-chance {
+        width: 50px;
+        height: 50px;
+    }
+}
