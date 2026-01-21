@@ -95,6 +95,7 @@ public class UserBetService {
                 model.addAttribute("aiTotalGains", aiTotalGains);
                 model.addAttribute("aiSolde", aiSolde);
                 model.addAttribute("aiRoi", aiRoi);
+                model.addAttribute("dateDernierTirage", tirage.getDateTirage());
             } else {
                 model.addAttribute("aiBetsDernierTirage", new ArrayList<>());
             }
