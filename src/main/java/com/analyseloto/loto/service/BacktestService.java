@@ -43,10 +43,12 @@ public class BacktestService {
         List<LotoService.AlgoConfig> configsATester = new ArrayList<>();
 
         int countId = 0;
-        for (double forme = 5.0; forme <= 40.0; forme += 5.0) {
-            for (double ecart = 0.4; ecart <= 1.6; ecart += 0.2) {
-                for (double affinite = 0.0; affinite <= 6.0; affinite += 2.0) {
-                    for (double tension = 0.0; tension <= 20.0; tension += 10.0) {
+        int nbGrillesParTest = 50;
+
+        for (double forme = 5.0; forme <= 50.0; forme += 2.5) {
+            for (double ecart = 0.4; ecart <= 1.8; ecart += 0.2) {
+                for (double affinite = 0.0; affinite <= 10.0; affinite += 1.0) {
+                    for (double tension = 0.0; tension <= 30.0; tension += 15.0) {
                         // On ajoute aussi Markov 0 ou 2 pour voir
                         configsATester.add(new LotoService.AlgoConfig(
                                 "TEST_" + (++countId), 3.0, forme, ecart, tension, 0.0, affinite, false
@@ -74,7 +76,7 @@ public class BacktestService {
 
                 // ON AUGMENTE LA PRÉCISION : 10 grilles par tirage au lieu de 3
                 // Cela évite les "coups de chance" isolés. Une bonne stratégie doit gagner souvent.
-                List<List<Integer>> grilles = lotoService.genererGrillesDepuisScenario(scenar, config, 10);
+                List<List<Integer>> grilles = lotoService.genererGrillesDepuisScenario(scenar, config, nbGrillesParTest);
 
                 depense += (grilles.size() * 2.20);
 
