@@ -305,8 +305,10 @@ public class LotoService {
      * @return contraintes dynamiques
      */
     private DynamicConstraints analyserContraintesDynamiques(List<LotoTirage> history, List<Integer> dernierTirage) {
+        // Sécurité : Si l'historique est vide, on renvoie des contraintes par défaut
+        if (history.isEmpty()) return new DynamicConstraints(2, 3, true, new HashSet<>());
+
         // 1. Analyse Parité (Sur les 10 derniers tirages)
-        // La moyenne théorique est 2.5 pairs par tirage.
         long totalPairsRecents = history.stream().limit(10)
                 .flatMap(t -> t.getBoules().stream())
                 .filter(n -> n % 2 == 0)
@@ -315,23 +317,18 @@ public class LotoService {
         double moyenneRecente = totalPairsRecents / 10.0;
 
         int minP, maxP;
-        // Si on a eu TROP de pairs récemment (> 2.8), on force les IMPAIRS
         if (moyenneRecente > 2.8) {
-            minP = 1; maxP = 2; // On vise 1 ou 2 pairs max (donc 3 ou 4 impairs)
-        }
-        // Si on a eu TROP d'impairs (< 2.2), on force les PAIRS
-        else if (moyenneRecente < 2.2) {
-            minP = 3; maxP = 4; // On vise 3 ou 4 pairs
-        }
-        // Sinon, zone neutre équilibrée
-        else {
-            minP = 2; maxP = 3;
+            minP = 1; maxP = 2; // Trop de pairs récemment → on vise Impair
+        } else if (moyenneRecente < 2.2) {
+            minP = 3; maxP = 4; // Trop d'impairs récemment → on vise Pair
+        } else {
+            minP = 2; maxP = 3; // Zone neutre
         }
 
         // 2. Analyse des Suites (Sur les 5 derniers tirages)
-        // Est-ce qu'une suite (ex: 12-13) est sortie récemment ?
         boolean suiteRecente = false;
         for (int i = 0; i < Math.min(5, history.size()); i++) {
+            // Optimisation : On évite de trier la liste originale du tirage, on copie
             List<Integer> b = new ArrayList<>(history.get(i).getBoules());
             Collections.sort(b);
             for (int k = 0; k < b.size() - 1; k++) {
@@ -342,26 +339,21 @@ public class LotoService {
             }
             if (suiteRecente) break;
         }
-
-        // Si une suite est sortie récemment, on les interdit (trop rare pour sortir 2x).
-        // Si aucune suite n'est sortie depuis 5 tours, on les autorise (la tension monte).
         boolean allowSuites = !suiteRecente;
 
-        // 3. Interdiction stricte du dernier tirage (Anti-répétition immédiate)
+        // 3. RÈGLE "ANTI-SURCHAUFFE" (Utilisation correcte de dernierTirage)
         Set<Integer> forbidden = new HashSet<>();
 
-        // RÈGLE : "ANTI-SURCHAUFFE"
-        // Si un numéro est sorti 3 fois de suite (sur les 3 derniers tirages),
-        // il est statistiquement "cramé". Il y a 99% de chance qu'il ne sorte pas une 4ème fois.
-        // On l'ajoute aux interdits.
-        if (history.size() >= 3) {
-            List<Integer> t1 = history.get(0).getBoules(); // Dernier
+        if (history.size() >= 3 && dernierTirage != null) {
+            // CORRECTION ICI : On utilise le paramètre passé
+            List<Integer> t1 = dernierTirage;
             List<Integer> t2 = history.get(1).getBoules(); // Avant-dernier
             List<Integer> t3 = history.get(2).getBoules(); // Ante-pénultième
 
             for (Integer n : t1) {
+                // Si le numéro est présent dans les 3 derniers tirages consécutifs
                 if (t2.contains(n) && t3.contains(n)) {
-                    forbidden.add(n); // Hop, interdit de jouer ce numéro ce soir
+                    forbidden.add(n); // Il est "cramé", on l'interdit pour le prochain
                 }
             }
         }
@@ -698,11 +690,6 @@ public class LotoService {
         return Constantes.BUCKET_NEUTRAL;
     }
 
-    /**
-     * Création des buckets Hot, Cold, Neutral pour trier les numéros
-     * @param scores scores des numéros
-     * @return Map des buckets
-     */
     /**
      * OPTIMISÉE : Version ultra-rapide sans Streams complexes pour le Backtest
      */
@@ -1181,12 +1168,6 @@ public class LotoService {
     }
 
     /**
-     * Construction optimisée de la matrice d'affinités pondérée
-     * @param history historique des tirages
-     * @param jourCible jour de la semaine cible pour le pondération
-     * @return matrice d'affinités pondérée
-     */
-    /**
      * OPTIMISÉE : Utilise des tableaux primitifs int[][] pour le calcul (x10 plus rapide)
      * et convertit en Map à la fin pour la compatibilité.
      */
@@ -1478,7 +1459,7 @@ public class LotoService {
             Map<Integer, RawStatData> rawBoules = extraireStatsBrutes(historyConnu, 49, cible.getDateTirage().getDayOfWeek(), false, hotFinales);
             Map<Integer, RawStatData> rawChance = extraireStatsBrutes(historyConnu, 10, cible.getDateTirage().getDayOfWeek(), true, Collections.emptySet());
 
-            scenarios.add(new ScenarioSimulation(cible, dernierTirage, matAff, matChance, rawBoules, rawChance, contraintes, null, topTrios));
+            scenarios.add(new ScenarioSimulation(cible, dernierTirage, matAff, matChance, rawBoules, rawChance, contraintes, topTrios));
         }
         return scenarios;
     }
