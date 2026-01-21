@@ -1,31 +1,64 @@
 /* =========================================
-   1. VARIABLES & BASE
+   1. VARIABLES & CONFIGURATION
    ========================================= */
 :root {
-    --primary-color: #0d6efd;
+    /* --- Palette de Couleurs --- */
+    --primary-color: #4F46E5;
+    --primary-dark: #4338ca;
     --secondary-bg: #f8f9fa;
-    /* Ajout du dégradé global */
-    --primary-gradient: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%);
-}
+    --text-main: #1e293b;
+    --text-muted: #64748b;
 
-body {
-    font-family: 'Poppins', sans-serif;
-    background-color: #f3f4f6; /* Harmonisé avec le HTML */
-    color: #333;
-    min-height: 100vh;
-    display: flex;
-    flex-direction: column;
+    /* --- Gradients --- */
+    --gradient-primary: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%);
+    --gradient-gold: linear-gradient(45deg, #F59E0B, #FBBF24);
+    --gradient-dark: linear-gradient(to right, #0f172a, #1e293b);
+    --gradient-hero: linear-gradient(43deg, #4158D0 0%, #C850C0 46%, #FFCC70 100%);
+
+    /* --- Ombres (Douces et colorées) --- */
+    --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+    --shadow-glow: 0 0 15px rgba(79, 70, 229, 0.3);
+
+    /* --- Glassmorphism --- */
+    --glass-bg: rgba(255, 255, 255, 0.7);
+    --glass-border: 1px solid rgba(255, 255, 255, 0.5);
+    --glass-blur: blur(12px);
 }
 
 /* =========================================
-   2. NAVBAR PREMIUM
+   2. RESET & BASE
+   ========================================= */
+body {
+    font-family: 'Poppins', sans-serif;
+    background-color: #f3f4f6;
+    color: var(--text-main);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    -webkit-font-smoothing: antialiased; /* Rendu texte plus net (Mac) */
+    -moz-osx-font-smoothing: grayscale;
+}
+
+a { text-decoration: none; }
+
+/* Utilitaires Glassmorphism (à appliquer sur n'importe quel div) */
+.glass-panel {
+    background: var(--glass-bg);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    border: var(--glass-border);
+    box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.05);
+}
+
+/* =========================================
+   3. NAVBAR PREMIUM
    ========================================= */
 .navbar-custom {
-    /* Le fix sombre demandé (Bleu nuit profond) */
-    background: linear-gradient(to right, #0f172a, #1e293b);
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
-    padding-top: 0.8rem;
-    padding-bottom: 0.8rem;
+    background: var(--gradient-dark);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+    padding: 0.8rem 0;
 }
 
 .navbar-brand {
@@ -33,26 +66,25 @@ body {
     font-size: 1.3rem;
     letter-spacing: -0.5px;
     color: #fff !important;
-    text-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    text-shadow: 0 2px 4px rgba(0,0,0,0.3);
 }
 
 .navbar-custom .nav-link {
     font-weight: 500;
-    color: rgba(255, 255, 255, 0.95) !important;
-    transition: all 0.3s ease;
+    color: rgba(255, 255, 255, 0.85) !important;
+    transition: color 0.3s ease, transform 0.3s ease;
     position: relative;
     padding: 0.5rem 1rem !important;
-    margin-right: 15px;
+    margin-right: 5px;
 }
 
-/* Effet de survol Premium (Point lumineux + Texte blanc pur) */
 .navbar-custom .nav-link:hover {
-    color: #ffffff !important;
-    text-shadow: 0 0 10px rgba(255,255,255,0.5);
-    transform: translateY(-1px);
+    color: #fff !important;
+    transform: translateY(-2px);
+    text-shadow: 0 0 8px rgba(255,255,255,0.6);
 }
 
-/* Ligne dorée animée sous les liens */
+/* Ligne dorée animée */
 .navbar-custom .nav-link::after {
     content: '';
     position: absolute;
@@ -60,428 +92,258 @@ body {
     height: 2px;
     bottom: 5px;
     left: 50%;
-    background-color: #ffd700; /* Or */
-    transition: all 0.3s ease;
+    background: #ffd700;
+    transition: width 0.3s ease, transform 0.3s ease;
     transform: translateX(-50%);
 }
 
 .navbar-custom .nav-link:hover::after {
-    width: 20px;
+    width: 25px;
 }
 
 /* Avatar Utilisateur */
 .user-avatar {
-    width: 38px;
-    height: 38px;
-    background: rgba(255,255,255,0.15);
+    width: 38px; height: 38px;
+    background: rgba(255,255,255,0.1);
     backdrop-filter: blur(4px);
     border: 1px solid rgba(255,255,255,0.2);
     color: white;
     border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-weight: bold;
-    font-size: 1.1rem;
-    transition: all 0.3s ease;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700;
+    transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 .user-dropdown-toggle:hover .user-avatar {
     background: #ffd700;
-    color: #333;
-    transform: rotate(10deg);
+    color: #1e293b;
+    transform: scale(1.1) rotate(10deg);
+    box-shadow: 0 0 15px rgba(255, 215, 0, 0.5);
 }
 
 /* Menu Déroulant */
 .dropdown-menu-custom {
     border: none;
     border-radius: 12px;
-    box-shadow: 0 10px 30px rgba(0,0,0,0.15);
-    overflow: hidden;
-    margin-top: 10px;
-    animation: slideDown 0.2s ease forwards;
+    box-shadow: var(--shadow-lg);
+    margin-top: 12px;
+    animation: slideDown 0.3s ease forwards;
+    padding: 0.5rem;
 }
 
 .dropdown-item {
-    padding: 0.7rem 1.2rem;
-    font-size: 0.95rem;
-    transition: background 0.2s;
+    border-radius: 8px;
+    padding: 0.6rem 1rem;
+    font-size: 0.9rem;
+    font-weight: 500;
+    transition: all 0.2s;
 }
 
 .dropdown-item:hover {
-    background-color: #f0f2f5;
+    background-color: #f1f5f9;
     color: var(--primary-color);
+    transform: translateX(5px);
 }
 
 .dropdown-item.text-danger:hover {
-    background-color: #fee2e2;
-    color: #dc2626;
+    background-color: #fef2f2;
+    color: #ef4444;
 }
 
 /* =========================================
-   3. CARTES & CONTENEURS
+   4. CARTES & LAYOUT
    ========================================= */
+.container.pb-5 { flex: 1; }
+
 .card {
     border: none;
-    border-radius: 1rem;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.05);
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    border-radius: 16px; /* Plus arrondi pour look moderne */
+    box-shadow: var(--shadow-sm);
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+    background: white;
+    overflow: hidden; /* Important pour les effets de bordure */
 }
 
+/* Effet de survol subtil */
 .card:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 6px 15px rgba(0,0,0,0.08);
+    transform: translateY(-4px);
+    box-shadow: var(--shadow-lg);
 }
 
-/* Styles spécifiques Stats (depuis HTML) */
-.stat-card {
-    transition: all 0.3s ease;
-    border: none;
-    border-radius: 1rem;
-}
-.stat-card:hover {
-    transform: translateY(-5px);
-    box-shadow: 0 10px 20px rgba(0,0,0,0.1);
-}
-.balance-card-gradient {
-    background: var(--primary-gradient);
+/* Hero Card Gradient */
+.card-gradient-hero {
+    background: var(--gradient-hero);
     color: white;
-}
-
-.container.pb-5 {
-    flex: 1; /* Pousse le footer vers le bas */
+    border: none;
 }
 
 /* =========================================
-   4. NAVIGATION ONGLETS (Nav Pills)
+   5. NAVIGATION ONGLETS & FILTRES
    ========================================= */
-/* Style harmonisé pour les onglets d'analyse */
 .nav-pills .nav-link {
-    color: #4b5563 !important; /* Gris foncé pour le texte inactif */
-    background-color: #ffffff;
-    border: 1px solid #e5e7eb;
-    margin: 0 2px;
+    color: var(--text-muted) !important;
+    background-color: white;
+    border: 1px solid #e2e8f0;
+    margin: 0 4px;
     font-weight: 600;
+    border-radius: 8px;
     transition: all 0.2s;
-    cursor: pointer;
 }
 
 .nav-pills .nav-link:hover {
-    background-color: #f3f4f6;
-    color: #4F46E5 !important;
+    background-color: #f8fafc;
+    color: var(--primary-color) !important;
 }
 
 .nav-pills .nav-link.active {
-    background: var(--primary-gradient) !important;
-    color: #ffffff !important;
+    background: var(--gradient-primary) !important;
+    color: white !important;
     border-color: transparent;
-    box-shadow: 0 4px 6px rgba(79, 70, 229, 0.3);
+    box-shadow: var(--shadow-glow);
 }
 
 /* =========================================
-   5. DASHBOARD FINANCIER & STATUTS
-   ========================================= */
-.balance-positive { border-left: 5px solid #198754; background-color: #d1e7dd; color: #0f5132; }
-.balance-negative { border-left: 5px solid #dc3545; background-color: #f8d7da; color: #842029; }
-
-/* Statut des paris (Bordures colorées) */
-.bet-pending { border-left: 4px solid #ffc107; }
-.bet-won { border-left: 4px solid #198754; }
-.bet-lost { border-left: 4px solid #dc3545; }
-
-/* =========================================
-   6. MODULES SPÉCIFIQUES (Boules, Heatmap)
+   6. ÉLÉMENTS LOTO (Boules 3D)
    ========================================= */
 
-/* Styles des boules (Badge résultat) */
-.loto-badge {
-    width: 28px;
-    height: 28px;
-    line-height: 26px;
-    font-size: 0.85rem;
+/* Mixin pour l'aspect boule 3D */
+.ball-base {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     font-weight: 700;
-    display: inline-block;
-    padding: 0;
-    text-align: center;
-    transition: all 0.3s ease;
+    border-radius: 50%;
+    /* Ombre portée pour détacher la boule du fond */
+    box-shadow: 2px 4px 6px rgba(0,0,0,0.15), inset -2px -4px 4px rgba(0,0,0,0.1);
 }
 
-/* Styles des boules (Input Formulaire) */
+/* Grandes boules (Résultat Header) */
+.ball-display {
+    width: 48px; height: 48px;
+    background: radial-gradient(circle at 30% 30%, #ffffff, #e2e8f0);
+    color: var(--primary-dark);
+    font-size: 1.4rem;
+    font-family: 'Poppins', sans-serif;
+    border: 1px solid rgba(255,255,255,0.5);
+    @extend .ball-base; /* Pseudo-code conceptuel, appliqué via CSS ci-dessous */
+    box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+}
+
+/* Boule Chance (Rouge) */
+.ball-chance {
+    background: radial-gradient(circle at 30% 30%, #ef4444, #b91c1c);
+    color: white;
+    border: 2px solid rgba(255,255,255,0.4);
+    text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+}
+
+/* Petites boules (Listes & Tableaux) */
+.loto-badge, .ai-ball {
+    width: 32px; height: 32px; /* Un peu plus grand pour la lisibilité */
+    font-size: 0.9rem;
+    line-height: 32px;
+    display: inline-block;
+    text-align: center;
+    border-radius: 50%;
+    font-weight: 700;
+}
+
+/* Boules IA dans les cartes */
+.ai-ball.bg-dark {
+    background: radial-gradient(circle at 30% 30%, #334155, #0f172a) !important;
+    color: white;
+    box-shadow: 1px 2px 4px rgba(0,0,0,0.2);
+}
+.ai-ball.bg-danger {
+    background: radial-gradient(circle at 30% 30%, #ef4444, #991b1b) !important;
+    color: white;
+    box-shadow: 0 0 10px rgba(239, 68, 68, 0.4);
+}
+
+/* Input Formulaire */
 .loto-ball-input {
-    width: 50px;
-    height: 50px;
+    width: 50px; height: 50px;
     border-radius: 50%;
     text-align: center;
     font-weight: 700;
     font-size: 1.2rem;
     border: 2px solid #e5e7eb;
+    background: white;
     margin: 0 auto;
     transition: all 0.2s;
 }
 .loto-ball-input:focus {
-    border-color: #4F46E5;
-    box-shadow: 0 0 0 4px rgba(79, 70, 229, 0.1);
-}
-
-/* Heatmap Grid */
-.heatmap-cell {
-    width: 45px; height: 45px;
-    display: flex; align-items: center; justify-content: center;
-    border-radius: 8px;
-    font-weight: bold; color: white;
-    font-size: 0.9rem;
-    transition: transform 0.15s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-    cursor: pointer;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-}
-.heatmap-cell:hover {
-    transform: scale(1.15);
-    z-index: 10;
-}
-
-/* Effets visuels boules */
-.opacity-50 { opacity: 0.4; filter: grayscale(100%); }
-.glowing-border { box-shadow: 0 0 8px rgba(220, 53, 69, 0.6); animation: pulse-red 2s infinite; }
-
-/* Canvas Graphique */
-canvas { max-height: 400px; }
-
-/* =========================================
-   7. PLUGINS CUSTOM (DataTables & Flatpickr)
-   ========================================= */
-
-/* --- DATATABLES PAGINATION --- */
-.dataTables_wrapper .dataTables_paginate {
-    padding-top: 1rem;
-    display: flex;
-    justify-content: center;
-    gap: 5px;
-}
-
-.dataTables_wrapper .page-item .page-link {
-    border: none;
-    border-radius: 50% !important;
-    width: 38px; height: 38px;
-    display: flex; align-items: center; justify-content: center;
-    color: #6b7280; font-weight: 600; font-size: 0.9rem;
-    background-color: transparent;
-    transition: all 0.2s ease-in-out;
-    margin: 0 2px;
-}
-
-.dataTables_wrapper .page-item .page-link:focus { box-shadow: none; }
-
-.dataTables_wrapper .page-item:not(.active):not(.disabled) .page-link:hover {
-    background-color: #e0e7ff;
-    color: #4F46E5;
-    transform: translateY(-2px);
-}
-
-.dataTables_wrapper .page-item.active .page-link {
-    background: var(--primary-gradient);
-    color: white;
-    box-shadow: 0 4px 10px rgba(79, 70, 229, 0.4);
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 4px rgba(79, 70, 229, 0.15);
     transform: scale(1.1);
 }
 
-.dataTables_wrapper .page-item.disabled .page-link {
-    background-color: transparent;
-    color: #d1d5db;
+/* Heatmap */
+.heatmap-cell {
+    width: 45px; height: 45px;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 10px;
+    font-weight: bold; color: white;
+    font-size: 0.9rem;
+    transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    cursor: pointer;
+    box-shadow: var(--shadow-sm);
 }
-
-.dataTables_wrapper .dataTables_info {
-    font-size: 0.8rem;
-    color: #9ca3af;
-    text-align: center;
-    margin-top: 10px;
-    font-style: italic;
-}
-
-/* --- FLATPICKR CALENDAR --- */
-.flatpickr-day.selected, .flatpickr-day.startRange, .flatpickr-day.endRange,
-.flatpickr-day.selected.inRange, .flatpickr-day.selected:focus, .flatpickr-day.selected:hover {
-    background: var(--primary-gradient) !important;
-    border-color: #4F46E5 !important;
-}
-.flatpickr-day.disabled, .flatpickr-day.disabled:hover {
-    color: #cbd5e1 !important;
-    background: transparent !important;
+.heatmap-cell:hover {
+    transform: scale(1.15) translateY(-2px);
+    z-index: 10;
+    box-shadow: var(--shadow-md);
 }
 
 /* =========================================
-   8. ANIMATIONS & BOUTONS
+   7. ANIMATIONS & INTERACTIVITÉ
    ========================================= */
 
-/* Bouton Magique (Dégradé Orange) */
-.btn-magic {
-    background: linear-gradient(45deg, #F59E0B, #FBBF24);
-    border: none;
-    color: #fff;
-    font-weight: 600;
-    box-shadow: 0 4px 15px rgba(245, 158, 11, 0.4);
-}
-.btn-magic:hover {
-    transform: scale(1.02);
-    color: #fff;
+/* Apparition (Utilisé pour les cartes pronostics) */
+.animate-up {
+    opacity: 0;
+    animation: slideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    will-change: transform, opacity;
 }
 
-/* Apparition vers le haut */
-.animate-up {
-    animation: slideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-    opacity: 0;
-    transform: translateY(20px);
-}
 @keyframes slideUp {
-    from { opacity: 0; transform: translateY(20px); }
+    from { opacity: 0; transform: translateY(30px); }
     to { opacity: 1; transform: translateY(0); }
 }
 
-/* Délais */
-.delay-1 { animation-delay: 0.1s; }
-.delay-2 { animation-delay: 0.2s; }
-.delay-3 { animation-delay: 0.3s; }
-.delay-4 { animation-delay: 0.4s; }
+/* Pop-in (Pour les boules du header) */
+.pop-in {
+    opacity: 0;
+    transform: scale(0.5);
+    animation: popIn 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+@keyframes popIn {
+    to { opacity: 1; transform: scale(1); }
+}
+
+/* Slide Down (Menus) */
+@keyframes slideDown {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
 
 /* Pulsations */
+.pulse-animation { animation: pulse-red 2s infinite; }
 .btn-pulse { animation: pulse-shadow 2s infinite; }
+
 @keyframes pulse-shadow {
     0% { box-shadow: 0 0 0 0 rgba(255, 193, 7, 0.4); }
     70% { box-shadow: 0 0 0 10px rgba(255, 193, 7, 0); }
     100% { box-shadow: 0 0 0 0 rgba(255, 193, 7, 0); }
 }
 @keyframes pulse-red {
-    0% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.7); }
-    70% { box-shadow: 0 0 0 6px rgba(220, 53, 69, 0); }
-    100% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0); }
-}
-
-/* Menu Dropdown Animation */
-@keyframes slideDown {
-    from { opacity: 0; transform: translateY(-10px); }
-    to { opacity: 1; transform: translateY(0); }
-}
-
-/* Fade In */
-.fade-in { animation: fadeIn 0.5s ease-in-out; }
-@keyframes fadeIn {
-    from { opacity: 0; transform: translateY(10px); }
-    to { opacity: 1; transform: translateY(0); }
-}
-
-/* =========================================
-   9. PIED DE PAGE (Footer)
-   ========================================= */
-.footer {
-    background-color: #ffffff;
-    border-top: 1px solid rgba(0,0,0,0.05);
-    padding: 2rem 0;
-    margin-top: auto;
-    font-size: 0.9rem;
-    color: #6c757d;
-}
-
-.footer a { color: #6c757d; text-decoration: none; transition: color 0.2s; }
-.footer a:hover { color: var(--primary-color); }
-
-.footer-social-btn {
-    width: 36px; height: 36px;
-    display: inline-flex; align-items: center; justify-content: center;
-    background-color: #f8f9fa;
-    border-radius: 50%;
-    margin-left: 0.5rem;
-    transition: all 0.2s ease;
-}
-
-.footer-social-btn:hover {
-    background-color: var(--primary-color);
-    color: white !important;
-    transform: translateY(-3px);
-}
-
-/* =========================================
-   10. UTILITAIRES DIVERS
-   ========================================= */
-/* Input Focus */
-.form-control:focus, .form-select:focus {
-    transform: translateY(-1px);
-    box-shadow: 0 4px 10px rgba(13, 110, 253, 0.15);
-}
-
-/* Glassmorphism Modales */
-.modal-content {
-    backdrop-filter: blur(10px);
-    background-color: rgba(255, 255, 255, 0.95);
-}
-
-/* Petite listes stats */
-.small-list .list-group-item {
-    font-size: 0.9rem; padding: 0.6rem 1rem;
-    border-bottom: 1px solid rgba(0,0,0,0.05);
-    background-color: #fff; transition: background-color 0.2s;
-}
-.small-list .list-group-item:hover { background-color: #f8f9fa; }
-.small-list .list-group-item:last-child { border-bottom: none; }
-
-.ball-display {
-    width: 50px; height: 50px;
-    background-color: white;
-    color: #4F46E5; /* Couleur du thème */
-    border-radius: 50%;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 1.5rem;
-    font-weight: 700;
-    font-family: 'Poppins', sans-serif;
-}
-
-.ball-chance {
-    background-color: #ef4444; /* Rouge */
-    color: white;
-    border: 3px solid rgba(255,255,255,0.3);
-}
-
-/* Petite animation pour attirer l'oeil sur la chance */
-@keyframes pulse-red {
     0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
-    70% { transform: scale(1.05); box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
+    70% { transform: scale(1.05); box-shadow: 0 0 0 12px rgba(239, 68, 68, 0); }
     100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
 }
-.pulse-animation {
-    animation: pulse-red 2s infinite;
-}
 
-/* Responsive : plus petit sur mobile */
-@media (max-width: 576px) {
-    .ball-display { width: 40px; height: 40px; font-size: 1.2rem; }
-}
-
-/* --- ANIMATIONS LOTO --- */
-
-/* 1. Fond animé du header */
-.animated-gradient-bg {
-    background: linear-gradient(270deg, #4f46e5, #7c3aed, #2563eb);
-    background-size: 200% 200%;
-    animation: gradientMove 6s ease infinite;
-}
-
-@keyframes gradientMove {
-    0% { background-position: 0% 50%; }
-    50% { background-position: 100% 50%; }
-    100% { background-position: 0% 50%; }
-}
-
-/* 2. Effet d'apparition (Pop-in) - INDISPENSABLE POUR VOIR LE RÉSULTAT */
-.pop-in {
-    animation: popIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
-    opacity: 0; /* C'est ça qui cache l'élément au début */
-    transform: scale(0);
-}
-
-/* C'est ce bloc qui rend l'élément visible ! */
-@keyframes popIn {
-    to { opacity: 1; transform: scale(1); }
-}
-
-/* Délais */
+/* Délais d'animation */
 .pop-delay-1 { animation-delay: 0.1s; }
 .pop-delay-2 { animation-delay: 0.2s; }
 .pop-delay-3 { animation-delay: 0.3s; }
@@ -489,15 +351,90 @@ canvas { max-height: 400px; }
 .pop-delay-5 { animation-delay: 0.5s; }
 .pop-delay-6 { animation-delay: 0.6s; }
 
-/* 3. Effet Verre au survol */
-.glass-hover {
-    transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-    position: relative;
-    overflow: hidden;
-    z-index: 1;
+/* Bouton Magique */
+.btn-magic {
+    background: var(--gradient-gold);
+    border: none;
+    color: white;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    box-shadow: 0 4px 15px rgba(245, 158, 11, 0.4);
 }
-.glass-hover:hover {
-    transform: translateY(-8px) scale(1.02);
-    box-shadow: 0 15px 30px rgba(0,0,0,0.15) !important;
-    border-color: #4f46e5 !important;
+.btn-magic:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(245, 158, 11, 0.6);
+    color: white;
+}
+
+/* =========================================
+   8. PLUGINS CUSTOM (Flatpickr & DataTables)
+   ========================================= */
+
+/* Calendrier */
+.flatpickr-calendar {
+    border: none !important;
+    box-shadow: var(--shadow-lg) !important;
+    border-radius: 12px !important;
+}
+.flatpickr-day.selected {
+    background: var(--primary-color) !important;
+    border-color: var(--primary-color) !important;
+}
+
+/* Pagination Tableau */
+.dataTables_wrapper .page-item .page-link {
+    border-radius: 50%;
+    width: 36px; height: 36px;
+    display: flex; align-items: center; justify-content: center;
+    border: none;
+    color: var(--text-muted);
+    font-weight: 600;
+    margin: 0 2px;
+}
+.dataTables_wrapper .page-item.active .page-link {
+    background: var(--gradient-primary);
+    color: white;
+    box-shadow: 0 4px 10px rgba(79, 70, 229, 0.3);
+}
+
+/* =========================================
+   9. FOOTER & UTILITAIRES
+   ========================================= */
+.footer {
+    background: white;
+    border-top: 1px solid #f1f5f9;
+    padding: 3rem 0;
+    margin-top: auto;
+    color: var(--text-muted);
+}
+
+.footer-social-btn {
+    width: 40px; height: 40px;
+    display: inline-flex; align-items: center; justify-content: center;
+    background: #f1f5f9;
+    border-radius: 50%;
+    color: var(--text-muted);
+    transition: all 0.3s;
+}
+.footer-social-btn:hover {
+    background: var(--primary-color);
+    color: white;
+    transform: translateY(-3px);
+}
+
+/* Indicateurs Dashboard */
+.balance-positive { border-left: 5px solid #10b981; background: #ecfdf5; color: #065f46; }
+.balance-negative { border-left: 5px solid #ef4444; background: #fef2f2; color: #991b1b; }
+
+/* Focus global */
+.form-control:focus, .form-select:focus {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 4px rgba(79, 70, 229, 0.1);
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .ball-display { width: 40px; height: 40px; font-size: 1.1rem; }
+    .card-body { padding: 1rem; }
 }

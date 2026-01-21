@@ -1323,6 +1323,22 @@ public class LotoService {
         );
     }
 
+    public void verificationAuDemarrage() {
+        // Si une config est déjà chargée (via @PostConstruct) et qu'elle date d'aujourd'hui
+        if (this.cachedBestConfig != null && LocalDate.now().equals(this.lastBacktestDate)) {
+            log.info("✋ [WARMUP] Stratégie du jour déjà présente en mémoire/BDD. Calcul inutile.");
+
+            // On peut regénérer les pronostics du jour ici si le cache est vide,
+            // c'est rapide (0ms) et ça préchauffe le cache "DailyPronos"
+            genererMultiplesPronostics(recupererDateProchainTirage(), 5);
+            return;
+        }
+
+        // Sinon, c'est que la base est vide ou date d'hier : on lance le calcul
+        log.info("⚠️ [WARMUP] Aucune stratégie valide pour ce jour. Lancement du calcul...");
+        forceDailyOptimization();
+    }
+
     /**
      * Méthode appelée par le scheduler pour forcer l'optimisation quotidienne
      */

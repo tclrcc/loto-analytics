@@ -412,16 +412,29 @@ document.addEventListener('DOMContentLoaded', () => {
         const listContainer = document.getElementById('pronoList');
         const dateLabel = document.getElementById('pronoDate');
 
+        // 1. Affichage du container et mise à jour de la date
         container.classList.remove('d-none');
         if(dateLabel) {
             const d = new Date(dateStr);
             dateLabel.textContent = d.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
         }
 
+        // 2. CORRECTION IMPORTANTE : Recréation du bouton "Tout"
+        // On cible le conteneur de boutons dans le header de la carte
+        const headerBtnGroup = container.querySelector('.d-flex.justify-content-between .btn-group');
+        if(headerBtnGroup) {
+            headerBtnGroup.innerHTML = `
+            <button class="btn btn-sm btn-outline-secondary" onclick="toggleAllGrids()">
+                <i class="bi bi-check-all"></i> Tout
+            </button>`;
+        }
+
+        // 3. Nettoyage de la liste précédente
         listContainer.innerHTML = '';
 
+        // 4. Génération des nouvelles cartes
         list.forEach((bet, index) => {
-            // Badge Type Algo
+            // Gestion des Badges Algo
             let badgeHtml = '';
             const type = bet.typeAlgo || '';
             if (type.includes('GENETIQUE') || type.includes('OPTIMAL'))
@@ -431,7 +444,7 @@ document.addEventListener('DOMContentLoaded', () => {
             else
                 badgeHtml = '<span class="badge bg-secondary bg-opacity-10 text-dark border"><i class="bi bi-dice-5-fill"></i> Hasard</span>';
 
-            // Gestion numeroChance
+            // Gestion sécurisée du numéro chance (compatible avec les différents noms de champs DTO)
             const chanceNum = bet.numeroChance !== undefined ? bet.numeroChance : bet.chance;
 
             const col = document.createElement('div');
@@ -439,35 +452,35 @@ document.addEventListener('DOMContentLoaded', () => {
             col.style.animationDelay = (index * 0.05) + 's';
 
             col.innerHTML = `
-                <div class="card h-100 shadow-sm border-light grid-card cursor-pointer position-relative" 
-                     id="grid-card-${index}"
-                     onclick="toggleGridSelection(${index}, this)">
-                    
-                    <div class="position-absolute top-0 end-0 p-2">
-                        <input type="checkbox" class="form-check-input fs-5" id="check-${index}" style="pointer-events: none;">
-                    </div>
+            <div class="card h-100 shadow-sm border-light grid-card cursor-pointer position-relative" 
+                 id="grid-card-${index}"
+                 onclick="toggleGridSelection(${index}, this)">
+                
+                <div class="position-absolute top-0 end-0 p-2">
+                    <input type="checkbox" class="form-check-input fs-5" id="check-${index}" style="pointer-events: none;">
+                </div>
 
-                    <div class="card-body p-3">
-                        <div class="d-flex align-items-center mb-2 gap-2">
-                            <span class="badge bg-light text-muted border">#${index + 1}</span>
-                            ${badgeHtml}
-                        </div>
-                        
-                        <div class="d-flex justify-content-center gap-1 mb-3">
-                            ${bet.boules.map(b => `<span class="badge rounded-circle bg-dark fs-6 d-flex align-items-center justify-content-center shadow-sm" style="width:32px; height:32px;">${b}</span>`).join('')}
-                            <span class="badge rounded-circle bg-danger fs-6 d-flex align-items-center justify-content-center shadow-sm" style="width:32px; height:32px;">${chanceNum}</span>
-                        </div>
-                        
-                        <div class="small text-muted bg-light p-2 rounded mb-0 d-flex justify-content-between align-items-center">
-                            <div><i class="bi bi-graph-up me-1"></i>Score: <strong>${bet.scoreGlobal}</strong></div>
-                            <button class="btn btn-xs btn-link text-decoration-none p-0" 
-                                    onclick="event.stopPropagation(); preparerGrille(${bet.boules[0]}, ${bet.boules[1]}, ${bet.boules[2]}, ${bet.boules[3]}, ${bet.boules[4]}, ${chanceNum})"
-                                    title="Jouer cette grille seule">
-                                Jouer seul
-                            </button>
-                        </div>
+                <div class="card-body p-3">
+                    <div class="d-flex align-items-center mb-2 gap-2">
+                        <span class="badge bg-light text-muted border">#${index + 1}</span>
+                        ${badgeHtml}
                     </div>
-                </div>`;
+                    
+                    <div class="d-flex justify-content-center gap-1 mb-3">
+                        ${bet.boules.map(b => `<span class="badge rounded-circle bg-dark fs-6 d-flex align-items-center justify-content-center shadow-sm" style="width:32px; height:32px;">${b}</span>`).join('')}
+                        <span class="badge rounded-circle bg-danger fs-6 d-flex align-items-center justify-content-center shadow-sm" style="width:32px; height:32px;">${chanceNum}</span>
+                    </div>
+                    
+                    <div class="small text-muted bg-light p-2 rounded mb-0 d-flex justify-content-between align-items-center">
+                        <div><i class="bi bi-graph-up me-1"></i>Score: <strong>${bet.scoreGlobal}</strong></div>
+                        <button class="btn btn-xs btn-link text-decoration-none p-0" 
+                                onclick="event.stopPropagation(); preparerGrille(${bet.boules[0]}, ${bet.boules[1]}, ${bet.boules[2]}, ${bet.boules[3]}, ${bet.boules[4]}, ${chanceNum})"
+                                title="Jouer cette grille seule">
+                            Jouer seul
+                        </button>
+                    </div>
+                </div>
+            </div>`;
 
             listContainer.appendChild(col);
         });

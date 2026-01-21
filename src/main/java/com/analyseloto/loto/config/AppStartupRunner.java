@@ -20,7 +20,7 @@ public class AppStartupRunner {
     @EventListener(ApplicationReadyEvent.class)
     public void warmupCache() {
         log.info("🔥 [WARMUP] Initialisation au démarrage...");
-        // Appelle la même méthode que le CRON
-        lotoService.forceDailyOptimization();
+        // Appelle méthode vérification config algo
+        lotoService.verificationAuDemarrage();
     }
 }
