@@ -23,58 +23,68 @@ public class BacktestService {
      * @return Meilleure configuration trouvée
      */
     public LotoService.AlgoConfig trouverMeilleureConfig(List<LotoTirage> historiqueComplet) {
-        log.info("🧪 Démarrage de l'optimisation PARALLÈLE...");
+        log.info("🧪 Démarrage de l'optimisation HYPER-RAPIDE...");
         long start = System.currentTimeMillis();
 
-        // 1. On génère toutes les combinaisons possibles dans une liste
-        List<LotoService.AlgoConfig> configsATester = new ArrayList<>();
+        // 1. PRÉ-CALCUL DES SCÉNARIOS (Le secret de la vitesse)
+        // On prépare les données pour les 100 derniers tirages (Beaucoup plus représentatif que 50)
+        // HistoryDepth = 250 (suffisant pour les matrices)
+        log.info("📸 Pré-calcul des snapshots historiques...");
+        List<LotoService.ScenarioSimulation> scenarios = lotoService.preparerScenariosBacktest(historiqueComplet, 100, 250);
+        log.info("✅ {} Scénarios prêts en mémoire.", scenarios.size());
 
-        double[] poidsFormeOpts = {10.0, 15.0, 20.0, 25.0, 30.0};
-        double[] poidsEcartOpts = {0.6, 0.8, 1.0, 1.2, 1.4};
-        double[] poidsMarkovOpts = {0.0, 2.0};
-        double[] poidsAffiniteOpts = {0.0, 1.0, 3.0};
+        // 2. Génération des Configs à tester
+        List<LotoService.AlgoConfig> configsATester = new ArrayList<>();
+        double[] poidsFormeOpts = {10.0, 20.0, 30.0, 40.0};
+        double[] poidsEcartOpts = {0.5, 1.0, 1.5};
+        double[] poidsAffiniteOpts = {1.0, 3.0, 5.0}; // On insiste sur l'affinité
+        // On fixe les autres pour réduire le volume si besoin, ou on boucle
 
         int i = 0;
         for (double pForme : poidsFormeOpts) {
             for (double pEcart : poidsEcartOpts) {
-                for (double pMarkov : poidsMarkovOpts) {
-                    for (double pAff : poidsAffiniteOpts) {
-                        configsATester.add(new LotoService.AlgoConfig(
-                                "TEST_" + i++, 3.0, pForme, pEcart, 12.0, pMarkov, pAff, false
-                        ));
-                    }
+                for (double pAff : poidsAffiniteOpts) {
+                    configsATester.add(new LotoService.AlgoConfig(
+                            "TEST_" + i++, 3.0, pForme, pEcart, 12.0, 0.0, pAff, false
+                    ));
                 }
             }
         }
 
-        log.info("📊 Analyse de {} stratégies sur tous les cœurs CPU...", configsATester.size());
-
-        // 2. Variable atomique pour gérer la concurrence (Thread-safe)
-        // On utilise un wrapper pour stocker le meilleur résultat
+        // 3. BACKTEST PARALLÈLE
         final var bestResultRef = new Object() {
             LotoService.AlgoConfig config = LotoService.AlgoConfig.defaut();
             double maxBilan = -Double.MAX_VALUE;
         };
 
-        // 3. TRAITEMENT PARALLÈLE (Le turbo !)
         configsATester.parallelStream().forEach(config -> {
+            double bilan = 0;
+            double depense = 0;
 
-            // 50 tirages tests
-            double bilan = simulerSurHistorique(config, historiqueComplet, 50);
+            // Boucle sur les scénarios pré-calculés (Pas d'accès BDD, pas de calcul matrice !)
+            for (LotoService.ScenarioSimulation scenar : scenarios) {
+                // Génération éclair (3 grilles par tirage suffisent pour la tendance)
+                List<List<Integer>> grilles = lotoService.genererGrillesDepuisScenario(scenar, config, 3);
 
-            // Bloc synchronisé pour mettre à jour le record
+                depense += (grilles.size() * 2.20);
+                for (List<Integer> g : grilles) {
+                    bilan += calculerGainRapide(g, scenar.getTirageReel());
+                }
+            }
+
+            double net = bilan - depense;
+
             synchronized (bestResultRef) {
-                if (bilan > bestResultRef.maxBilan) {
-                    bestResultRef.maxBilan = bilan;
+                if (net > bestResultRef.maxBilan) {
+                    bestResultRef.maxBilan = net;
                     bestResultRef.config = config;
-                    log.info("🚀 Record [Thread] ! Bilan: {} € | Config: F={}, E={}, M={}, A={}",
-                            String.format("%.2f", bilan), config.getPoidsForme(), config.getPoidsEcart(), config.getPoidsMarkov(), config.getPoidsAffinite());
+                    log.info("🚀 Record : {} € (Forme={}, Ecart={}, Aff={})", String.format("%.2f", net), config.getPoidsForme(), config.getPoidsEcart(), config.getPoidsAffinite());
                 }
             }
         });
 
         long duration = System.currentTimeMillis() - start;
-        log.info("🏁 Optimisation terminée en {} ms.", duration);
+        log.info("🏁 Terminé en {} ms. Meilleure config retenue.", duration);
 
         return bestResultRef.config;
     }
@@ -111,13 +121,47 @@ public class BacktestService {
     }
 
     private double calculerGainRapide(List<Integer> grille, LotoTirage t) {
-        long bonsNumeros = grille.stream().filter(t.getBoules()::contains).count();
-        // Note: Pour le backtest rapide, on ignore le numéro chance ou on le fixe à 1/10 proba
-        // Gains approximatifs FDJ
-        if (bonsNumeros == 5) return 100000.0; // Jackpot théorique réduit
-        if (bonsNumeros == 4) return 500.0;
-        if (bonsNumeros == 3) return 20.0;
-        if (bonsNumeros == 2) return 5.0;
+        // Sécurité : on s'attend à 6 numéros (5 boules + 1 chance)
+        if (grille.size() < 6) return 0.0;
+
+        // On sépare les boules et la chance
+        // subList(0, 5) prend les index 0, 1, 2, 3, 4
+        List<Integer> boulesJouees = grille.subList(0, 5);
+        int chanceJouee = grille.get(5); // Le dernier élément est la chance
+
+        // Vérification des boules
+        long bonsNumeros = boulesJouees.stream().filter(t.getBoules()::contains).count();
+
+        // Vérification de la chance
+        boolean bonneChance = (chanceJouee == t.getNumeroChance());
+
+        // --- Grille des Gains (Approximation réaliste FDJ) ---
+
+        // 5 Bons numéros
+        if (bonsNumeros == 5) {
+            return bonneChance ? 2_000_000.0 : 100_000.0; // Jackpot (Rank 1) vs Rank 2
+        }
+
+        // 4 Bons numéros
+        if (bonsNumeros == 4) {
+            return bonneChance ? 1_000.0 : 500.0;
+        }
+
+        // 3 Bons numéros
+        if (bonsNumeros == 3) {
+            return bonneChance ? 50.0 : 20.0;
+        }
+
+        // 2 Bons numéros
+        if (bonsNumeros == 2) {
+            return bonneChance ? 10.0 : 5.0;
+        }
+
+        // 0 ou 1 Bon numéro mais Bonne Chance (Remboursement)
+        if (bonneChance) {
+            return 2.20;
+        }
+
         return 0.0;
     }
 }

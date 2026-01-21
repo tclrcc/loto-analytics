@@ -302,10 +302,18 @@ public class LotoJob {
     @Scheduled(cron = "${loto.jobs.cron.optimisation-ia}", zone = "Europe/Paris")
     public void optimisationQuotidienne() {
         log.info("⏰ Réveil du Job d'Optimisation IA...");
+
+        // Enregistrement début job
+        JobLog jobLog = jobMonitorService.startJob("OPTIMISATION_QUOTIDIENNE_IA");
         try {
+            // Appelle méthode traitement
             lotoService.forceDailyOptimization();
+
+            // Enregistrement log
+            jobMonitorService.endJob(jobLog, JobExecutionStatus.SUCCESS.getCode(), "Optimisation IA terminée.");
         } catch (Exception e) {
             log.error("❌ Echec de l'optimisation nocturne", e);
+            jobMonitorService.endJob(jobLog, JobExecutionStatus.FAILURE.getCode(), "Erreur : " + e.getMessage());
         }
     }
 }

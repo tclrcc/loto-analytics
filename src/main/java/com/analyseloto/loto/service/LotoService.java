@@ -91,6 +91,35 @@ public class LotoService {
         double fitness;
     }
 
+    @Data
+    @AllArgsConstructor
+    public static class ScenarioSimulation {
+        private LotoTirage tirageReel; // Pour vérifier le gain
+        private List<Integer> dernierTirageConnu; // Pour les filtres
+
+        // Données pré-calculées (Lourdes)
+        private Map<Integer, Map<Integer, Integer>> matriceAffinites;
+        private Map<Integer, Map<Integer, Integer>> matriceChance;
+        private Map<Integer, RawStatData> rawStatsBoules; // Stats brutes par boule
+        private Map<Integer, RawStatData> rawStatsChance;
+
+        private DynamicConstraints contraintes;
+        private Map<String, List<Integer>> bucketsPrecalcules; // Optionnel
+    }
+
+    @Data
+    @AllArgsConstructor
+    public static class RawStatData {
+        private long freqJour;
+        private long ecart;
+        private boolean isForme;
+        private boolean isTresForme; // Hot streak
+        private boolean isBoostAstro; // Toujours false ici sauf si on personnalise
+        private boolean isHotFinale;
+        private boolean isTension;
+        // On ne stocke pas le score final car il dépend des poids !
+    }
+
     /**
      * Génération de N pronostics optimisés (sans astro)
      * @param dateCible date tirage
@@ -1401,5 +1430,131 @@ public class LotoService {
             date = date.plusDays(1);
         }
         return date;
+    }
+
+    /**
+     * ÉTAPE 1 : Pré-calcul massif des contextes historiques.
+     * Cette méthode est lente mais n'est exécutée qu'une seule fois.
+     */
+    public List<ScenarioSimulation> preparerScenariosBacktest(List<LotoTirage> historiqueComplet, int nbTirages, int historyDepth) {
+        List<ScenarioSimulation> scenarios = new ArrayList<>();
+
+        // Sécurité
+        if (historiqueComplet.size() < nbTirages + historyDepth) return scenarios;
+
+        for (int i = 0; i < nbTirages; i++) {
+            LotoTirage cible = historiqueComplet.get(i);
+
+            // On coupe l'historique "comme si on y était"
+            int end = Math.min(i + 1 + historyDepth, historiqueComplet.size());
+            List<LotoTirage> historyConnu = historiqueComplet.subList(i + 1, end);
+
+            if(historyConnu.isEmpty()) continue;
+
+            // 1. Calculs Invariants (Matrices, Contraintes...)
+            List<Integer> dernierTirage = historyConnu.get(0).getBoules();
+            Set<Integer> hotFinales = detecterFinalesChaudes(historyConnu);
+            DynamicConstraints contraintes = analyserContraintesDynamiques(historyConnu, dernierTirage);
+
+            // Matrices (Optimisées int[][])
+            Map<Integer, Map<Integer, Integer>> matAff = construireMatriceAffinitesPonderee(historyConnu, cible.getDateTirage().getDayOfWeek());
+            Map<Integer, Map<Integer, Integer>> matChance = construireMatriceAffinitesChancePonderee(historyConnu, cible.getDateTirage().getDayOfWeek());
+
+            // 2. Extraction des Stats Brutes (SANS appliquer les poids)
+            Map<Integer, RawStatData> rawBoules = extraireStatsBrutes(historyConnu, 49, cible.getDateTirage().getDayOfWeek(), false, hotFinales);
+            Map<Integer, RawStatData> rawChance = extraireStatsBrutes(historyConnu, 10, cible.getDateTirage().getDayOfWeek(), true, Collections.emptySet());
+
+            scenarios.add(new ScenarioSimulation(cible, dernierTirage, matAff, matChance, rawBoules, rawChance, contraintes, null));
+        }
+        return scenarios;
+    }
+
+    /**
+     * Helper pour extraire les stats brutes (Frequency, Ecart...) sans les pondérer
+     */
+    private Map<Integer, RawStatData> extraireStatsBrutes(List<LotoTirage> history, int maxNum, DayOfWeek jour, boolean isChance, Set<Integer> hotFinales) {
+        Map<Integer, RawStatData> map = new HashMap<>();
+        // Note: On pourrait optimiser encore en évitant les streams ici, mais c'est fait 1 fois
+        List<LotoTirage> histJour = history.stream().filter(t -> t.getDateTirage().getDayOfWeek() == jour).toList();
+
+        for (int i = 1; i <= maxNum; i++) {
+            int num = i;
+            long freqJour = histJour.stream().filter(t -> isChance ? t.getNumeroChance() == num : t.getBoules().contains(num)).count();
+
+            // Ecart
+            int idxLast = -1;
+            for(int k=0; k < history.size(); k++) {
+                if (isChance ? history.get(k).getNumeroChance() == num : history.get(k).getBoules().contains(num)) {
+                    idxLast = k; break;
+                }
+            }
+            long ecart = (idxLast == -1) ? history.size() : idxLast;
+
+            // Forme
+            long sorties15 = history.stream().limit(15).filter(t -> isChance ? t.getNumeroChance() == num : t.getBoules().contains(num)).count();
+            long sorties10 = history.stream().limit(10).filter(t -> isChance ? t.getNumeroChance() == num : t.getBoules().contains(num)).count();
+
+            boolean isTension = !isChance && tiragesSuffisants(history, num);
+            boolean isHotFinale = !isChance && hotFinales.contains(num % 10);
+
+            map.put(num, new RawStatData(freqJour, ecart, sorties15 >= 2, sorties10 >= 2, false, isHotFinale, isTension));
+        }
+        return map;
+    }
+
+    /**
+     * ÉTAPE 2 : Génération Ultra-Rapide
+     * Applique la Config (Poids) sur les Données Pré-calculées (Scenario)
+     */
+    public List<List<Integer>> genererGrillesDepuisScenario(ScenarioSimulation sc, AlgoConfig config, int nbGrilles) {
+        List<List<Integer>> resultats = new ArrayList<>();
+        Random rng = new Random();
+
+        // 1. Calcul des Scores (Multiplication simple Poids * RawData)
+        Map<Integer, Double> scoresBoules = sc.rawStatsBoules.entrySet().stream().collect(Collectors.toMap(
+                Map.Entry::getKey,
+                e -> calculerScoreFinal(e.getValue(), config)
+        ));
+
+        Map<Integer, Double> scoresChance = sc.rawStatsChance.entrySet().stream().collect(Collectors.toMap(
+                Map.Entry::getKey,
+                e -> calculerScoreFinal(e.getValue(), config)
+        ));
+
+        // 2. Buckets
+        Map<String, List<Integer>> buckets = creerBuckets(scoresBoules);
+
+        // 3. Génération (Identique à avant, mais utilisant les matrices pré-calculées du scénario)
+        int essais = 0;
+        while(resultats.size() < nbGrilles && essais < 200) { // Limite essais pour vitesse
+            essais++;
+            // On réutilise votre méthode genererGrilleParAffinite qui prend déjà les maps en entrée !
+            List<Integer> boules = genererGrilleParAffinite(buckets, sc.matriceAffinites, sc.dernierTirageConnu, null, rng); // null pour history car trios ignorés en mode rapide ou adapter
+
+            if (estGrilleCoherente(boules, sc.dernierTirageConnu, sc.contraintes)) {
+                // Fitness Check rapide
+                int chance = selectionnerChanceOptimisee(boules, scoresChance, sc.matriceChance, rng);
+
+                Collections.sort(boules);
+                boules.add(chance);
+                resultats.add(boules);
+            }
+        }
+        return resultats;
+    }
+
+    private double calculerScoreFinal(RawStatData raw, AlgoConfig cfg) {
+        double s = 10.0;
+        s += (raw.freqJour * cfg.getPoidsFreqJour());
+
+        if (raw.ecart > 40) s -= 5.0;
+        else if (raw.ecart > 10) s += (raw.ecart * cfg.getPoidsEcart());
+
+        if (raw.isForme) s += cfg.getPoidsForme();
+        if (raw.isTresForme) s += 25.0; // Boost fixe
+        if (raw.isHotFinale) s += 8.0;
+        if (raw.isTension) s += cfg.getPoidsTension();
+
+        return s;
     }
 }
