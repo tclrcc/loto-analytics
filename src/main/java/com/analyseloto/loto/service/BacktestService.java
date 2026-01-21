@@ -23,33 +23,40 @@ public class BacktestService {
      * @return Meilleure configuration trouvée
      */
     public LotoService.AlgoConfig trouverMeilleureConfig(List<LotoTirage> historiqueComplet) {
-        log.info("🧪 Démarrage de l'optimisation HYPER-RAPIDE...");
+        log.info("🧪 Démarrage de l'optimisation MASSIVE...");
         long start = System.currentTimeMillis();
 
-        // 1. PRÉ-CALCUL DES SCÉNARIOS (Le secret de la vitesse)
-        // On prépare les données pour les 100 derniers tirages (Beaucoup plus représentatif que 50)
-        // HistoryDepth = 250 (suffisant pour les matrices)
-        log.info("📸 Pré-calcul des snapshots historiques...");
-        List<LotoService.ScenarioSimulation> scenarios = lotoService.preparerScenariosBacktest(historiqueComplet, 100, 250);
+        // 1. PRÉ-CALCUL DES SCÉNARIOS (On augmente la profondeur)
+        // On teste sur les 350 derniers tirages (2.5 ans) pour une robustesse maximale
+        int depthBacktest = 350;
+        log.info("📸 Pré-calcul des snapshots sur {} tirages...", depthBacktest);
+
+        List<LotoService.ScenarioSimulation> scenarios = lotoService.preparerScenariosBacktest(historiqueComplet, depthBacktest, 250);
+
+        if (scenarios.isEmpty()) {
+            log.warn("Pas assez d'historique. Retour config défaut.");
+            return LotoService.AlgoConfig.defaut();
+        }
         log.info("✅ {} Scénarios prêts en mémoire.", scenarios.size());
 
-        // 2. Génération des Configs à tester
+        // 2. GÉNÉRATION EXPLOSIVE DES CONFIGS (Brute Force Intelligent)
         List<LotoService.AlgoConfig> configsATester = new ArrayList<>();
-        double[] poidsFormeOpts = {10.0, 20.0, 30.0, 40.0};
-        double[] poidsEcartOpts = {0.5, 1.0, 1.5};
-        double[] poidsAffiniteOpts = {1.0, 3.0, 5.0}; // On insiste sur l'affinité
-        // On fixe les autres pour réduire le volume si besoin, ou on boucle
 
-        int i = 0;
-        for (double pForme : poidsFormeOpts) {
-            for (double pEcart : poidsEcartOpts) {
-                for (double pAff : poidsAffiniteOpts) {
-                    configsATester.add(new LotoService.AlgoConfig(
-                            "TEST_" + i++, 3.0, pForme, pEcart, 12.0, 0.0, pAff, false
-                    ));
+        int countId = 0;
+        for (double forme = 5.0; forme <= 40.0; forme += 5.0) {
+            for (double ecart = 0.4; ecart <= 1.6; ecart += 0.2) {
+                for (double affinite = 0.0; affinite <= 6.0; affinite += 2.0) {
+                    for (double tension = 0.0; tension <= 20.0; tension += 10.0) {
+                        // On ajoute aussi Markov 0 ou 2 pour voir
+                        configsATester.add(new LotoService.AlgoConfig(
+                                "TEST_" + (++countId), 3.0, forme, ecart, tension, 0.0, affinite, false
+                        ));
+                    }
                 }
             }
         }
+
+        log.info("📊 Analyse de {} stratégies complexes sur tous les cœurs CPU...", configsATester.size());
 
         // 3. BACKTEST PARALLÈLE
         final var bestResultRef = new Object() {
@@ -57,16 +64,21 @@ public class BacktestService {
             double maxBilan = -Double.MAX_VALUE;
         };
 
+        // Utilisation de parallelStream pour saturer le CPU
         configsATester.parallelStream().forEach(config -> {
             double bilan = 0;
             double depense = 0;
 
-            // Boucle sur les scénarios pré-calculés (Pas d'accès BDD, pas de calcul matrice !)
+            // Boucle sur les scénarios (Lecture seule = Thread Safe & Rapide)
             for (LotoService.ScenarioSimulation scenar : scenarios) {
-                // Génération éclair (3 grilles par tirage suffisent pour la tendance)
-                List<List<Integer>> grilles = lotoService.genererGrillesDepuisScenario(scenar, config, 3);
+
+                // ON AUGMENTE LA PRÉCISION : 10 grilles par tirage au lieu de 3
+                // Cela évite les "coups de chance" isolés. Une bonne stratégie doit gagner souvent.
+                List<List<Integer>> grilles = lotoService.genererGrillesDepuisScenario(scenar, config, 10);
 
                 depense += (grilles.size() * 2.20);
+
+                // Calcul rapide du gain
                 for (List<Integer> g : grilles) {
                     bilan += calculerGainRapide(g, scenar.getTirageReel());
                 }
@@ -74,50 +86,22 @@ public class BacktestService {
 
             double net = bilan - depense;
 
+            // Mise à jour Thread-Safe du meilleur résultat
             synchronized (bestResultRef) {
                 if (net > bestResultRef.maxBilan) {
                     bestResultRef.maxBilan = net;
                     bestResultRef.config = config;
-                    log.info("🚀 Record : {} € (Forme={}, Ecart={}, Aff={})", String.format("%.2f", net), config.getPoidsForme(), config.getPoidsEcart(), config.getPoidsAffinite());
+                    log.info("🚀 Record : {} € (Forme={}, Ecart={}, Aff={}, Tens={})",
+                            String.format("%.2f", net),
+                            config.getPoidsForme(), config.getPoidsEcart(), config.getPoidsAffinite(), config.getPoidsTension());
                 }
             }
         });
 
         long duration = System.currentTimeMillis() - start;
-        log.info("🏁 Terminé en {} ms. Meilleure config retenue.", duration);
+        log.info("🏁 Terminé en {} ms. Config gagnante : {}", duration, bestResultRef.config.getNomStrategie());
 
         return bestResultRef.config;
-    }
-
-    private double simulerSurHistorique(LotoService.AlgoConfig config, List<LotoTirage> historiqueComplet, int nbTiragesTest) {
-        double depense = 0;
-        double gain = 0;
-
-        // Optimisation : On limite l'historique passé à 200 tirages max pour les calculs de stats
-        // (Inutile de remonter à 2008 pour savoir qu'un numéro est en forme ce mois-ci)
-        int historyLimit = 200;
-
-        // Sécurité
-        if (historiqueComplet.size() < nbTiragesTest + 100) return 0.0;
-
-        for (int i = 0; i < nbTiragesTest; i++) {
-            int targetIndex = i;
-            LotoTirage tirageReel = historiqueComplet.get(targetIndex);
-
-            // On coupe l'historique pour aller plus vite
-            int endSub = Math.min(targetIndex + 1 + historyLimit, historiqueComplet.size());
-            List<LotoTirage> historiqueConnu = historiqueComplet.subList(targetIndex + 1, endSub);
-            // --------------------
-
-            // On génère 5 grilles par test
-            List<List<Integer>> grillesGenerees = lotoService.genererGrillesPourSimulation(historiqueConnu, config, 5);
-
-            depense += (grillesGenerees.size() * 2.20);
-            for (List<Integer> g : grillesGenerees) {
-                gain += calculerGainRapide(g, tirageReel);
-            }
-        }
-        return gain - depense;
     }
 
     private double calculerGainRapide(List<Integer> grille, LotoTirage t) {
