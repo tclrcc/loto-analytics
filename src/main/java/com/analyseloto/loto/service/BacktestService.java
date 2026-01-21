@@ -100,10 +100,18 @@ public class BacktestService {
             }
         });
 
+        // Durée du traitement
         long duration = System.currentTimeMillis() - start;
-        log.info("🏁 Terminé en {} ms. Config gagnante : {}", duration, bestResultRef.config.getNomStrategie());
 
-        return bestResultRef.config;
+        // Configuration gagnante
+        LotoService.AlgoConfig gagnante = bestResultRef.config;
+        gagnante.setBilanEstime(bestResultRef.maxBilan);
+        gagnante.setNbTiragesTestes(depthBacktest);
+
+        log.info("🏁 Terminé en {} ms. Config gagnante : {} (Bilan: {} €)",
+                duration, gagnante.getNomStrategie(), String.format("%.2f", gagnante.getBilanEstime()));
+
+        return gagnante;
     }
 
     private double calculerGainRapide(List<Integer> grille, LotoTirage t) {

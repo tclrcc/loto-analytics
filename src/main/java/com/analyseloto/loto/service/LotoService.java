@@ -62,6 +62,21 @@
             private double poidsMarkov;
             private double poidsAffinite;
             private boolean utiliserGenetique; // NOUVEAU : Activer l'algo génétique ?
+
+            // Champs de résultats
+            private double bilanEstime;
+            private int nbTiragesTestes;
+
+            public AlgoConfig(String nom, double pFreq, double pForme, double pEcart, double pTens, double pMark, double pAff, boolean gen) {
+                this.nomStrategie = nom;
+                this.poidsFreqJour = pFreq;
+                this.poidsForme = pForme;
+                this.poidsEcart = pEcart;
+                this.poidsTension = pTens;
+                this.poidsMarkov = pMark;
+                this.poidsAffinite = pAff;
+                this.utiliserGenetique = gen;
+            }
     
             // 1. Standard (Mix équilibré)
             public static AlgoConfig defaut() {
@@ -164,137 +179,123 @@
          * @return liste des pronostics
          */
         private List<PronosticResultDto> genererPronosticAvecConfig(LocalDate dateCible, int nombreGrilles, AstroProfileDto profilAstro) {
-    
-            // 1. Initialisation optimisée (Trié par la BDD directement)
+            // 1. Chargement Historique
             List<LotoTirage> history = repository.findAll(Sort.by(Sort.Direction.DESC, "dateTirage"));
             if (history.isEmpty()) return new ArrayList<>();
-    
             List<Integer> dernierTirage = history.get(0).getBoules();
-    
-            // --- OPTIMISATION INTELLIGENTE (CACHE) ---
+
+            // 2. Choix de la Config (Sécurisé)
             AlgoConfig configOptimisee;
-    
-            // 1. Si on a déjà une config du jour en cache, on l'utilise
-            if (cachedBestConfig != null && LocalDate.now().equals(lastBacktestDate)) {
+            if (cachedBestConfig != null) {
                 configOptimisee = cachedBestConfig;
-            }
-            // 2. Sinon, on utilise la config par défaut (pour ne pas bloquer l'utilisateur 10s)
-            else {
-                // Petit log pour dire qu'on est en mode dégradé temporaire
-                if (cachedBestConfig == null) {
-                    log.info("⏳ [ALGO] Backtest en cours ou non démarré. Utilisation Config PAR DÉFAUT en attendant.");
-                } else {
-                    log.info("⚠️ [ALGO] Config périmée (date différente). Utilisation Config PAR DÉFAUT en attendant le CRON.");
-                    // Optionnel : on pourrait déclencher un refresh asynchrone ici si le CRON a raté
+                // On accepte la config même si elle date d'hier (elle reste excellente)
+                // Warning seulement si > 7 jours
+                if (lastBacktestDate != null && lastBacktestDate.isBefore(LocalDate.now().minusDays(7))) {
+                    log.warn("⚠️ [ALGO] Config périmée (>7 jours). Vérifiez le CRON.");
                 }
+            } else {
+                log.info("⏳ [ALGO] Pas de config en cache. Utilisation DÉFAUT.");
                 configOptimisee = AlgoConfig.defaut();
             }
-    
-            // --- LOG STRATÉGIQUE ---
-            log.info("🎯 [ALGO] Stratégie utilisée : {}", configOptimisee.getNomStrategie());
-            log.info("   ➤ Dernier tirage connu : {} (Date : {})", dernierTirage, history.get(0).getDateTirage());
-    
-            // 2. Calcul des Scores (Avec la config optimisée par l'IA)
+
+            log.info("🎯 [ALGO] Stratégie : {} (Bilan Backtest: {} €)",
+                    configOptimisee.getNomStrategie(), String.format("%.2f", configOptimisee.getBilanEstime()));
+
+            // 3. Préparations des Données (Optimisé hors boucle)
             Set<Integer> hotFinales = detecterFinalesChaudes(history);
             List<Integer> boostNumbers = (profilAstro != null) ? astroService.getLuckyNumbersOnly(profilAstro) : Collections.emptyList();
-    
+
+            List<List<Integer>> topTriosDuJour = getTopTriosRecents(history);
             Map<Integer, Map<Integer, Integer>> matriceAffinites = construireMatriceAffinitesPonderee(history, dateCible.getDayOfWeek());
             Map<Integer, Map<Integer, Integer>> matriceChance = construireMatriceAffinitesChancePonderee(history, dateCible.getDayOfWeek());
-    
-            Map<Integer, Double> scoresBoules = calculerScores(history, 49, dateCible.getDayOfWeek(), false,
-                    boostNumbers, hotFinales, configOptimisee, dernierTirage);
-            Map<Integer, Double> scoresChance = calculerScores(history, 10, dateCible.getDayOfWeek(), true,
-                    boostNumbers, Collections.emptySet(), configOptimisee, null);
-    
-            // 3. GÉNÉRATION DE MASSE (POOLING)
+
+            // Calcul des scores unitaires avec les poids de l'IA
+            Map<Integer, Double> scoresBoules = calculerScores(history, 49, dateCible.getDayOfWeek(), false, boostNumbers, hotFinales, configOptimisee, dernierTirage);
+            Map<Integer, Double> scoresChance = calculerScores(history, 10, dateCible.getDayOfWeek(), true, boostNumbers, Collections.emptySet(), configOptimisee, null);
+
+            DynamicConstraints contraintesDuJour = analyserContraintesDynamiques(history, dernierTirage);
+            Map<String, List<Integer>> buckets = creerBuckets(scoresBoules);
+
+            // --- OPTIMISATION PERFORMANCE : Cache des grilles passées pour vérification rapide ---
+            // On stocke les hashcodes des 500 derniers tirages pour éviter de parcourir la liste à chaque fois
+            Set<Set<Integer>> historiqueSet = new HashSet<>();
+            int limitHistoryCheck = Math.min(history.size(), 300); // On vérifie les 300 derniers
+            for(int i=0; i<limitHistoryCheck; i++) {
+                historiqueSet.add(new HashSet<>(history.get(i).getBoules()));
+            }
+
+            // 4. Génération de Masse (Monte Carlo)
             List<GrilleCandidate> population = new ArrayList<>();
             int taillePopulation = 5000;
             Random rng = new Random();
-    
-            Map<String, List<Integer>> buckets = creerBuckets(scoresBoules);
-    
-            // Calcul des contraintes dynamiques (Pair/Impair, Suites...)
-            DynamicConstraints contraintesDuJour = analyserContraintesDynamiques(history, dernierTirage);
-    
-            List<List<Integer>> topTriosDuJour = getTopTriosRecents(history);
-    
+
             for (int i = 0; i < taillePopulation; i++) {
                 List<Integer> boules;
-    
-                // 70% Intelligence (Buckets) / 30% Exploration (Hasard)
+
+                // 70% Intelligence (Affinité/Trios) / 30% Hasard
                 if (rng.nextDouble() < 0.7) {
                     boules = genererGrilleParAffinite(buckets, matriceAffinites, dernierTirage, topTriosDuJour, rng);
                 } else {
                     boules = genererGrilleAleatoireSecours(rng);
                 }
-    
-                // On vérifie la cohérence AVEC les contraintes dynamiques du jour
-                // Optimisation : On le fait AVANT de calculer le fitness complet pour économiser du CPU
+
+                // Filtres rapides (Structurel)
                 if (estGrilleCoherente(boules, dernierTirage, contraintesDuJour)) {
-    
+
+                    // Filtre Doublon Historique (Ultra-rapide grâce au Set)
+                    if (historiqueSet.contains(new HashSet<>(boules))) {
+                        continue; // On jette, c'est déjà sorti
+                    }
+
                     int chance = selectionnerChanceOptimisee(boules, scoresChance, matriceChance, rng);
-                    double fitness = calculerScoreFitness(boules, chance, scoresBoules, scoresChance, matriceAffinites, history, dernierTirage, configOptimisee.getPoidsAffinite());
-    
+
+                    // Calcul Fitness (Version Production)
+                    double fitness = calculerScoreFitness(boules, chance, scoresBoules, scoresChance, matriceAffinites,
+                            history, dernierTirage, configOptimisee.getPoidsAffinite());
+
                     population.add(new GrilleCandidate(boules, chance, fitness));
                 }
             }
-    
-            // 4. SÉLECTION ÉLITISTE
+
+            // 5. Sélection Élitiste (On prend les meilleures selon le fitness)
             population.sort((g1, g2) -> Double.compare(g2.fitness, g1.fitness));
-    
-            // 5. CONSTRUCTION DU RÉSULTAT
+
             List<PronosticResultDto> resultats = new ArrayList<>();
             Set<List<Integer>> doublonsCheck = new HashSet<>();
-    
+
             for (GrilleCandidate cand : population) {
                 if (resultats.size() >= nombreGrilles) break;
-    
                 Collections.sort(cand.boules);
                 if (doublonsCheck.contains(cand.boules)) continue;
-    
+
+                // Analyse détaillée pour l'affichage (Simulation sur historique)
                 SimulationResultDto simu = simulerGrilleDetaillee(cand.boules, dateCible, history);
                 double maxDuo = simu.getPairs().stream().mapToDouble(MatchGroup::getRatio).max().orElse(0.0);
                 double maxTrio = simu.getTrios().stream().mapToDouble(MatchGroup::getRatio).max().orElse(0.0);
-                boolean fullMatch = !simu.getQuintuplets().isEmpty();
-    
-                // Badge IA Dynamique
-                String typeAlgo = (cand.fitness > 50.0) ? "IA_GENETIQUE ⭐" : "IA_FLEXIBLE ⚠️";
-    
-                // On loggue le top 3 des grilles retenues
-                if (resultats.size() < 3) {
-                    log.info("🏆 [ALGO] Grille Retenue #{} : {} + {} (Fitness: {}, Algo: {})",
-                            resultats.size() + 1, cand.boules, cand.chance,
-                            String.format("%.2f", cand.fitness), typeAlgo);
-                }
-    
+
+                // Badge IA clair pour l'UI
+                String typeAlgo = "IA_OPTIMAL (" + configOptimisee.getNomStrategie() + ")";
+                if(cand.fitness < 50) typeAlgo = "IA_FLEXIBLE";
+
                 resultats.add(new PronosticResultDto(
-                        cand.boules,
-                        cand.chance,
+                        cand.boules, cand.chance,
                         Math.round(cand.fitness * 100.0) / 100.0,
-                        maxDuo,
-                        maxTrio,
-                        fullMatch,
+                        maxDuo, maxTrio, !simu.getQuintuplets().isEmpty(),
                         typeAlgo
                 ));
-    
                 doublonsCheck.add(cand.boules);
             }
-    
-            // Fallback (Rare)
+
+            // Fallback (Au cas où on est trop restrictif)
             while (resultats.size() < nombreGrilles) {
-                log.warn("⚠️ [ALGO] Pas assez de grilles valides trouvées ({} / {}). Passage en mode Secours (Hasard).", resultats.size(), nombreGrilles);
-    
-                // Génération de grilles aléatoires
-                List<Integer> boulesSecours = genererGrilleAleatoireSecours(rng);
-                Collections.sort(boulesSecours);
-    
-                // On évite les doublons même en secours
-                if (!doublonsCheck.contains(boulesSecours)) {
-                    resultats.add(new PronosticResultDto(boulesSecours, 1, 0.0, 0.0, 0.0, false, "HASARD 🎲"));
-                    doublonsCheck.add(boulesSecours);
+                List<Integer> b = genererGrilleAleatoireSecours(rng);
+                Collections.sort(b);
+                if(!doublonsCheck.contains(b)){
+                    resultats.add(new PronosticResultDto(b, 1, 0.0, 0.0, 0.0, false, "HASARD_SECOURS"));
+                    doublonsCheck.add(b);
                 }
             }
-    
+
             return resultats;
         }
     
@@ -374,84 +375,70 @@
                 Map<Integer, Double> scoresBoules,
                 Map<Integer, Double> scoresChance,
                 Map<Integer, Map<Integer, Integer>> affinites,
-                List<LotoTirage> history,
+                List<LotoTirage> history, // On le garde pour les vérifs "récentes"
                 List<Integer> dernierTirage,
                 double poidsAffinite) {
+
             double score = 0.0;
-    
-            // 1. Somme des scores individuels
-            for (Integer b : boules) {
-                score += scoresBoules.getOrDefault(b, 0.0);
-            }
+
+            // 1. Somme des scores individuels (Optimisés par l'IA)
+            for (Integer b : boules) score += scoresBoules.getOrDefault(b, 0.0);
             score += scoresChance.getOrDefault(chance, 0.0);
-    
-            // 2. Cohésion de groupe (Affinités)
+
+            // 2. Cohésion de groupe (Affinités) - TRÈS IMPORTANT vu vos résultats
             double scoreAffinite = 0;
             for (int i = 0; i < boules.size(); i++) {
                 for (int j = i + 1; j < boules.size(); j++) {
                     scoreAffinite += affinites.getOrDefault(boules.get(i), Map.of()).getOrDefault(boules.get(j), 0);
                 }
             }
-    
-            // Mise à jour du score final avec pondération affinité
             score += (scoreAffinite * poidsAffinite);
-    
-            // 3. BONUS / MALUS STRUCTURELS
-    
-            // Pairs / Impairs
+
+            // 3. Bonus/Malus Structurels (Non optimisés par l'IA mais bons sens mathématique)
+            // Pairs / Impairs (Equilibre)
             long pairs = boules.stream().filter(n -> n % 2 == 0).count();
-            if (pairs == 2 || pairs == 3) score += 20.0;
-    
-            // Somme
+            if (pairs == 2 || pairs == 3) score += 15.0; // Bonus équilibre
+
+            // Somme (Courbe de Gauss)
             int somme = boules.stream().mapToInt(Integer::intValue).sum();
-            if (somme >= 130 && somme <= 160) score += 15.0;
-    
-            // Suites
+            if (somme >= 120 && somme <= 170) score += 10.0;
+
+            // Suites (Pénalité si trop)
             Collections.sort(boules);
             int suites = 0;
             for(int k=0; k<boules.size()-1; k++) {
                 if(boules.get(k+1) == boules.get(k) + 1) suites++;
             }
             if(suites > 1) score -= 30.0;
-    
-            // Répétition immédiate (Dernier tirage)
-            long communsDernier = boules.stream().filter(dernierTirage::contains).count();
-            if(communsDernier > 1) score -= 50.0;
-    
-            if (scoreAffinite < 5.0) score -= 20.0;
-    
-            // --- 4. ANALYSE HISTORIQUE (NOUVEAU) ---
-            // On suppose que 'history' est trié du plus récent au plus ancien
-    
-            int profondeurVerif = Math.min(history.size(), 500); // On regarde les 500 derniers tirages pour la perf
-    
-            for (int i = 0; i < profondeurVerif; i++) {
-                LotoTirage t = history.get(i);
-                List<Integer> bHist = t.getBoules();
-    
-                // Compte les numéros communs entre ma grille candidate et ce vieux tirage
+
+            // --- 4. ANALYSE HISTORIQUE RAPIDE ---
+            // On a déjà vérifié le "Doublon Exact" via le Set dans la méthode appelante.
+            // Ici, on vérifie juste les "presque doublons" (4/5 numéros) sur le court terme.
+            if (dernierTirage != null) {
+                long communsDernier = boules.stream().filter(dernierTirage::contains).count();
+                if (communsDernier > 0) {
+                    score -= 50.0; // Malus dissuasif pour favoriser la nouveauté totale
+                }
+            }
+
+            // On limite à 20 tirages pour la performance (suffisant pour la répétition)
+            int depthFastCheck = Math.min(history.size(), 20);
+
+            for (int i = 0; i < depthFastCheck; i++) {
+                List<Integer> bHist = history.get(i).getBoules();
                 long communs = boules.stream().filter(bHist::contains).count();
-    
-                // A. PÉNALITÉ DOUBLON EXACT (5 numéros)
-                // Si cette grille est déjà sortie, on la tue. On cherche l'inédit.
-                if (communs == 5) {
-                    score -= 200.0; // Disqualification quasi-totale
-                    break; // Pas la peine de continuer
+
+                // Si 4 numéros communs avec un tirage très récent → Pénalité
+                if (communs >= 4) {
+                    score -= 100.0;
+                    break; // Inutile de continuer
                 }
-    
-                // B. PÉNALITÉ RÉPÉTITION RÉCENTE (4 numéros)
-                // Si on a 4 numéros en commun avec un tirage d'il y a moins de 20 tours
-                if (communs >= 4 && i < 20) {
-                    score -= 100.0; // Très improbable que ça retombe si vite
-                }
-    
-                // C. PÉNALITÉ RÉPÉTITION TROP FRÉQUENTE (3 numéros)
-                // Si on a 3 numéros en commun avec le tirage d'il y a 2 jours
-                if (communs >= 3 && i < 5) {
+                // Si 3 numéros communs avec le tirage d'hier ou avant-hier → Pénalité
+                if (communs >= 3 && i < 3) {
                     score -= 20.0;
                 }
             }
-    
+
             return score;
         }
     
@@ -1329,10 +1316,15 @@
                 entity.setPoidsMarkov(newConfig.getPoidsMarkov());
                 entity.setPoidsTension(newConfig.getPoidsTension());
                 entity.setPoidsFreqJour(newConfig.getPoidsFreqJour());
+
+                // Enregistrement des perfs
+                entity.setBilanEstime(newConfig.getBilanEstime());
+                entity.setNbTiragesTestes(newConfig.getNbTiragesTestes());
     
                 strategyConfigRepostiroy.save(entity);
-    
-                log.info("✅ [CRON] Stratégie sauvegardée en BDD et RAM en {} ms.", (System.currentTimeMillis() - start));
+
+                log.info("✅ [CRON] Stratégie sauvegardée (Bilan: {} €) en {} ms.",
+                        String.format("%.2f", entity.getBilanEstime()), (System.currentTimeMillis() - start));
             }
         }
     
