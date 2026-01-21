@@ -104,7 +104,7 @@ public class LotoService {
         private Map<Integer, RawStatData> rawStatsChance;
 
         private DynamicConstraints contraintes;
-        private Map<String, List<Integer>> bucketsPrecalcules; // Optionnel
+        private List<List<Integer>> topTriosPrecalcules;
     }
 
     @Data
@@ -216,12 +216,14 @@ public class LotoService {
         // Calcul des contraintes dynamiques (Pair/Impair, Suites...)
         DynamicConstraints contraintesDuJour = analyserContraintesDynamiques(history, dernierTirage);
 
+        List<List<Integer>> topTriosDuJour = getTopTriosRecents(history);
+
         for (int i = 0; i < taillePopulation; i++) {
             List<Integer> boules;
 
             // 70% Intelligence (Buckets) / 30% Exploration (Hasard)
             if (rng.nextDouble() < 0.7) {
-                boules = genererGrilleParAffinite(buckets, matriceAffinites, dernierTirage, history, rng);
+                boules = genererGrilleParAffinite(buckets, matriceAffinites, dernierTirage, topTriosDuJour, rng);
             } else {
                 boules = genererGrilleAleatoireSecours(rng);
             }
@@ -582,27 +584,21 @@ public class LotoService {
     private List<Integer> genererGrilleParAffinite(Map<String, List<Integer>> buckets,
             Map<Integer, Map<Integer, Integer>> matrice,
             List<Integer> dernierTirage,
-            List<LotoTirage> history, // Historique requis pour les trios
+            List<List<Integer>> triosDisponibles, // Historique requis pour les trios
             Random rng) {
         List<Integer> selection = new ArrayList<>();
 
-        // --- STRATÉGIE 1 : GOLDEN TRIO (50% de chance) ---
-        // On tente de démarrer directement avec 3 numéros qui vont bien ensemble
-        if (rng.nextBoolean()) {
-            List<List<Integer>> topTrios = getTopTriosRecents(history);
+        if (triosDisponibles != null && !triosDisponibles.isEmpty() && rng.nextBoolean()) {
 
-            if (!topTrios.isEmpty()) {
-                // On essaie jusqu'à 3 fois de trouver un trio valide (anti-répétition)
-                for (int tryTrio = 0; tryTrio < 3; tryTrio++) {
-                    List<Integer> trioChoisi = topTrios.get(rng.nextInt(topTrios.size()));
+            for (int tryTrio = 0; tryTrio < 3; tryTrio++) {
+                List<Integer> trioChoisi = triosDisponibles.get(rng.nextInt(triosDisponibles.size()));
 
-                    // Vérification Anti-Répétition
-                    long communs = trioChoisi.stream().filter(dernierTirage::contains).count();
+                // Vérification Anti-Répétition
+                long communs = trioChoisi.stream().filter(dernierTirage::contains).count();
 
-                    if (communs < 2) {
-                        selection.addAll(trioChoisi);
-                        break;
-                    }
+                if (communs < 2) {
+                    selection.addAll(trioChoisi);
+                    break;
                 }
             }
         }
@@ -707,39 +703,44 @@ public class LotoService {
      * @param scores scores des numéros
      * @return Map des buckets
      */
+    /**
+     * OPTIMISÉE : Version ultra-rapide sans Streams complexes pour le Backtest
+     */
     private Map<String, List<Integer>> creerBuckets(Map<Integer, Double> scores) {
-        // 1. Conversion et Tri
+        // 1. Conversion rapide Map -> List
         List<Map.Entry<Integer, Double>> list = new ArrayList<>(scores.entrySet());
-        list.sort((e1, e2) -> e2.getValue().compareTo(e1.getValue())); // Tri Décroissant
 
-        Map<String, List<Integer>> buckets = new HashMap<>();
+        // 2. Tri optimisé (Java utilise Timsort, très rapide pour les listes partiellement triées)
+        list.sort(Map.Entry.<Integer, Double>comparingByValue().reversed());
+
         int total = list.size();
 
-        // Sécurité : Si pas assez de données, on renvoie vide
+        // Si pas assez de données (début historique), on renvoie des listes vides
         if (total < 10) {
-            buckets.put(Constantes.BUCKET_HOT, new ArrayList<>());
-            buckets.put(Constantes.BUCKET_NEUTRAL, new ArrayList<>());
-            buckets.put(Constantes.BUCKET_COLD, new ArrayList<>());
-            return buckets;
+            return Map.of(
+                    Constantes.BUCKET_HOT, new ArrayList<>(),
+                    Constantes.BUCKET_NEUTRAL, new ArrayList<>(),
+                    Constantes.BUCKET_COLD, new ArrayList<>()
+            );
         }
 
-        // 2. Calcul dynamique des tailles (Règle du Quartile)
-        // Pour 49 numéros : taille = 12.
-        int tailleHotCold = total / 4;
+        // 3. Découpage par index (SubList est une vue, donc 0 coût mémoire)
+        int tailleQuart = total / 4; // Environ 12 numéros pour 49
 
-        // 3. Découpage avec subList (Beaucoup plus rapide et lisible)
-        // HOT : Le premier quart (ex: 0 à 12)
-        List<Integer> hotList = list.subList(0, tailleHotCold).stream()
-                .map(Map.Entry::getKey).toList();
+        // HOT : Le Top 25%
+        List<Integer> hotList = new ArrayList<>(tailleQuart);
+        for (int i = 0; i < tailleQuart; i++) hotList.add(list.get(i).getKey());
 
-        // COLD : Le dernier quart (ex: 37 à 49)
-        List<Integer> coldList = list.subList(total - tailleHotCold, total).stream()
-                .map(Map.Entry::getKey).toList();
+        // COLD : Le Flop 25%
+        List<Integer> coldList = new ArrayList<>(tailleQuart);
+        for (int i = total - tailleQuart; i < total; i++) coldList.add(list.get(i).getKey());
 
-        // NEUTRAL : Tout le reste au milieu (ex: 12 à 37)
-        List<Integer> neutralList = list.subList(tailleHotCold, total - tailleHotCold).stream()
-                .map(Map.Entry::getKey).toList();
+        // NEUTRAL : Le milieu (50%)
+        List<Integer> neutralList = new ArrayList<>(total - (2 * tailleQuart));
+        for (int i = tailleQuart; i < total - tailleQuart; i++) neutralList.add(list.get(i).getKey());
 
+        // 4. Construction Map résultat
+        Map<String, List<Integer>> buckets = new HashMap<>(4);
         buckets.put(Constantes.BUCKET_HOT, hotList);
         buckets.put(Constantes.BUCKET_NEUTRAL, neutralList);
         buckets.put(Constantes.BUCKET_COLD, coldList);
@@ -1287,24 +1288,28 @@ public class LotoService {
     public List<List<Integer>> genererGrillesPourSimulation(List<LotoTirage> historiqueSimule, AlgoConfig config, int nbGrilles) {
         if (historiqueSimule.isEmpty()) return new ArrayList<>();
 
-        // 1. On récupère le dernier tirage de cet historique simulé
+        // 1. Contextualisation
         List<Integer> dernierTirage = historiqueSimule.get(0).getBoules();
-        LocalDate dateVirtuelle = historiqueSimule.get(0).getDateTirage().plusDays(2); // Date approx du prochain
+        LocalDate dateVirtuelle = historiqueSimule.get(0).getDateTirage().plusDays(2);
 
-        // 2. On prépare les données comme dans la méthode principale
+        // 2. Préparation Données
         Set<Integer> hotFinales = detecterFinalesChaudes(historiqueSimule);
-
         Map<Integer, Map<Integer, Integer>> matriceAffinites = construireMatriceAffinitesPonderee(historiqueSimule, dateVirtuelle.getDayOfWeek());
+
+        // On a besoin de ces matrices pour choisir la chance intelligemment
         Map<Integer, Map<Integer, Integer>> matriceChance = construireMatriceAffinitesChancePonderee(historiqueSimule, dateVirtuelle.getDayOfWeek());
 
         // 3. Scores
         Map<Integer, Double> scoresBoules = calculerScores(historiqueSimule, 49, dateVirtuelle.getDayOfWeek(), false, Collections.emptyList(), hotFinales, config, dernierTirage);
+
+        // On calcule les scores chance pour pondérer le choix
         Map<Integer, Double> scoresChance = calculerScores(historiqueSimule, 10, dateVirtuelle.getDayOfWeek(), true, Collections.emptyList(), Collections.emptySet(), config, null);
 
-        // 4. Analyse Dynamique (Nouvelle méthode !)
+        // 4. Analyse Dynamique & Trios
         DynamicConstraints contraintes = analyserContraintesDynamiques(historiqueSimule, dernierTirage);
+        List<List<Integer>> topTriosDuJour = getTopTriosRecents(historiqueSimule);
 
-        // 5. Génération rapide (Copie simplifiée de la boucle de population)
+        // 5. Génération
         List<List<Integer>> resultats = new ArrayList<>();
         Random rng = new Random();
         Map<String, List<Integer>> buckets = creerBuckets(scoresBoules);
@@ -1312,14 +1317,21 @@ public class LotoService {
         int essais = 0;
         while(resultats.size() < nbGrilles && essais < 1000) {
             essais++;
-            List<Integer> boules = genererGrilleParAffinite(buckets, matriceAffinites, dernierTirage, historiqueSimule, rng);
+            List<Integer> boules = genererGrilleParAffinite(buckets, matriceAffinites, dernierTirage, topTriosDuJour, rng);
 
-            // Validation avec règles dynamiques
+            // Validation
             if (estGrilleCoherente(boules, dernierTirage, contraintes)) {
-                // On vérifie doublon interne
-                boolean doublon = resultats.stream().anyMatch(r -> new HashSet<>(r).containsAll(boules));
+
+                // --- CORRECTION : SÉLECTION DU NUMÉRO CHANCE ---
+                // On utilise les variables calculées au début (scoresChance et matriceChance)
+                int chance = selectionnerChanceOptimisee(boules, scoresChance, matriceChance, rng);
+
+                // Vérification doublon (sur les 5 boules seulement pour simplifier)
+                boolean doublon = resultats.stream().anyMatch(r -> new HashSet<>(r.subList(0, 5)).containsAll(boules));
+
                 if (!doublon) {
-                    Collections.sort(boules);
+                    Collections.sort(boules);   // On trie les 5 boules
+                    boules.add(chance);         // On ajoute la chance en 6ème position
                     resultats.add(boules);
                 }
             }
@@ -1455,6 +1467,8 @@ public class LotoService {
             List<Integer> dernierTirage = historyConnu.get(0).getBoules();
             Set<Integer> hotFinales = detecterFinalesChaudes(historyConnu);
             DynamicConstraints contraintes = analyserContraintesDynamiques(historyConnu, dernierTirage);
+            // Pré-calcul des trios
+            List<List<Integer>> topTrios = getTopTriosRecents(historyConnu);
 
             // Matrices (Optimisées int[][])
             Map<Integer, Map<Integer, Integer>> matAff = construireMatriceAffinitesPonderee(historyConnu, cible.getDateTirage().getDayOfWeek());
@@ -1464,7 +1478,7 @@ public class LotoService {
             Map<Integer, RawStatData> rawBoules = extraireStatsBrutes(historyConnu, 49, cible.getDateTirage().getDayOfWeek(), false, hotFinales);
             Map<Integer, RawStatData> rawChance = extraireStatsBrutes(historyConnu, 10, cible.getDateTirage().getDayOfWeek(), true, Collections.emptySet());
 
-            scenarios.add(new ScenarioSimulation(cible, dernierTirage, matAff, matChance, rawBoules, rawChance, contraintes, null));
+            scenarios.add(new ScenarioSimulation(cible, dernierTirage, matAff, matChance, rawBoules, rawChance, contraintes, null, topTrios));
         }
         return scenarios;
     }
@@ -1529,7 +1543,7 @@ public class LotoService {
         while(resultats.size() < nbGrilles && essais < 200) { // Limite essais pour vitesse
             essais++;
             // On réutilise votre méthode genererGrilleParAffinite qui prend déjà les maps en entrée !
-            List<Integer> boules = genererGrilleParAffinite(buckets, sc.matriceAffinites, sc.dernierTirageConnu, null, rng); // null pour history car trios ignorés en mode rapide ou adapter
+            List<Integer> boules = genererGrilleParAffinite(buckets, sc.matriceAffinites, sc.dernierTirageConnu, sc.topTriosPrecalcules, rng); // null pour history car trios ignorés en mode rapide ou adapter
 
             if (estGrilleCoherente(boules, sc.dernierTirageConnu, sc.contraintes)) {
                 // Fitness Check rapide
