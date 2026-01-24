@@ -23,6 +23,10 @@ public class BacktestService {
 
     public BacktestService(@Lazy LotoService lotoService) {
         this.lotoService = lotoService;
+
+        // On force la propriété système AVANT que Jenetics ne soit chargé en mémoire.
+        // Cela empêche l'erreur "L64X256MixRandom not available" sur les JVM allégées.
+        System.setProperty("io.jenetics.util.defaultRandomGenerator", "java.util.Random");
     }
 
     /**
@@ -31,8 +35,6 @@ public class BacktestService {
     public LotoService.AlgoConfig trouverMeilleureConfig(List<LotoTirage> historiqueComplet) {
         log.info("🧬 Démarrage de la Méta-Optimisation IA (Jenetics)...");
         long start = System.currentTimeMillis();
-
-        RandomRegistry.random(new Random());
 
         int depthBacktest = 350;
         List<LotoService.ScenarioSimulation> scenarios = lotoService.preparerScenariosBacktest(historiqueComplet, depthBacktest, 250);
