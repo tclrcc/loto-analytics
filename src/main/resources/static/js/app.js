@@ -92,7 +92,6 @@ document.addEventListener('DOMContentLoaded', () => {
         return new bootstrap.Popover(popoverTriggerEl)
     });
 
-    chargerStats();
     chargerFavoris();
     checkWinEffect();
 
@@ -135,7 +134,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 document.querySelectorAll('.btn-filter').forEach(b => b.classList.remove('active'));
                 const target = e.target.closest('.btn');
                 target.classList.add('active');
-                chargerStats(target.getAttribute('data-jour'));
             });
         });
 
@@ -266,7 +264,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 } else if (activeTab === 'heat') {
                     if(heatContainer) heatContainer.classList.remove('d-none');
                 }
-                filtrerEtAfficher();
             });
         });
 
@@ -282,7 +279,6 @@ document.addEventListener('DOMContentLoaded', () => {
             btn.addEventListener('click', () => {
                 searchInput.value = '';
                 searchChanceInput.value = '';
-                filtrerEtAfficher();
             });
         });
 
