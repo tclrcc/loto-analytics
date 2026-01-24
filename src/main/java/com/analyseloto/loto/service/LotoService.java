@@ -1568,6 +1568,63 @@
         }
 
         /**
+         * Prépare les données de la stratégie pour l'affichage utilisateur (Dashboard)
+         */
+        public StrategyDisplayDto getStrategieDuJourPourAffichage() {
+            AlgoConfig config = (this.cachedBestConfig != null) ? this.cachedBestConfig : AlgoConfig.defaut();
+
+            // 1. Normalisation pour le Radar Chart (Note sur 10 pour que ce soit joli)
+            // Forme (max ~20) -> on divise par 2
+            double valForme = Math.min(10.0, config.getPoidsForme() / 2.0);
+            // Ecart (max ~2.0) -> on multiplie par 5
+            double valEcart = Math.min(10.0, config.getPoidsEcart() * 5.0);
+            // Affinité (max ~10) -> tel quel
+            double valAffinite = Math.min(10.0, config.getPoidsAffinite());
+            // Tension (max ~30) -> on divise par 3
+            double valTension = Math.min(10.0, config.getPoidsTension() / 3.0);
+
+            // 2. Détermination de la "Météo" (Le point fort de la stratégie)
+            String titre, desc, icone;
+            double max = Math.max(Math.max(valForme, valEcart), Math.max(valAffinite, valTension));
+
+            if (max == valEcart) {
+                titre = "Chasse aux numéros froids";
+                desc = "L'IA parie sur la loi des grands nombres : les numéros qui ne sont pas sortis depuis longtemps sont privilégiés ce soir.";
+                icone = "bi-snow";
+            } else if (max == valAffinite) {
+                titre = "L'heure des Duos Historiques";
+                desc = "L'algorithme a détecté des paires de numéros inséparables. Focus maximal sur les affinités de groupe.";
+                icone = "bi-people-fill";
+            } else if (max == valTension) {
+                titre = "Correction Statistique";
+                desc = "L'IA force le destin sur les numéros qui sont en 'retard' par rapport à leur moyenne théorique de sortie.";
+                icone = "bi-magnet-fill";
+            } else {
+                titre = "Sur la vague de la tendance";
+                desc = "L'IA suit le courant : priorité aux numéros chauds qui ont dominé les derniers tirages.";
+                icone = "bi-fire";
+            }
+
+            // 3. Le Badge de Puissance
+            // Si c'est notre config "Deep Blue" (nbTiragesTestes = 350)
+            String puissance = (config.getNbTiragesTestes() > 0)
+                    ? "Basé sur 78 millions de simulations"
+                    : "Algorithme Standard FDJ";
+
+            return StrategyDisplayDto.builder()
+                    .nom("IA GÉNÉTIQUE (" + config.getNomStrategie() + ")")
+                    .meteoTitre(titre)
+                    .meteoDescription(desc)
+                    .meteoIcone(icone)
+                    .badgePuissance(puissance)
+                    .chartForme(Math.round(valForme * 10.0) / 10.0)
+                    .chartEcart(Math.round(valEcart * 10.0) / 10.0)
+                    .chartAffinite(Math.round(valAffinite * 10.0) / 10.0)
+                    .chartTension(Math.round(valTension * 10.0) / 10.0)
+                    .build();
+        }
+
+        /**
          * ULTRA-RAPIDE : Convertit une grille en un masque de 64 bits (long)
          * Numéro 1 = Bit 1, Numéro 49 = Bit 49.
          */

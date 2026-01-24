@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="fr" xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Stratégie IA du Jour - Loto Master</title>
+
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <style>
+    body { font-family: 'Poppins', sans-serif; background-color: #f8f9fa; }
+    .navbar-custom { background: linear-gradient(135deg, #1e1b4b 0%, #312e81 100%); }
+    .card { border: none; border-radius: 12px; transition: transform 0.2s; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
+    .card:hover { transform: translateY(-2px); }
+    .icon-lg { font-size: 2.5rem; }
+    .meteo-card { background: linear-gradient(135deg, #e0e7ff 0%, #ffffff 100%); }
+    .pulse-badge { animation: pulse 2s infinite; }
+    @keyframes pulse {
+      0% { box-shadow: 0 0 0 0 rgba(13, 110, 253, 0.4); }
+      70% { box-shadow: 0 0 0 10px rgba(13, 110, 253, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(13, 110, 253, 0); }
+    }
+  </style>
+</head>
+<body>
+
+<nav class="navbar navbar-expand-lg navbar-dark navbar-custom shadow-sm mb-5">
+  <div class="container">
+    <a class="navbar-brand fw-bold" th:href="@{/}">
+      <i class="bi bi-cpu-fill text-warning me-2"></i>LOTO MASTER AI
+    </a>
+  </div>
+</nav>
+
+<div class="container pb-5">
+  <div class="row mb-4">
+    <div class="col-12 text-center">
+      <h1 class="fw-bold text-dark mb-2">Comprendre l'IA du Jour</h1>
+      <p class="text-muted fs-5">Découvrez comment notre algorithme a choisi vos numéros ce soir.</p>
+    </div>
+  </div>
+
+  <div class="row justify-content-center mb-5">
+    <div class="col-md-8">
+      <div class="card bg-dark text-white text-center p-3">
+        <div class="d-flex align-items-center justify-content-center">
+          <span class="badge bg-primary fs-6 me-3 pulse-badge">ACTIF</span>
+          <h5 class="mb-0 fw-bold">
+            <i class="bi bi-shield-check text-success me-2"></i>
+            <span th:text="${strategie.badgePuissance}">Basé sur 78 millions de simulations</span>
+          </h5>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-4 justify-content-center">
+    <div class="col-md-5">
+      <div class="card h-100 p-4 meteo-card">
+        <h6 class="text-primary fw-bold text-uppercase mb-4">Météo Stratégique</h6>
+        <div class="text-center mb-4">
+          <i th:class="'bi ' + ${strategie.meteoIcone} + ' icon-lg text-dark'"></i>
+          <h3 class="fw-bold mt-3 text-dark" th:text="${strategie.meteoTitre}">Titre</h3>
+        </div>
+        <p class="text-muted text-center" th:text="${strategie.meteoDescription}">Description</p>
+        <div class="mt-auto pt-4 border-top">
+          <small class="text-muted d-block text-center">Moteur en charge : <strong th:text="${strategie.nom}">IA</strong></small>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-5">
+      <div class="card h-100 p-4 bg-white">
+        <h6 class="text-primary fw-bold text-uppercase mb-4">Profil Mathématique</h6>
+        <div class="d-flex justify-content-center" style="height: 300px;">
+          <canvas id="radarChart"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row mt-5">
+    <div class="col-12 text-center">
+      <a th:href="@{/}" class="btn btn-primary btn-lg fw-bold shadow">
+        <i class="bi bi-play-circle-fill me-2"></i>Voir mes pronostics
+      </a>
+    </div>
+  </div>
+
+</div>
+
+<script th:inline="javascript">
+  const chartForme = /*[[${strategie.chartForme}]]*/ 5;
+  const chartEcart = /*[[${strategie.chartEcart}]]*/ 5;
+  const chartAffinite = /*[[${strategie.chartAffinite}]]*/ 5;
+  const chartTension = /*[[${strategie.chartTension}]]*/ 5;
+
+  // Configuration Chart.js
+  const ctx = document.getElementById('radarChart').getContext('2d');
+  new Chart(ctx, {
+    type: 'radar',
+    data: {
+      labels: ['Chauds (Forme)', 'Froids (Ecart)', 'Duos (Affinité)', 'Tension (Math)'],
+      datasets: [{
+        label: 'Poids de l\'IA',
+        data: [chartForme, chartEcart, chartAffinite, chartTension],
+        backgroundColor: 'rgba(49, 46, 129, 0.2)', // Couleur custom
+        borderColor: '#312e81',
+        pointBackgroundColor: '#0d6efd',
+        borderWidth: 2,
+        pointRadius: 4
+      }]
+    },
+    options: {
+      scales: {
+        r: {
+          min: 0,
+          max: 10,
+          ticks: { display: false },
+          grid: { color: '#e2e8f0' },
+          pointLabels: {
+            font: { size: 13, family: 'Poppins', weight: '600' },
+            color: '#495057'
+          }
+        }
+      },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: function(context) { return ' Force : ' + context.raw + ' / 10'; }
+          }
+        }
+      },
+      responsive: true,
+      maintainAspectRatio: false
+    }
+  });
+</script>
+
+</body>
+</html>

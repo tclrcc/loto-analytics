@@ -2,6 +2,7 @@ package com.analyseloto.loto.controller;
 
 import com.analyseloto.loto.entity.JobLog;
 import com.analyseloto.loto.service.JobMonitorService;
+import com.analyseloto.loto.service.LotoService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -20,6 +21,7 @@ import java.util.List;
 public class AdminController {
     // Services
     private final JobMonitorService jobMonitorService;
+    private final LotoService lotoService;
 
     /**
      * Affichage de la page admin
@@ -42,5 +44,11 @@ public class AdminController {
     @ResponseBody
     public List<JobLog> getAllHistory() {
         return jobMonitorService.getHistory();
+    }
+
+    @GetMapping("/strategie")
+    public String afficherPageStrategie(Model model) {
+        model.addAttribute("strategie", lotoService.getStrategieDuJourPourAffichage());
+        return "strategie"; // Renvoie vers strategie.html
     }
 }

@@ -18,10 +18,10 @@ public class BacktestService {
     }
 
     /**
-     * Recherche de la meilleure configuration : MODE "DEEP BLUE" (Volume Extrême)
+     * Recherche de la meilleure configuration : MODE "ORACLE" (Markov + Volume Titanesque)
      */
     public LotoService.AlgoConfig trouverMeilleureConfig(List<LotoTirage> historiqueComplet) {
-        log.info("🧪 Démarrage de l'optimisation DEEP BLUE (Volume Extrême)...");
+        log.info("🧪 Démarrage de l'optimisation ORACLE (Cible: ~180 Millions de simulations)...");
         long start = System.currentTimeMillis();
 
         int depthBacktest = 350;
@@ -36,44 +36,49 @@ public class BacktestService {
         log.info("✅ {} Scénarios prêts en mémoire.", scenarios.size());
 
         // -------------------------------------------------------------
-        // 1. PUISSANCE MAXIMALE : 200 Grilles / Tirage
+        // 1. PUISSANCE MONSTRUEUSE : 300 Grilles / Tirage
         // -------------------------------------------------------------
-        int nbGrillesParTest = 200;
+        int nbGrillesParTest = 300;
 
         // -------------------------------------------------------------
-        // 2. GÉNÉRATION HYPER-CIBLÉE + NOUVELLE VARIABLE (FreqJour)
+        // 2. GÉNÉRATION DES CONFIGS + INJECTION DE MARKOV
         // -------------------------------------------------------------
         List<LotoService.AlgoConfig> configsATester = new ArrayList<>();
 
         int countId = 0;
 
-        // NOUVEAU : On teste l'impact du Jour (Lundi/Merc/Sam)
+        // FreqJour : 1.0, 3.0, 5.0 (3 steps)
         for (double freqJour = 1.0; freqJour <= 5.0; freqJour += 2.0) {
 
-            // Forme : Autour de 14.0 (12 à 16)
-            for (double forme = 12.0; forme <= 16.0; forme += 1.0) {
+            // Forme : 14 à 17 (4 steps)
+            for (double forme = 14.0; forme <= 17.0; forme += 1.0) {
 
-                // Ecart : Autour de 1.7 (1.5 à 1.9)
-                for (double ecart = 1.5; ecart <= 1.9; ecart += 0.1) {
+                // Ecart : 1.6 à 1.9 (4 steps)
+                for (double ecart = 1.6; ecart <= 1.9; ecart += 0.1) {
 
-                    // Affinité : Autour de 5.0 (3.0 à 7.0)
-                    for (double affinite = 3.0; affinite <= 7.0; affinite += 1.0) {
+                    // Affinité : 6.0 à 9.0 (4 steps)
+                    for (double affinite = 6.0; affinite <= 9.0; affinite += 1.0) {
 
-                        // Tension : Autour de 15.0 (10.0 à 20.0)
-                        for (double tension = 10.0; tension <= 20.0; tension += 5.0) {
+                        // Tension : 15.0 à 25.0 (3 steps)
+                        for (double tension = 15.0; tension <= 25.0; tension += 5.0) {
 
-                            configsATester.add(new LotoService.AlgoConfig(
-                                    "DEEP_" + (++countId), freqJour, forme, ecart, tension, 0.0, affinite, false
-                            ));
+                            // --- NOUVEAU : Test du Poids MARKOV (Transitions) ---
+                            // 0.0, 5.0, 10.0 (3 steps)
+                            for (double markov = 0.0; markov <= 10.0; markov += 5.0) {
+
+                                configsATester.add(new LotoService.AlgoConfig(
+                                        "ORACLE_" + (++countId), freqJour, forme, ecart, tension, markov, affinite, false
+                                ));
+                            }
                         }
                     }
                 }
             }
         }
 
-        // Total Configs = 3 * 5 * 5 * 5 * 3 = 1125 configs.
-        // Grilles générées = 1125 configs * 350 tirages * 200 grilles = ~78 Millions de grilles.
-        log.info("📊 Analyse de {} stratégies à volume extrême sur {} grilles chacune...", configsATester.size(), nbGrillesParTest);
+        // Total Configs = 3 * 4 * 4 * 4 * 3 * 3 = 1728 configs.
+        // Grilles générées = 1728 configs * 350 tirages * 300 grilles = ~181,440,000 de grilles.
+        log.info("📊 Analyse de {} stratégies (INCLUANT MARKOV) sur {} grilles chacune...", configsATester.size(), nbGrillesParTest);
 
         // 3. BACKTEST PARALLÈLE
         final var bestResultRef = new Object() {
@@ -86,11 +91,8 @@ public class BacktestService {
             double depense = 0;
 
             for (LotoService.ScenarioSimulation scenar : scenarios) {
-
                 List<List<Integer>> grilles = lotoService.genererGrillesDepuisScenario(scenar, config, nbGrillesParTest);
-
                 depense += (grilles.size() * 2.20);
-
                 for (List<Integer> g : grilles) {
                     bilan += calculerGainRapide(g, scenar.getTirageReel());
                 }
@@ -102,9 +104,9 @@ public class BacktestService {
                 if (net > bestResultRef.maxBilan) {
                     bestResultRef.maxBilan = net;
                     bestResultRef.config = config;
-                    log.info("🚀 Record : {} € (Freq={}, F={}, E={}, Aff={}, Tens={})",
+                    log.info("🚀 Record : {} € (Mk={}, Freq={}, F={}, E={}, Aff={}, Tens={})",
                             String.format("%.2f", net),
-                            config.getPoidsFreqJour(), config.getPoidsForme(), config.getPoidsEcart(), config.getPoidsAffinite(), config.getPoidsTension());
+                            config.getPoidsMarkov(), config.getPoidsFreqJour(), config.getPoidsForme(), config.getPoidsEcart(), config.getPoidsAffinite(), config.getPoidsTension());
                 }
             }
         });
