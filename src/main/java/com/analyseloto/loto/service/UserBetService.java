@@ -39,20 +39,6 @@ public class UserBetService {
     }
 
     /**
-     * Remplir le bilan de l'utilisateur dans le modèle
-     * @param userBets liste des grilles de l'utilisateur
-     * @param model modèle
-     */
-    public void remplirBilanUser(List<UserBet> userBets, Model model) {
-        // Remplissage infos bilan utilisateur
-        Map<String, Double> mapValuesBilan = getMapValuesBilan(userBets);
-        // Données pour le bilan financier de l'utilisateur
-        model.addAttribute("totalDepense", mapValuesBilan.get(Constantes.MAP_KEY_TOTAL_DEPENSE));
-        model.addAttribute("totalGains", mapValuesBilan.get(Constantes.MAP_KEY_TOTAL_GAINS));
-        model.addAttribute("solde", mapValuesBilan.get(Constantes.MAP_KEY_SOLDE));
-    }
-
-    /**
      * Remplir le bilan de l'utilisateur IA dans le modèle
      * @param model modèle
      */

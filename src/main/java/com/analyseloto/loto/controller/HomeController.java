@@ -72,9 +72,6 @@ public class HomeController {
         List<UserBet> userBets = userBetService.recupererGrillesUtilisateurTriees(user);
         model.addAttribute("bets", userBets);
 
-        // Remplissage du bilan IA de l'utilisateur
-        userBetService.remplirBilanUser(userBets, model);
-
         // On récupère toutes les dates uniques jouées par l'utilisateur
         Set<LocalDate> datesJouees = userBets.stream()
                 .map(UserBet::getDateJeu)
