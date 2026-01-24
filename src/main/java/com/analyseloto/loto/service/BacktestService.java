@@ -5,11 +5,13 @@ import io.jenetics.*;
 import io.jenetics.engine.Engine;
 import io.jenetics.engine.EvolutionResult;
 import io.jenetics.util.Factory;
+import io.jenetics.util.RandomRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Random;
 
 @Service
 @Slf4j
@@ -29,6 +31,8 @@ public class BacktestService {
     public LotoService.AlgoConfig trouverMeilleureConfig(List<LotoTirage> historiqueComplet) {
         log.info("🧬 Démarrage de la Méta-Optimisation IA (Jenetics)...");
         long start = System.currentTimeMillis();
+
+        RandomRegistry.random(new Random());
 
         int depthBacktest = 350;
         List<LotoService.ScenarioSimulation> scenarios = lotoService.preparerScenariosBacktest(historiqueComplet, depthBacktest, 250);
