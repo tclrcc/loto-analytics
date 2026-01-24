@@ -38,7 +38,6 @@
         // Services
         private final AstroService astroService;
         private final BacktestService backtestService;
-        private final LstmPredictionService lstmService;
         // Variable de classe pour stocker la meilleure config en mémoire (Cache simple)
         private AlgoConfig cachedBestConfig = null;
         private LocalDate lastBacktestDate = null;
@@ -208,21 +207,9 @@
             Map<Integer, Map<Integer, Integer>> matriceAffinites = construireMatriceAffinitesPonderee(history, dateCible.getDayOfWeek());
             Map<Integer, Map<Integer, Integer>> matriceChance = construireMatriceAffinitesChancePonderee(history, dateCible.getDayOfWeek());
 
-            // L'IA Deep Learning donne son avis sur ce qui va sortir ce soir.
-            Map<Integer, Double> scoresLstm = lstmService.getLstmPredictions(history.subList(0, Math.min(history.size(), 20)));
-
             // Calcul des scores unitaires avec les poids de l'IA
             Map<Integer, Double> scoresBoules = calculerScores(history, 49, dateCible.getDayOfWeek(), false, boostNumbers, hotFinales, configOptimisee, dernierTirage);
             Map<Integer, Double> scoresChance = calculerScores(history, 10, dateCible.getDayOfWeek(), true, boostNumbers, Collections.emptySet(), configOptimisee, null);
-
-            // FUSION DES CERVEAUX : On ajoute la vision du LSTM aux statistiques pures
-            for (int i = 1; i <= 49; i++) {
-                double scoreStat = scoresBoules.getOrDefault(i, 10.0);
-                double scoreLstm = scoresLstm.getOrDefault(i, 0.0);
-
-                // Le LSTM a un poids énorme. S'il a une forte intuition, ça prime.
-                scoresBoules.put(i, scoreStat + scoreLstm);
-            }
 
             DynamicConstraints contraintesDuJour = analyserContraintesDynamiques(history, dernierTirage);
             Map<String, List<Integer>> buckets = creerBuckets(scoresBoules);
@@ -1346,9 +1333,6 @@
                 entity.setNbTiragesTestes(newConfig.getNbTiragesTestes());
     
                 strategyConfigRepostiroy.save(entity);
-
-                // Entraînement du réseau de neurones profond (prend environ 5 à 15 secondes)
-                lstmService.trainModel(history);
 
                 log.info("✅ [CRON] Stratégie sauvegardée (Bilan: {} €) en {} ms.",
                         String.format("%.2f", entity.getBilanEstime()), (System.currentTimeMillis() - start));
