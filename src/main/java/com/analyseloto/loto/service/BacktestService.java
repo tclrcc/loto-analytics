@@ -18,16 +18,13 @@ public class BacktestService {
     }
 
     /**
-     * Recherche de la meilleure configuration de l'algorithme par optimisation génétique simplifiée
-     * @param historiqueComplet historique complet des tirages
-     * @return Meilleure configuration trouvée
+     * Recherche de la meilleure configuration de l'algorithme : MODE SNIPER
      */
     public LotoService.AlgoConfig trouverMeilleureConfig(List<LotoTirage> historiqueComplet) {
-        log.info("🧪 Démarrage de l'optimisation MASSIVE...");
+        log.info("🧪 Démarrage de l'optimisation SNIPER (100 millions de simulations)...");
         long start = System.currentTimeMillis();
 
-        // 1. PRÉ-CALCUL DES SCÉNARIOS (On augmente la profondeur)
-        // On teste sur les 350 derniers tirages (2.5 ans) pour une robustesse maximale
+        // 1. PRÉ-CALCUL DES SCÉNARIOS (350 derniers tirages = 2.5 ans)
         int depthBacktest = 350;
         log.info("📸 Pré-calcul des snapshots sur {} tirages...", depthBacktest);
 
@@ -39,28 +36,47 @@ public class BacktestService {
         }
         log.info("✅ {} Scénarios prêts en mémoire.", scenarios.size());
 
-        // 2. GÉNÉRATION EXPLOSIVE DES CONFIGS (Brute Force Intelligent)
+        // -------------------------------------------------------------
+        // 2. RÉGLAGE DE LA PUISSANCE DE FEU (Grâce à l'optimisation)
+        // -------------------------------------------------------------
+        // On double la précision : 100 grilles simulées par tirage historique
+        int nbGrillesParTest = 100;
+
+        // -------------------------------------------------------------
+        // 3. GÉNÉRATION CIBLÉE DES CONFIGS (Smart Range)
+        // -------------------------------------------------------------
         List<LotoService.AlgoConfig> configsATester = new ArrayList<>();
 
-        int countId = 0;
-        int nbGrillesParTest = 50;
+        // On a vu que Forme ~12.5-17.5 et Ecart ~1.6-1.8 fonctionnaient bien.
+        // On va scanner CETTE zone au microscope.
 
-        for (double forme = 5.0; forme <= 50.0; forme += 2.5) {
-            for (double ecart = 0.4; ecart <= 1.8; ecart += 0.2) {
+        int countId = 0;
+
+        // Forme : De 10 à 20 par pas de 1 (Très précis) -> 11 steps
+        for (double forme = 10.0; forme <= 20.0; forme += 1.0) {
+
+            // Ecart : De 1.4 à 2.0 par pas de 0.1 -> 7 steps
+            for (double ecart = 1.4; ecart <= 2.0; ecart += 0.1) {
+
+                // Affinité : De 0 à 10 par pas de 1 -> 11 steps
                 for (double affinite = 0.0; affinite <= 10.0; affinite += 1.0) {
+
+                    // Tension : 0, 15, 30 -> 3 steps
                     for (double tension = 0.0; tension <= 30.0; tension += 15.0) {
-                        // On ajoute aussi Markov 0 ou 2 pour voir
+
                         configsATester.add(new LotoService.AlgoConfig(
-                                "TEST_" + (++countId), 3.0, forme, ecart, tension, 0.0, affinite, false
+                                "SNIPER_" + (++countId), 3.0, forme, ecart, tension, 0.0, affinite, false
                         ));
                     }
                 }
             }
         }
 
-        log.info("📊 Analyse de {} stratégies complexes sur tous les cœurs CPU...", configsATester.size());
+        // Total Configs = 11 * 7 * 11 * 3 = 2541 configs.
+        // Grilles générées = 2541 configs * 350 tirages * 100 grilles = ~89 Millions de grilles.
+        log.info("📊 Analyse de {} stratégies haute-précision sur {} grilles chacune...", configsATester.size(), nbGrillesParTest);
 
-        // 3. BACKTEST PARALLÈLE
+        // 4. BACKTEST PARALLÈLE
         final var bestResultRef = new Object() {
             LotoService.AlgoConfig config = LotoService.AlgoConfig.defaut();
             double maxBilan = -Double.MAX_VALUE;
@@ -71,16 +87,12 @@ public class BacktestService {
             double bilan = 0;
             double depense = 0;
 
-            // Boucle sur les scénarios (Lecture seule = Thread Safe & Rapide)
             for (LotoService.ScenarioSimulation scenar : scenarios) {
 
-                // ON AUGMENTE LA PRÉCISION : 10 grilles par tirage au lieu de 3
-                // Cela évite les "coups de chance" isolés. Une bonne stratégie doit gagner souvent.
                 List<List<Integer>> grilles = lotoService.genererGrillesDepuisScenario(scenar, config, nbGrillesParTest);
 
                 depense += (grilles.size() * 2.20);
 
-                // Calcul rapide du gain
                 for (List<Integer> g : grilles) {
                     bilan += calculerGainRapide(g, scenar.getTirageReel());
                 }
@@ -88,22 +100,20 @@ public class BacktestService {
 
             double net = bilan - depense;
 
-            // Mise à jour Thread-Safe du meilleur résultat
             synchronized (bestResultRef) {
                 if (net > bestResultRef.maxBilan) {
                     bestResultRef.maxBilan = net;
                     bestResultRef.config = config;
-                    log.info("🚀 Record : {} € (Forme={}, Ecart={}, Aff={}, Tens={})",
+                    log.info("🚀 Record : {} € (F={}, E={}, Aff={}, Tens={})",
                             String.format("%.2f", net),
                             config.getPoidsForme(), config.getPoidsEcart(), config.getPoidsAffinite(), config.getPoidsTension());
                 }
             }
         });
 
-        // Durée du traitement
         long duration = System.currentTimeMillis() - start;
 
-        // Configuration gagnante
+        // Configuration gagnante finale
         LotoService.AlgoConfig gagnante = bestResultRef.config;
         gagnante.setBilanEstime(bestResultRef.maxBilan);
         gagnante.setNbTiragesTestes(depthBacktest);
@@ -115,46 +125,21 @@ public class BacktestService {
     }
 
     private double calculerGainRapide(List<Integer> grille, LotoTirage t) {
-        // Sécurité : on s'attend à 6 numéros (5 boules + 1 chance)
         if (grille.size() < 6) return 0.0;
 
-        // On sépare les boules et la chance
-        // subList(0, 5) prend les index 0, 1, 2, 3, 4
         List<Integer> boulesJouees = grille.subList(0, 5);
-        int chanceJouee = grille.get(5); // Le dernier élément est la chance
+        int chanceJouee = grille.get(5);
 
-        // Vérification des boules
+        // Comptage rapide des bons numéros
         long bonsNumeros = boulesJouees.stream().filter(t.getBoules()::contains).count();
-
-        // Vérification de la chance
         boolean bonneChance = (chanceJouee == t.getNumeroChance());
 
-        // --- Grille des Gains (Approximation réaliste FDJ) ---
-
-        // 5 Bons numéros
-        if (bonsNumeros == 5) {
-            return bonneChance ? 2_000_000.0 : 100_000.0; // Jackpot (Rank 1) vs Rank 2
-        }
-
-        // 4 Bons numéros
-        if (bonsNumeros == 4) {
-            return bonneChance ? 1_000.0 : 500.0;
-        }
-
-        // 3 Bons numéros
-        if (bonsNumeros == 3) {
-            return bonneChance ? 50.0 : 20.0;
-        }
-
-        // 2 Bons numéros
-        if (bonsNumeros == 2) {
-            return bonneChance ? 10.0 : 5.0;
-        }
-
-        // 0 ou 1 Bon numéro mais Bonne Chance (Remboursement)
-        if (bonneChance) {
-            return 2.20;
-        }
+        // --- Grille des Gains (Approximation FDJ) ---
+        if (bonsNumeros == 5) return bonneChance ? 2_000_000.0 : 100_000.0;
+        if (bonsNumeros == 4) return bonneChance ? 1_000.0 : 500.0;
+        if (bonsNumeros == 3) return bonneChance ? 50.0 : 20.0;
+        if (bonsNumeros == 2) return bonneChance ? 10.0 : 5.0;
+        if (bonneChance) return 2.20;
 
         return 0.0;
     }

@@ -188,8 +188,6 @@
             AlgoConfig configOptimisee;
             if (cachedBestConfig != null) {
                 configOptimisee = cachedBestConfig;
-                // On accepte la config même si elle date d'hier (elle reste excellente)
-                // Warning seulement si > 7 jours
                 if (lastBacktestDate != null && lastBacktestDate.isBefore(LocalDate.now().minusDays(7))) {
                     log.warn("⚠️ [ALGO] Config périmée (>7 jours). Vérifiez le CRON.");
                 }
@@ -217,49 +215,33 @@
             Map<String, List<Integer>> buckets = creerBuckets(scoresBoules);
 
             // --- OPTIMISATION PERFORMANCE : Cache des grilles passées pour vérification rapide ---
-            // On stocke les hashcodes des 500 derniers tirages pour éviter de parcourir la liste à chaque fois
-            Set<Set<Integer>> historiqueSet = new HashSet<>();
-            int limitHistoryCheck = Math.min(history.size(), 300); // On vérifie les 300 derniers
+            Set<Long> historiqueBitMasks = new HashSet<>();
+            int limitHistoryCheck = Math.min(history.size(), 300);
             for(int i=0; i<limitHistoryCheck; i++) {
-                historiqueSet.add(new HashSet<>(history.get(i).getBoules()));
+                historiqueBitMasks.add(calculerBitMask(history.get(i).getBoules()));
             }
 
-            // 4. Génération de Masse (Monte Carlo)
-            List<GrilleCandidate> population = new ArrayList<>();
-            int taillePopulation = 5000;
             Random rng = new Random();
 
-            for (int i = 0; i < taillePopulation; i++) {
-                List<Integer> boules;
+            // ---------------------------------------------------------
+            // 4. GÉNÉRATION : MOTEUR GÉNÉTIQUE IA
+            // ---------------------------------------------------------
+            int taillePopulation = 1000;
+            int nbGenerations = 15;
 
-                // 70% Intelligence (Affinité/Trios) / 30% Hasard
-                if (rng.nextDouble() < 0.7) {
-                    boules = genererGrilleParAffinite(buckets, matriceAffinites, dernierTirage, topTriosDuJour, rng);
-                } else {
-                    boules = genererGrilleAleatoireSecours(rng);
-                }
+            // C'est LUI qui fait tout le travail maintenant (génération, mutation, sélection) !
+            List<GrilleCandidate> population = executerAlgorithmeGenetique(
+                    taillePopulation, nbGenerations, buckets, matriceAffinites, dernierTirage,
+                    topTriosDuJour, scoresBoules, scoresChance, matriceChance,
+                    history, contraintesDuJour, configOptimisee.getPoidsAffinite(),
+                    historiqueBitMasks, rng
+            );
 
-                // Filtres rapides (Structurel)
-                if (estGrilleCoherente(boules, dernierTirage, contraintesDuJour)) {
+            // ---------------------------------------------------------
+            // 5. CONSTRUCTION DU RÉSULTAT FINAL
+            // ---------------------------------------------------------
 
-                    // Filtre Doublon Historique (Ultra-rapide grâce au Set)
-                    if (historiqueSet.contains(new HashSet<>(boules))) {
-                        continue; // On jette, c'est déjà sorti
-                    }
-
-                    int chance = selectionnerChanceOptimisee(boules, scoresChance, matriceChance, rng);
-
-                    // Calcul Fitness (Version Production)
-                    double fitness = calculerScoreFitness(boules, chance, scoresBoules, scoresChance, matriceAffinites,
-                            history, dernierTirage, configOptimisee.getPoidsAffinite());
-
-                    population.add(new GrilleCandidate(boules, chance, fitness));
-                }
-            }
-
-            // 5. Sélection Élitiste (On prend les meilleures selon le fitness)
-            population.sort((g1, g2) -> Double.compare(g2.fitness, g1.fitness));
-
+            // NB: Le tri est déjà fait à la fin de l'algo génétique, on n'a même plus besoin de le refaire ici.
             List<PronosticResultDto> resultats = new ArrayList<>();
             Set<List<Integer>> doublonsCheck = new HashSet<>();
 
@@ -273,8 +255,8 @@
                 double maxDuo = simu.getPairs().stream().mapToDouble(MatchGroup::getRatio).max().orElse(0.0);
                 double maxTrio = simu.getTrios().stream().mapToDouble(MatchGroup::getRatio).max().orElse(0.0);
 
-                // Badge IA clair pour l'UI
-                String typeAlgo = "IA_OPTIMAL (" + configOptimisee.getNomStrategie() + ")";
+                // Badge IA clair pour l'UI (Maintenant c'est du vrai génétique !)
+                String typeAlgo = "IA_GÉNÉTIQUE (" + configOptimisee.getNomStrategie() + ") ⭐";
                 if(cand.fitness < 50) typeAlgo = "IA_FLEXIBLE";
 
                 resultats.add(new PronosticResultDto(
@@ -1480,5 +1462,120 @@
             if (raw.isTension) s += cfg.getPoidsTension();
     
             return s;
+        }
+
+        /**
+         * VRAI ALGORITHME GÉNÉTIQUE : Évolution par Sélection, Croisement et Mutation
+         */
+        private List<GrilleCandidate> executerAlgorithmeGenetique(
+                int taillePopulation, int generations,
+                Map<String, List<Integer>> buckets,
+                Map<Integer, Map<Integer, Integer>> matriceAffinites,
+                List<Integer> dernierTirage,
+                List<List<Integer>> topTrios,
+                Map<Integer, Double> scoresBoules,
+                Map<Integer, Double> scoresChance,
+                Map<Integer, Map<Integer, Integer>> matriceChance,
+                List<LotoTirage> history,
+                DynamicConstraints contraintes,
+                double poidsAffinite,
+                Set<Long> historiqueBitMasks,
+                Random rng) {
+
+            List<GrilleCandidate> population = new ArrayList<>();
+
+            // -------------------------------------------------------------
+            // 1. POPULATION INITIALE (Génération 0)
+            // -------------------------------------------------------------
+            while (population.size() < taillePopulation) {
+                List<Integer> boules = genererGrilleParAffinite(buckets, matriceAffinites, dernierTirage, topTrios, rng);
+                if (estGrilleCoherente(boules, dernierTirage, contraintes) && !historiqueBitMasks.contains(calculerBitMask(boules))) {
+                    int chance = selectionnerChanceOptimisee(boules, scoresChance, matriceChance, rng);
+                    double fitness = calculerScoreFitness(boules, chance, scoresBoules, scoresChance, matriceAffinites, history, dernierTirage, poidsAffinite);
+                    population.add(new GrilleCandidate(boules, chance, fitness));
+                }
+            }
+
+            // -------------------------------------------------------------
+            // 2. ÉVOLUTION (Boucle des Générations)
+            // -------------------------------------------------------------
+            for (int gen = 1; gen <= generations; gen++) {
+                // Tri des individus du meilleur au moins bon
+                population.sort((g1, g2) -> Double.compare(g2.fitness, g1.fitness));
+
+                List<GrilleCandidate> nouvelleGeneration = new ArrayList<>();
+
+                // A. ELITISME (On garde les 15% meilleurs intacts)
+                int nbElites = (int) (taillePopulation * 0.15);
+                for (int i = 0; i < nbElites; i++) {
+                    nouvelleGeneration.add(population.get(i));
+                }
+
+                // B. CROSSOVER (Reproduction : 70% de la population)
+                int nbEnfants = (int) (taillePopulation * 0.85); // 15% élite + 70% enfants = 85%
+                while (nouvelleGeneration.size() < nbEnfants) {
+                    // Sélection des parents par "Tournoi" (On prend 2 parents parmi les 30% meilleurs)
+                    GrilleCandidate maman = population.get(rng.nextInt(taillePopulation / 3));
+                    GrilleCandidate papa = population.get(rng.nextInt(taillePopulation / 3));
+
+                    // L'enfant hérite de 3 gènes de maman et 2 de papa
+                    Set<Integer> genesEnfant = new HashSet<>(maman.boules.subList(0, 3));
+                    for (Integer numPapa : papa.boules) {
+                        if (genesEnfant.size() < 5) genesEnfant.add(numPapa);
+                    }
+
+                    // Si maman et papa avaient des numéros en commun, il manque des boules à l'enfant. On comble.
+                    while (genesEnfant.size() < 5) {
+                        genesEnfant.add(rng.nextInt(49) + 1);
+                    }
+
+                    List<Integer> boulesEnfant = new ArrayList<>(genesEnfant);
+                    Collections.sort(boulesEnfant);
+
+                    // C. MUTATION (15% de chance de modifier un numéro aléatoirement)
+                    if (rng.nextDouble() < 0.15) {
+                        int idxToMutate = rng.nextInt(5);
+                        int mutation = rng.nextInt(49) + 1;
+                        while (boulesEnfant.contains(mutation)) mutation = rng.nextInt(49) + 1;
+                        boulesEnfant.set(idxToMutate, mutation);
+                        Collections.sort(boulesEnfant);
+                    }
+
+                    // D. VALIDATION DE L'ENFANT
+                    if (estGrilleCoherente(boulesEnfant, dernierTirage, contraintes) && !historiqueBitMasks.contains(calculerBitMask(boulesEnfant))) {
+                        int chance = rng.nextBoolean() ? maman.chance : papa.chance; // Héritage du numéro chance
+                        double fitness = calculerScoreFitness(boulesEnfant, chance, scoresBoules, scoresChance, matriceAffinites, history, dernierTirage, poidsAffinite);
+                        nouvelleGeneration.add(new GrilleCandidate(boulesEnfant, chance, fitness));
+                    }
+                }
+
+                // E. IMMIGRATION (15% de sang neuf pour éviter la consanguinité/blocage local)
+                while (nouvelleGeneration.size() < taillePopulation) {
+                    List<Integer> b = genererGrilleParAffinite(buckets, matriceAffinites, dernierTirage, topTrios, rng);
+                    if (estGrilleCoherente(b, dernierTirage, contraintes) && !historiqueBitMasks.contains(calculerBitMask(b))) {
+                        int c = selectionnerChanceOptimisee(b, scoresChance, matriceChance, rng);
+                        double f = calculerScoreFitness(b, c, scoresBoules, scoresChance, matriceAffinites, history, dernierTirage, poidsAffinite);
+                        nouvelleGeneration.add(new GrilleCandidate(b, c, f));
+                    }
+                }
+
+                population = nouvelleGeneration; // La nouvelle génération remplace l'ancienne
+            }
+
+            // Tri final après la dernière génération
+            population.sort((g1, g2) -> Double.compare(g2.fitness, g1.fitness));
+            return population;
+        }
+
+        /**
+         * ULTRA-RAPIDE : Convertit une grille en un masque de 64 bits (long)
+         * Numéro 1 = Bit 1, Numéro 49 = Bit 49.
+         */
+        private long calculerBitMask(List<Integer> boules) {
+            long mask = 0L;
+            for (Integer b : boules) {
+                mask |= (1L << b); // Allume le bit correspondant au numéro
+            }
+            return mask;
         }
     }
