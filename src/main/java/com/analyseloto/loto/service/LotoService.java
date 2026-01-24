@@ -238,25 +238,40 @@
             );
 
             // ---------------------------------------------------------
-            // 5. CONSTRUCTION DU RÉSULTAT FINAL
+            // 5. CONSTRUCTION DU RÉSULTAT FINAL (AVEC FILTRE DE DIVERSITÉ)
             // ---------------------------------------------------------
 
-            // NB: Le tri est déjà fait à la fin de l'algo génétique, on n'a même plus besoin de le refaire ici.
             List<PronosticResultDto> resultats = new ArrayList<>();
-            Set<List<Integer>> doublonsCheck = new HashSet<>();
+            List<List<Integer>> grillesRetenues = new ArrayList<>(); // Pour comparer les grilles entre elles
 
             for (GrilleCandidate cand : population) {
                 if (resultats.size() >= nombreGrilles) break;
                 Collections.sort(cand.boules);
-                if (doublonsCheck.contains(cand.boules)) continue;
+
+                // --- NOUVEAU : LE FILTRE DE DIVERSITÉ ---
+                // On s'assure que la grille n'est pas un "clone" d'une grille déjà sélectionnée.
+                boolean tropSimilaire = false;
+                for (List<Integer> dejaPrise : grillesRetenues) {
+                    // On compte les numéros en commun entre la grille candidate et celles déjà retenues
+                    long communs = cand.boules.stream().filter(dejaPrise::contains).count();
+
+                    // Si elles partagent 4 ou 5 numéros, c'est un clone, on rejette !
+                    // (Même si le numéro chance est différent, on veut de la variété sur les boules)
+                    if (communs >= 4) {
+                        tropSimilaire = true;
+                        break;
+                    }
+                }
+                if (tropSimilaire) continue; // On jette ce clone et on passe au candidat suivant
+                // ----------------------------------------
 
                 // Analyse détaillée pour l'affichage (Simulation sur historique)
                 SimulationResultDto simu = simulerGrilleDetaillee(cand.boules, dateCible, history);
                 double maxDuo = simu.getPairs().stream().mapToDouble(MatchGroup::getRatio).max().orElse(0.0);
                 double maxTrio = simu.getTrios().stream().mapToDouble(MatchGroup::getRatio).max().orElse(0.0);
 
-                // Badge IA clair pour l'UI (Maintenant c'est du vrai génétique !)
-                String typeAlgo = "IA_GÉNÉTIQUE (" + configOptimisee.getNomStrategie() + ") ⭐";
+                // Badge IA
+                String typeAlgo = "IA_OPTIMAL (" + configOptimisee.getNomStrategie() + ")";
                 if(cand.fitness < 50) typeAlgo = "IA_FLEXIBLE";
 
                 resultats.add(new PronosticResultDto(
@@ -265,16 +280,21 @@
                         maxDuo, maxTrio, !simu.getQuintuplets().isEmpty(),
                         typeAlgo
                 ));
-                doublonsCheck.add(cand.boules);
+
+                // On ajoute la grille à la liste des retenues pour les futures comparaisons
+                grillesRetenues.add(cand.boules);
             }
 
-            // Fallback (Au cas où on est trop restrictif)
+            // Fallback (Au cas où le filtre est trop strict et qu'on manque de grilles)
             while (resultats.size() < nombreGrilles) {
                 List<Integer> b = genererGrilleAleatoireSecours(rng);
                 Collections.sort(b);
-                if(!doublonsCheck.contains(b)){
+
+                // On vérifie quand même qu'on ne met pas un doublon exact au hasard
+                boolean existeDeja = grillesRetenues.stream().anyMatch(g -> g.equals(b));
+                if(!existeDeja){
                     resultats.add(new PronosticResultDto(b, 1, 0.0, 0.0, 0.0, false, "HASARD_SECOURS"));
-                    doublonsCheck.add(b);
+                    grillesRetenues.add(b);
                 }
             }
 
