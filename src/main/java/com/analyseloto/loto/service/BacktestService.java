@@ -26,7 +26,7 @@ public class BacktestService {
 
         // On force la propriété système AVANT que Jenetics ne soit chargé en mémoire.
         // Cela empêche l'erreur "L64X256MixRandom not available" sur les JVM allégées.
-        System.setProperty("io.jenetics.util.defaultRandomGenerator", "java.util.Random");
+        System.setProperty("io.jenetics.util.defaultRandomGenerator", "Random");
     }
 
     /**
