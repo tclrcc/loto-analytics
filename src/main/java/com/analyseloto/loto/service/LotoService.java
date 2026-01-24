@@ -229,6 +229,9 @@
             int taillePopulation = 1000;
             int nbGenerations = 15;
 
+            // --- AJOUT DE LOGS POUR LE SUIVI ---
+            log.info("🧬 Démarrage de l'Algo Génétique : Création de {} grilles mutantes sur {} générations...", taillePopulation, nbGenerations);
+
             // C'est LUI qui fait tout le travail maintenant (génération, mutation, sélection) !
             List<GrilleCandidate> population = executerAlgorithmeGenetique(
                     taillePopulation, nbGenerations, buckets, matriceAffinites, dernierTirage,
@@ -236,6 +239,9 @@
                     history, contraintesDuJour, configOptimisee,
                     historiqueBitMasks, rng
             );
+
+            // --- LOG DE LA MEILLEURE GRILLE ABSOLUE ---
+            log.info("🏆 Évolution terminée ! Meilleur Score (Fitness) trouvé : {}", String.format("%.2f", population.get(0).fitness));
 
             // ---------------------------------------------------------
             // 5. CONSTRUCTION DU RÉSULTAT FINAL (AVEC FILTRE DE DIVERSITÉ)
@@ -248,6 +254,8 @@
             // On représente les numéros déjà "couverts" par nos grilles retenues via un BitMask.
             long couvertureGlobale = 0L;
 
+            log.info("🔍 Lancement du Tri Glouton (Wheeling) pour maximiser la couverture des numéros...");
+
             for (GrilleCandidate cand : population) {
                 if (resultats.size() >= nombreGrilles) break;
                 Collections.sort(cand.boules);
@@ -256,16 +264,17 @@
                 long masqueCandidat = calculerBitMask(cand.boules);
 
                 // --- ALGORITHME GLOUTON DE COUVERTURE ---
-                // On regarde combien de NOUVEAUX numéros cette grille apporte par rapport à ce qu'on a déjà.
-                // Opération bitwise : (Masque Candidat) ET NON (Couverture Globale)
                 long nouveauxNumerosMask = masqueCandidat & ~couvertureGlobale;
-
-                // Long.bitCount() compte le nombre de '1' (numéros uniques) apportés.
                 int apportDiversite = Long.bitCount(nouveauxNumerosMask);
 
                 // Règle Gloutonne : On n'accepte la grille que si elle apporte au moins 2 nouveaux numéros non couverts,
                 // OU si c'est la toute première grille (l'absolue meilleure).
                 if (resultats.isEmpty() || apportDiversite >= 2) {
+
+                    // --- LOG DE VALIDATION ---
+                    int index = resultats.size() + 1;
+                    log.info("✅ Grille #{} VALIDÉE -> Numéros: {} | Chance: {} | Score: {} | Nouveaux numéros couverts: {}",
+                            index, cand.boules, cand.chance, String.format("%.1f", cand.fitness), (resultats.isEmpty() ? 5 : apportDiversite));
 
                     // On met à jour notre couverture globale (OU binaire)
                     couvertureGlobale |= masqueCandidat;
@@ -275,8 +284,8 @@
                     SimulationResultDto simu = simulerGrilleDetaillee(cand.boules, dateCible, history);
                     double maxDuo = simu.getPairs().stream().mapToDouble(MatchGroup::getRatio).max().orElse(0.0);
 
-                    // Badge Marketing
-                    String typeAlgo = "IA_GÉNÉTIQUE + MARKOV ⭐";
+                    // CORRECTION DU BUG VISUEL : Remplacement de "GÉNÉTIQUE" par "OPTIMAL" (sans accent)
+                    String typeAlgo = "IA_OPTIMAL (MARKOV)";
                     if(cand.fitness < 50) typeAlgo = "IA_FLEXIBLE";
 
                     resultats.add(new PronosticResultDto(
@@ -295,6 +304,7 @@
 
                 boolean existeDeja = grillesRetenues.stream().anyMatch(g -> g.equals(b));
                 if(!existeDeja){
+                    log.warn("⚠️ Utilisation d'une grille de secours (Hasard) pour compléter la liste.");
                     resultats.add(new PronosticResultDto(b, 1, 0.0, 0.0, 0.0, false, "HASARD_SECOURS"));
                     grillesRetenues.add(b);
                 }
