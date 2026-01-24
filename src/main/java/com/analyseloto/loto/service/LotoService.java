@@ -38,6 +38,7 @@
         // Services
         private final AstroService astroService;
         private final BacktestService backtestService;
+        private final LstmPredictionService lstmService;
         // Variable de classe pour stocker la meilleure config en mémoire (Cache simple)
         private AlgoConfig cachedBestConfig = null;
         private LocalDate lastBacktestDate = null;
@@ -207,9 +208,21 @@
             Map<Integer, Map<Integer, Integer>> matriceAffinites = construireMatriceAffinitesPonderee(history, dateCible.getDayOfWeek());
             Map<Integer, Map<Integer, Integer>> matriceChance = construireMatriceAffinitesChancePonderee(history, dateCible.getDayOfWeek());
 
+            // L'IA Deep Learning donne son avis sur ce qui va sortir ce soir.
+            Map<Integer, Double> scoresLstm = lstmService.getLstmPredictions(history.subList(0, Math.min(history.size(), 20)));
+
             // Calcul des scores unitaires avec les poids de l'IA
             Map<Integer, Double> scoresBoules = calculerScores(history, 49, dateCible.getDayOfWeek(), false, boostNumbers, hotFinales, configOptimisee, dernierTirage);
             Map<Integer, Double> scoresChance = calculerScores(history, 10, dateCible.getDayOfWeek(), true, boostNumbers, Collections.emptySet(), configOptimisee, null);
+
+            // FUSION DES CERVEAUX : On ajoute la vision du LSTM aux statistiques pures
+            for (int i = 1; i <= 49; i++) {
+                double scoreStat = scoresBoules.getOrDefault(i, 10.0);
+                double scoreLstm = scoresLstm.getOrDefault(i, 0.0);
+
+                // Le LSTM a un poids énorme. S'il a une forte intuition, ça prime.
+                scoresBoules.put(i, scoreStat + scoreLstm);
+            }
 
             DynamicConstraints contraintesDuJour = analyserContraintesDynamiques(history, dernierTirage);
             Map<String, List<Integer>> buckets = creerBuckets(scoresBoules);
@@ -233,7 +246,7 @@
             List<GrilleCandidate> population = executerAlgorithmeGenetique(
                     taillePopulation, nbGenerations, buckets, matriceAffinites, dernierTirage,
                     topTriosDuJour, scoresBoules, scoresChance, matriceChance,
-                    history, contraintesDuJour, configOptimisee.getPoidsAffinite(),
+                    history, contraintesDuJour, configOptimisee,
                     historiqueBitMasks, rng
             );
 
@@ -242,55 +255,57 @@
             // ---------------------------------------------------------
 
             List<PronosticResultDto> resultats = new ArrayList<>();
-            List<List<Integer>> grillesRetenues = new ArrayList<>(); // Pour comparer les grilles entre elles
+            List<List<Integer>> grillesRetenues = new ArrayList<>();
+
+            // Objectif : Maximiser la couverture des numéros de l'élite.
+            // On représente les numéros déjà "couverts" par nos grilles retenues via un BitMask.
+            long couvertureGlobale = 0L;
 
             for (GrilleCandidate cand : population) {
                 if (resultats.size() >= nombreGrilles) break;
                 Collections.sort(cand.boules);
 
-                // --- NOUVEAU : LE FILTRE DE DIVERSITÉ ---
-                // On s'assure que la grille n'est pas un "clone" d'une grille déjà sélectionnée.
-                boolean tropSimilaire = false;
-                for (List<Integer> dejaPrise : grillesRetenues) {
-                    // On compte les numéros en commun entre la grille candidate et celles déjà retenues
-                    long communs = cand.boules.stream().filter(dejaPrise::contains).count();
+                // Création du masque binaire de la grille candidate
+                long masqueCandidat = calculerBitMask(cand.boules);
 
-                    // Si elles partagent 4 ou 5 numéros, c'est un clone, on rejette !
-                    // (Même si le numéro chance est différent, on veut de la variété sur les boules)
-                    if (communs >= 4) {
-                        tropSimilaire = true;
-                        break;
-                    }
+                // --- ALGORITHME GLOUTON DE COUVERTURE ---
+                // On regarde combien de NOUVEAUX numéros cette grille apporte par rapport à ce qu'on a déjà.
+                // Opération bitwise : (Masque Candidat) ET NON (Couverture Globale)
+                long nouveauxNumerosMask = masqueCandidat & ~couvertureGlobale;
+
+                // Long.bitCount() compte le nombre de '1' (numéros uniques) apportés.
+                int apportDiversite = Long.bitCount(nouveauxNumerosMask);
+
+                // Règle Gloutonne : On n'accepte la grille que si elle apporte au moins 2 nouveaux numéros non couverts,
+                // OU si c'est la toute première grille (l'absolue meilleure).
+                if (resultats.isEmpty() || apportDiversite >= 2) {
+
+                    // On met à jour notre couverture globale (OU binaire)
+                    couvertureGlobale |= masqueCandidat;
+                    grillesRetenues.add(cand.boules);
+
+                    // Stats et DTO
+                    SimulationResultDto simu = simulerGrilleDetaillee(cand.boules, dateCible, history);
+                    double maxDuo = simu.getPairs().stream().mapToDouble(MatchGroup::getRatio).max().orElse(0.0);
+
+                    // Badge Marketing
+                    String typeAlgo = "IA_GÉNÉTIQUE + MARKOV ⭐";
+                    if(cand.fitness < 50) typeAlgo = "IA_FLEXIBLE";
+
+                    resultats.add(new PronosticResultDto(
+                            cand.boules, cand.chance,
+                            Math.round(cand.fitness * 100.0) / 100.0,
+                            maxDuo, 0.0, !simu.getQuintuplets().isEmpty(),
+                            typeAlgo
+                    ));
                 }
-                if (tropSimilaire) continue; // On jette ce clone et on passe au candidat suivant
-                // ----------------------------------------
-
-                // Analyse détaillée pour l'affichage (Simulation sur historique)
-                SimulationResultDto simu = simulerGrilleDetaillee(cand.boules, dateCible, history);
-                double maxDuo = simu.getPairs().stream().mapToDouble(MatchGroup::getRatio).max().orElse(0.0);
-                double maxTrio = simu.getTrios().stream().mapToDouble(MatchGroup::getRatio).max().orElse(0.0);
-
-                // Badge IA
-                String typeAlgo = "IA_OPTIMAL (" + configOptimisee.getNomStrategie() + ")";
-                if(cand.fitness < 50) typeAlgo = "IA_FLEXIBLE";
-
-                resultats.add(new PronosticResultDto(
-                        cand.boules, cand.chance,
-                        Math.round(cand.fitness * 100.0) / 100.0,
-                        maxDuo, maxTrio, !simu.getQuintuplets().isEmpty(),
-                        typeAlgo
-                ));
-
-                // On ajoute la grille à la liste des retenues pour les futures comparaisons
-                grillesRetenues.add(cand.boules);
             }
 
-            // Fallback (Au cas où le filtre est trop strict et qu'on manque de grilles)
+            // Fallback (Au cas où le filtre est trop strict)
             while (resultats.size() < nombreGrilles) {
                 List<Integer> b = genererGrilleAleatoireSecours(rng);
                 Collections.sort(b);
 
-                // On vérifie quand même qu'on ne met pas un doublon exact au hasard
                 boolean existeDeja = grillesRetenues.stream().anyMatch(g -> g.equals(b));
                 if(!existeDeja){
                     resultats.add(new PronosticResultDto(b, 1, 0.0, 0.0, 0.0, false, "HASARD_SECOURS"));
@@ -377,24 +392,24 @@
                 Map<Integer, Double> scoresBoules,
                 Map<Integer, Double> scoresChance,
                 Map<Integer, Map<Integer, Integer>> affinites,
-                List<LotoTirage> history, // On le garde pour les vérifs "récentes"
+                List<LotoTirage> history,
                 List<Integer> dernierTirage,
-                double poidsAffinite) {
+                AlgoConfig config) {
 
             double score = 0.0;
 
-            // 1. Somme des scores individuels (Optimisés par l'IA)
+            // 1. Somme des scores individuels
             for (Integer b : boules) score += scoresBoules.getOrDefault(b, 0.0);
             score += scoresChance.getOrDefault(chance, 0.0);
 
-            // 2. Cohésion de groupe (Affinités) - TRÈS IMPORTANT vu vos résultats
+            // 2. Cohésion de groupe (Affinités)
             double scoreAffinite = 0;
             for (int i = 0; i < boules.size(); i++) {
                 for (int j = i + 1; j < boules.size(); j++) {
                     scoreAffinite += affinites.getOrDefault(boules.get(i), Map.of()).getOrDefault(boules.get(j), 0);
                 }
             }
-            score += (scoreAffinite * poidsAffinite);
+            score += (scoreAffinite * config.getPoidsAffinite());
 
             // 3. Bonus/Malus Structurels (Non optimisés par l'IA mais bons sens mathématique)
             // Pairs / Impairs (Equilibre)
@@ -439,6 +454,13 @@
                 if (communs >= 3 && i < 3) {
                     score -= 20.0;
                 }
+            }
+
+            // --- 5. FILTRE MARKOV ---
+            if (config.getPoidsMarkov() > 0 && dernierTirage != null) {
+                double probaMarkov = calculerScoreMarkov(boules, dernierTirage, history);
+                // On ajoute la probabilité multipliée par le poids (ex: 0.3 * 10 = +3.0 pts)
+                score += (probaMarkov * config.getPoidsMarkov());
             }
 
             return score;
@@ -1325,6 +1347,9 @@
     
                 strategyConfigRepostiroy.save(entity);
 
+                // Entraînement du réseau de neurones profond (prend environ 5 à 15 secondes)
+                lstmService.trainModel(history);
+
                 log.info("✅ [CRON] Stratégie sauvegardée (Bilan: {} €) en {} ms.",
                         String.format("%.2f", entity.getBilanEstime()), (System.currentTimeMillis() - start));
             }
@@ -1498,7 +1523,7 @@
                 Map<Integer, Map<Integer, Integer>> matriceChance,
                 List<LotoTirage> history,
                 DynamicConstraints contraintes,
-                double poidsAffinite,
+                AlgoConfig config,
                 Set<Long> historiqueBitMasks,
                 Random rng) {
 
@@ -1511,7 +1536,7 @@
                 List<Integer> boules = genererGrilleParAffinite(buckets, matriceAffinites, dernierTirage, topTrios, rng);
                 if (estGrilleCoherente(boules, dernierTirage, contraintes) && !historiqueBitMasks.contains(calculerBitMask(boules))) {
                     int chance = selectionnerChanceOptimisee(boules, scoresChance, matriceChance, rng);
-                    double fitness = calculerScoreFitness(boules, chance, scoresBoules, scoresChance, matriceAffinites, history, dernierTirage, poidsAffinite);
+                    double fitness = calculerScoreFitness(boules, chance, scoresBoules, scoresChance, matriceAffinites, history, dernierTirage, config);
                     population.add(new GrilleCandidate(boules, chance, fitness));
                 }
             }
@@ -1564,7 +1589,7 @@
                     // D. VALIDATION DE L'ENFANT
                     if (estGrilleCoherente(boulesEnfant, dernierTirage, contraintes) && !historiqueBitMasks.contains(calculerBitMask(boulesEnfant))) {
                         int chance = rng.nextBoolean() ? maman.chance : papa.chance; // Héritage du numéro chance
-                        double fitness = calculerScoreFitness(boulesEnfant, chance, scoresBoules, scoresChance, matriceAffinites, history, dernierTirage, poidsAffinite);
+                        double fitness = calculerScoreFitness(boulesEnfant, chance, scoresBoules, scoresChance, matriceAffinites, history, dernierTirage, config);
                         nouvelleGeneration.add(new GrilleCandidate(boulesEnfant, chance, fitness));
                     }
                 }
@@ -1574,7 +1599,7 @@
                     List<Integer> b = genererGrilleParAffinite(buckets, matriceAffinites, dernierTirage, topTrios, rng);
                     if (estGrilleCoherente(b, dernierTirage, contraintes) && !historiqueBitMasks.contains(calculerBitMask(b))) {
                         int c = selectionnerChanceOptimisee(b, scoresChance, matriceChance, rng);
-                        double f = calculerScoreFitness(b, c, scoresBoules, scoresChance, matriceAffinites, history, dernierTirage, poidsAffinite);
+                        double f = calculerScoreFitness(b, c, scoresBoules, scoresChance, matriceAffinites, history, dernierTirage, config);
                         nouvelleGeneration.add(new GrilleCandidate(b, c, f));
                     }
                 }
@@ -1642,6 +1667,55 @@
                     .chartAffinite(Math.round(valAffinite * 10.0) / 10.0)
                     .chartTension(Math.round(valTension * 10.0) / 10.0)
                     .build();
+        }
+
+        // ==================================================================================
+        // 6. MODULE MARKOV (PRÉDICTION STRUCTURELLE)
+        // ==================================================================================
+
+        /**
+         * Définit l'état abstrait d'un tirage basé sur la somme des boules.
+         * TRES_BAS (<100), BAS (100-125), MOYEN (126-150), HAUT (151-175), TRES_HAUT (>175)
+         */
+        private int calculerEtatAbstrait(List<Integer> boules) {
+            int somme = boules.stream().mapToInt(Integer::intValue).sum();
+            if (somme < 100) return 1;
+            if (somme <= 125) return 2;
+            if (somme <= 150) return 3;
+            if (somme <= 175) return 4;
+            return 5;
+        }
+
+        /**
+         * Calcule la probabilité de transition de l'état d'hier vers l'état candidat aujourd'hui.
+         */
+        private double calculerScoreMarkov(List<Integer> grilleCandidate, List<Integer> dernierTirage, List<LotoTirage> history) {
+            if (dernierTirage == null || history.size() < 200) return 0.0;
+
+            int etatPrecedent = calculerEtatAbstrait(dernierTirage);
+            int etatCandidat = calculerEtatAbstrait(grilleCandidate);
+
+            // On compte dans l'historique combien de fois 'etatPrecedent' a été suivi par 'etatCandidat'
+            int totalTransitions = 0;
+            int transitionsCibles = 0;
+
+            // On parcourt l'historique (history[0] est le plus récent)
+            for (int i = 0; i < history.size() - 1; i++) {
+                List<Integer> tirageJourJ = history.get(i).getBoules();
+                List<Integer> tirageHier = history.get(i+1).getBoules();
+
+                if (calculerEtatAbstrait(tirageHier) == etatPrecedent) {
+                    totalTransitions++;
+                    if (calculerEtatAbstrait(tirageJourJ) == etatCandidat) {
+                        transitionsCibles++;
+                    }
+                }
+            }
+
+            if (totalTransitions == 0) return 0.0;
+
+            // Renvoie une probabilité (ex: 0.25 si cet enchaînement arrive 1 fois sur 4)
+            return (double) transitionsCibles / totalTransitions;
         }
 
         /**

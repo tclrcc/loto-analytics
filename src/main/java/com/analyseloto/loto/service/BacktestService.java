@@ -1,11 +1,14 @@
 package com.analyseloto.loto.service;
 
 import com.analyseloto.loto.entity.LotoTirage;
+import io.jenetics.*;
+import io.jenetics.engine.Engine;
+import io.jenetics.engine.EvolutionResult;
+import io.jenetics.util.Factory;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 
-import java.util.ArrayList;
 import java.util.List;
 
 @Service
@@ -13,114 +16,110 @@ import java.util.List;
 public class BacktestService {
     private final LotoService lotoService;
 
+    // Constante pour le volume du test de fitness
+    private static final int NB_GRILLES_PAR_TEST = 200;
+
     public BacktestService(@Lazy LotoService lotoService) {
         this.lotoService = lotoService;
     }
 
     /**
-     * Recherche de la meilleure configuration : MODE "ORACLE" (Markov + Volume Titanesque)
+     * Recherche de la meilleure configuration : MODE "AUTO-ML" via JENETICS
      */
     public LotoService.AlgoConfig trouverMeilleureConfig(List<LotoTirage> historiqueComplet) {
-        log.info("🧪 Démarrage de l'optimisation ORACLE (Cible: ~180 Millions de simulations)...");
+        log.info("🧬 Démarrage de la Méta-Optimisation IA (Jenetics)...");
         long start = System.currentTimeMillis();
 
         int depthBacktest = 350;
-        log.info("📸 Pré-calcul des snapshots sur {} tirages...", depthBacktest);
-
         List<LotoService.ScenarioSimulation> scenarios = lotoService.preparerScenariosBacktest(historiqueComplet, depthBacktest, 250);
 
-        if (scenarios.isEmpty()) {
-            log.warn("Pas assez d'historique. Retour config défaut.");
-            return LotoService.AlgoConfig.defaut();
-        }
+        if (scenarios.isEmpty()) return LotoService.AlgoConfig.defaut();
         log.info("✅ {} Scénarios prêts en mémoire.", scenarios.size());
 
-        // -------------------------------------------------------------
-        // 1. PUISSANCE MONSTRUEUSE : 300 Grilles / Tirage
-        // -------------------------------------------------------------
-        int nbGrillesParTest = 300;
+        // 1. DÉFINITION DU GÉNOME (Les 6 poids de notre config)
+        // L'IA peut choisir n'importe quelle valeur (Double) dans ces intervalles.
+        Factory<Genotype<DoubleGene>> gtf = Genotype.of(
+                DoubleChromosome.of(1.0, 5.0),   // 0: Poids FreqJour
+                DoubleChromosome.of(12.0, 18.0), // 1: Poids Forme
+                DoubleChromosome.of(1.5, 2.0),   // 2: Poids Ecart
+                DoubleChromosome.of(10.0, 25.0), // 3: Poids Tension
+                DoubleChromosome.of(0.0, 10.0),  // 4: Poids Markov
+                DoubleChromosome.of(5.0, 10.0)   // 5: Poids Affinité
+        );
 
-        // -------------------------------------------------------------
-        // 2. GÉNÉRATION DES CONFIGS + INJECTION DE MARKOV
-        // -------------------------------------------------------------
-        List<LotoService.AlgoConfig> configsATester = new ArrayList<>();
+        // 2. CONFIGURATION DU MOTEUR ÉVOLUTIONNAIRE
+        Engine<DoubleGene, Double> engine = Engine.builder(gt -> evaluerFitness(gt, scenarios), gtf)
+                .populationSize(40) // 40 configurations testées par génération
+                .survivorsSelector(new TournamentSelector<>(3)) // Sélection des meilleurs
+                .offspringSelector(new RouletteWheelSelector<>()) // Reproduction pondérée
+                .alterers(
+                        new Mutator<>(0.15),      // 15% de mutation (exploration)
+                        new MeanAlterer<>(0.7)    // 70% de croisement par la moyenne
+                )
+                .build();
 
-        int countId = 0;
+        log.info("🚀 Lancement de l'évolution sur 15 générations...");
 
-        // FreqJour : 1.0, 3.0, 5.0 (3 steps)
-        for (double freqJour = 1.0; freqJour <= 5.0; freqJour += 2.0) {
+        // 3. EXÉCUTION DU MOTEUR (Automatiquement Parallélisé par Jenetics)
+        Phenotype<DoubleGene, Double> bestPhenotype = engine.stream()
+                .limit(15) // On s'arrête après 15 générations (40 * 15 = 600 tests hyper-qualitatifs)
+                .peek(result -> log.info("🏁 Génération {} terminée. Meilleur Bilan Actuel : {} €", result.generation(), String.format("%.2f", result.bestFitness())))
+                .collect(EvolutionResult.toBestPhenotype());
 
-            // Forme : 14 à 17 (4 steps)
-            for (double forme = 14.0; forme <= 17.0; forme += 1.0) {
+        // 4. RÉCUPÉRATION DE L'ULTIME VAINQUEUR
+        Genotype<DoubleGene> bestGeno = bestPhenotype.genotype();
+        double bestBilan = bestPhenotype.fitness();
 
-                // Ecart : 1.6 à 1.9 (4 steps)
-                for (double ecart = 1.6; ecart <= 1.9; ecart += 0.1) {
-
-                    // Affinité : 6.0 à 9.0 (4 steps)
-                    for (double affinite = 6.0; affinite <= 9.0; affinite += 1.0) {
-
-                        // Tension : 15.0 à 25.0 (3 steps)
-                        for (double tension = 15.0; tension <= 25.0; tension += 5.0) {
-
-                            // --- NOUVEAU : Test du Poids MARKOV (Transitions) ---
-                            // 0.0, 5.0, 10.0 (3 steps)
-                            for (double markov = 0.0; markov <= 10.0; markov += 5.0) {
-
-                                configsATester.add(new LotoService.AlgoConfig(
-                                        "ORACLE_" + (++countId), freqJour, forme, ecart, tension, markov, affinite, false
-                                ));
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Total Configs = 3 * 4 * 4 * 4 * 3 * 3 = 1728 configs.
-        // Grilles générées = 1728 configs * 350 tirages * 300 grilles = ~181,440,000 de grilles.
-        log.info("📊 Analyse de {} stratégies (INCLUANT MARKOV) sur {} grilles chacune...", configsATester.size(), nbGrillesParTest);
-
-        // 3. BACKTEST PARALLÈLE
-        final var bestResultRef = new Object() {
-            LotoService.AlgoConfig config = LotoService.AlgoConfig.defaut();
-            double maxBilan = -Double.MAX_VALUE;
-        };
-
-        configsATester.parallelStream().forEach(config -> {
-            double bilan = 0;
-            double depense = 0;
-
-            for (LotoService.ScenarioSimulation scenar : scenarios) {
-                List<List<Integer>> grilles = lotoService.genererGrillesDepuisScenario(scenar, config, nbGrillesParTest);
-                depense += (grilles.size() * 2.20);
-                for (List<Integer> g : grilles) {
-                    bilan += calculerGainRapide(g, scenar.getTirageReel());
-                }
-            }
-
-            double net = bilan - depense;
-
-            synchronized (bestResultRef) {
-                if (net > bestResultRef.maxBilan) {
-                    bestResultRef.maxBilan = net;
-                    bestResultRef.config = config;
-                    log.info("🚀 Record : {} € (Mk={}, Freq={}, F={}, E={}, Aff={}, Tens={})",
-                            String.format("%.2f", net),
-                            config.getPoidsMarkov(), config.getPoidsFreqJour(), config.getPoidsForme(), config.getPoidsEcart(), config.getPoidsAffinite(), config.getPoidsTension());
-                }
-            }
-        });
-
-        long duration = System.currentTimeMillis() - start;
-
-        LotoService.AlgoConfig gagnante = bestResultRef.config;
-        gagnante.setBilanEstime(bestResultRef.maxBilan);
+        LotoService.AlgoConfig gagnante = decoderGenotype(bestGeno, "AUTO_ML_FINAL");
+        gagnante.setBilanEstime(bestBilan);
         gagnante.setNbTiragesTestes(depthBacktest);
 
-        log.info("🏁 Terminé en {} ms. Config gagnante : {} (Bilan: {} €)",
-                duration, gagnante.getNomStrategie(), String.format("%.2f", gagnante.getBilanEstime()));
+        long duration = System.currentTimeMillis() - start;
+        log.info("🏆 Méta-Optimisation terminée en {} ms.", duration);
+        log.info("🔬 Config Finale : Freq={}, F={}, E={}, Tens={}, Mk={}, Aff={}",
+                String.format("%.1f", gagnante.getPoidsFreqJour()),
+                String.format("%.1f", gagnante.getPoidsForme()),
+                String.format("%.1f", gagnante.getPoidsEcart()),
+                String.format("%.1f", gagnante.getPoidsTension()),
+                String.format("%.1f", gagnante.getPoidsMarkov()),
+                String.format("%.1f", gagnante.getPoidsAffinite()));
 
         return gagnante;
+    }
+
+    /**
+     * FONCTION DE FITNESS (L'épreuve du feu pour chaque configuration)
+     */
+    private double evaluerFitness(Genotype<DoubleGene> gt, List<LotoService.ScenarioSimulation> scenarios) {
+        LotoService.AlgoConfig config = decoderGenotype(gt, "TEST_TEMP");
+
+        double bilan = 0;
+        double depense = 0;
+
+        for (LotoService.ScenarioSimulation scenar : scenarios) {
+            List<List<Integer>> grilles = lotoService.genererGrillesDepuisScenario(scenar, config, NB_GRILLES_PAR_TEST);
+            depense += (grilles.size() * 2.20);
+            for (List<Integer> g : grilles) {
+                bilan += calculerGainRapide(g, scenar.getTirageReel());
+            }
+        }
+        return bilan - depense; // Le bénéfice net est la note de fitness
+    }
+
+    /**
+     * Convertit l'ADN Jenetics en objet de configuration Loto
+     */
+    private LotoService.AlgoConfig decoderGenotype(Genotype<DoubleGene> gt, String nom) {
+        return new LotoService.AlgoConfig(
+                nom,
+                gt.get(0).get(0).doubleValue(), // FreqJour
+                gt.get(1).get(0).doubleValue(), // Forme
+                gt.get(2).get(0).doubleValue(), // Ecart
+                gt.get(3).get(0).doubleValue(), // Tension
+                gt.get(4).get(0).doubleValue(), // Markov
+                gt.get(5).get(0).doubleValue(), // Affinité
+                false
+        );
     }
 
     private double calculerGainRapide(List<Integer> grille, LotoTirage t) {
