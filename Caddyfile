@@ -1,0 +1,12 @@
+# Votre domaine gratuit basé sur votre IP
+51-254-133-205.nip.io {
+    reverse_proxy loto_app:8080 {
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Real-IP {remote_host}
+    }
+}
+
+# --- Page des Logs ---
+logs.51-254-133-205.nip.io {
+    reverse_proxy dozzle:8080
+}

@@ -103,6 +103,20 @@ services:
     depends_on:
       - loto_app
 
+  # ----------------------------------------------------
+  # OBSERVABILITE DES LOGS (Dozzle)
+  # ----------------------------------------------------
+  dozzle:
+    image: amir20/dozzle:latest
+    container_name: dozzle
+    restart: always
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      # Sécurité : Remplacez par vos propres identifiants
+      DOZZLE_USERNAME: tony
+      DOZZLE_PASSWORD: mon_mot_de_passe_super_secret
+
 volumes:
   pgdata:
   caddy_data:
