@@ -22,6 +22,18 @@
 </nav>
 
 <div class="container pb-5">
+    <div class="card border-0 shadow-sm mb-4 animate-up" th:if="${not #lists.isEmpty(stats.historiqueFinancier)}">
+        <div class="card-header bg-white border-bottom-0 pt-3 pb-0">
+            <h5 class="fw-bold text-secondary mb-0">
+                <i class="bi bi-graph-up-arrow me-2 text-success"></i>Évolution de votre Solde
+            </h5>
+        </div>
+        <div class="card-body">
+            <div style="height: 300px; width: 100%;">
+                <canvas id="bilanChart"></canvas>
+            </div>
+        </div>
+    </div>
 
     <div class="row g-3 mb-4 animate-up">
         <div class="mb-4 animate-up delay-1">
@@ -180,10 +192,49 @@
         // Données injectées par Thymeleaf
         const pairs = /*[[${stats.totalPairsJoues}]]*/ 0;
         const impairs = /*[[${stats.totalImpairsJoues}]]*/ 0;
+        const historique = /*[[${stats.historiqueFinancier}]]*/ [];
 
         const topBoules = /*[[${stats.topBoules}]]*/ [];
         const labelsBoules = topBoules.map(b => 'N° ' + b.numero);
         const dataBoules = topBoules.map(b => b.count);
+        // On extrait les dates et les soldes
+        // Optionnel : on reformate la date pour un affichage plus joli (ex: "12 Janv")
+        const labelsBilan = historique.map(b => new Date(b.dateBilan).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }));
+        const dataSolde = historique.map(b => b.solde);
+
+        // --- CHART DE PROGRESSION DU SOLDE (Line Chart) ---
+        if(document.getElementById('bilanChart')) {
+            new Chart(document.getElementById('bilanChart'), {
+                type: 'line',
+                data: {
+                    labels: labelsBilan,
+                    datasets: [{
+                        label: 'Solde Net (€)',
+                        data: dataSolde,
+                        borderColor: '#10B981', // Vert émeraude
+                        backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                        borderWidth: 3,
+                        pointBackgroundColor: '#fff',
+                        pointBorderColor: '#10B981',
+                        pointRadius: 4,
+                        fill: true,
+                        tension: 0.3 // Courbe lissée (plus joli)
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            grid: { color: 'rgba(0,0,0,0.05)' },
+                            ticks: { callback: function(value) { return value + ' €'; } }
+                        },
+                        x: { grid: { display: false } }
+                    },
+                    plugins: { legend: { display: false } }
+                }
+            });
+        }
 
         // 1. Chart Parité (Doughnut)
         new Chart(document.getElementById('parityChart'), {

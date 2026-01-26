@@ -3,6 +3,7 @@ package com.analyseloto.loto.service;
 import com.analyseloto.loto.entity.LotoTirage;
 import com.analyseloto.loto.entity.User;
 import com.analyseloto.loto.entity.UserBet;
+import com.analyseloto.loto.entity.UserBilan;
 import com.analyseloto.loto.event.NouveauTirageEvent;
 import com.analyseloto.loto.repository.UserBetRepository;
 import jakarta.transaction.Transactional;
@@ -69,5 +70,34 @@ public class GainCalculatorService {
                 }
             }
         });
+
+        // Enregistrement du bilan financier
+        parisParUtilisateur.forEach((user, bets) -> {
+
+            // On recalcule LE TOTAL historique (une seule fois par jour)
+            List<UserBet> toutHistorique = userBetRepository.findByUser(user);
+
+            double totalDepense = toutHistorique.stream().mapToDouble(UserBet::getMise).sum();
+            double totalGains = toutHistorique.stream().filter(b -> b.getGain() != null).mapToDouble(UserBet::getGain).sum();
+            long grillesGagnantes = toutHistorique.stream().filter(b -> b.getGain() != null && b.getGain() > 0).count();
+
+            // Création du Bilan du jour
+            UserBilan bilanDuJour = new UserBilan(user, tirage.getDateTirage());
+            bilanDuJour.setTotalDepense(totalDepense);
+            bilanDuJour.setTotalGains(totalGains);
+            bilanDuJour.setSolde(totalGains - totalDepense);
+            bilanDuJour.setNbGrillesJouees(toutHistorique.size());
+            bilanDuJour.setNbGrillesGagnantes((int) grillesGagnantes);
+
+            // Calcul ROI
+            if (totalDepense > 0) {
+                bilanDuJour.setRoi((bilanDuJour.getSolde() / totalDepense) * 100);
+            }
+
+            // Sauvegarde en BDD (Nécessite de créer un UserBilanRepository)
+            userBilanRepository.save(bilanDuJour);
+        });
+
+        log.info("📈 Bilans financiers mis à jour pour {} utilisateurs.", parisParUtilisateur.size());
     }
 }

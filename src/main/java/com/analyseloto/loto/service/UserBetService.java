@@ -2,12 +2,15 @@ package com.analyseloto.loto.service;
 
 import com.analyseloto.loto.entity.User;
 import com.analyseloto.loto.entity.UserBet;
+import com.analyseloto.loto.entity.UserBilan;
 import com.analyseloto.loto.enums.BetType;
 import com.analyseloto.loto.repository.LotoTirageRepository;
 import com.analyseloto.loto.repository.UserBetRepository;
+import com.analyseloto.loto.repository.UserBilanRepository;
 import com.analyseloto.loto.repository.UserRepository;
 import com.analyseloto.loto.util.Constantes;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.ui.Model;
 
@@ -21,6 +24,11 @@ public class UserBetService {
     private final LotoTirageRepository lotoTirageRepository;
     private final UserRepository userRepository;
     private final UserBetRepository betRepository;
+    private final UserBilanRepository userBilanRepository;
+
+    /* Email de l'utilisateur ia */
+    @Value("${user.ia.mail}")
+    private String mailUserIa;
 
     public List<UserBet> recupererGrillesUtilisateurTriees(User user) {
         List<UserBet> rawBets = betRepository.findByUser(user);
@@ -49,70 +57,36 @@ public class UserBetService {
             model.addAttribute("lastDraw", tirage);
 
             // On cherche l'utilisateur IA
-            User aiUser = userRepository.findByEmail("ai@loto.com").orElse(null);
+            User aiUser = userRepository.findByEmail(mailUserIa).orElse(null);
 
             if (aiUser != null) {
-                // On récupère ses jeux (pronostics) pour la date du dernier tirage
+                // 1. On récupère les JEUX DU DERNIER TIRAGE pour l'affichage visuel (Inchangé)
                 List<UserBet> aiBetsDernierTirage = betRepository.findByUserAndDateJeu(aiUser, tirage.getDateTirage());
                 model.addAttribute("aiBetsDernierTirage", aiBetsDernierTirage);
 
-                // Récupération de toutes les grilles de l'IA pour faire le bilan complet
-                List<UserBet> allAiBets = betRepository.findByUser(aiUser);
+                // Récupération du dernier bilan
+                Optional<UserBilan> lastBilanOpt = userBilanRepository.findTopByUserOrderByDateBilanDesc(aiUser);
 
-                // Récupération des valeurs du bilan de l'IA pour ce tirage
-                Map<String, Double> mapValuesBilan = getMapValuesBilan(allAiBets);
-                // Récupération valeur bilan map
-                double aiTotalDepense = mapValuesBilan.get(Constantes.MAP_KEY_TOTAL_DEPENSE);
-                double aiTotalGains = mapValuesBilan.get(Constantes.MAP_KEY_TOTAL_GAINS);
-                double aiSolde = mapValuesBilan.get(Constantes.MAP_KEY_SOLDE);
-
-                // Nombre de grilles gagnantes (gain > 0)
-                long aiNbGagnants = allAiBets.stream()
-                        .filter(b -> b.getGain() != null && b.getGain() > 0
-                                && b.getType() != null && b.getType().equals(BetType.GRILLE))
-                        .count();
-
-                // ROI (Retour sur investissement) en %
-                double aiRoi = (aiTotalDepense > 0) ? (aiSolde / aiTotalDepense) * 100 : 0.0;
-
-                // Injection dans le modèle
-                model.addAttribute("aiTotalGrids", allAiBets.size());
-                model.addAttribute("aiNbGagnants", aiNbGagnants);
-                model.addAttribute("aiTotalGains", aiTotalGains);
-                model.addAttribute("aiSolde", aiSolde);
-                model.addAttribute("aiRoi", aiRoi);
+                if (lastBilanOpt.isPresent()) {
+                    UserBilan bilan = lastBilanOpt.get();
+                    // Injection des données du Bilan en Base de données
+                    model.addAttribute("aiTotalGrids", bilan.getNbGrillesJouees());
+                    model.addAttribute("aiNbGagnants", bilan.getNbGrillesGagnantes());
+                    model.addAttribute("aiTotalGains", bilan.getTotalGains());
+                    model.addAttribute("aiSolde", bilan.getSolde());
+                    model.addAttribute("aiRoi", bilan.getRoi());
+                } else {
+                    // Fallback propre si aucun bilan n'existe encore
+                    model.addAttribute("aiTotalGrids", 0);
+                    model.addAttribute("aiNbGagnants", 0);
+                    model.addAttribute("aiTotalGains", 0.0);
+                    model.addAttribute("aiSolde", 0.0);
+                    model.addAttribute("aiRoi", 0.0);
+                }
                 model.addAttribute("dateDernierTirage", tirage.getDateTirage());
             } else {
                 model.addAttribute("aiBetsDernierTirage", new ArrayList<>());
             }
         });
-    }
-
-    /**
-     * Calcul des valeurs du bilan financier d'un utilisateur
-     * @param bets liste des grilles de l'utilisateur
-     * @return Map avec les clés : "solde", "totalDepense", "totalGains"
-     */
-    public Map<String, Double> getMapValuesBilan(List<UserBet> bets) {
-        Map<String, Double> mapValuesBilan = new HashMap<>();
-
-        // Somme des dépenses totales et des gains totaux (grilles terminées)
-        double totalDepense = bets.stream()
-                .filter(b -> b.getGain() != null && b.getType() != null &&  b.getType().equals(BetType.GRILLE))
-                .mapToDouble(UserBet::getMise)
-                .sum();
-        double totalGains = bets.stream()
-                .filter(b -> b.getGain() != null && b.getType() != null && b.getType().equals(BetType.GRILLE))
-                .mapToDouble(UserBet::getGain)
-                .sum();
-        // Calcul du solde
-        double solde = totalGains - totalDepense;
-
-        // Ajout des valeurs dans la map à retourner
-        mapValuesBilan.put(Constantes.MAP_KEY_SOLDE, solde);
-        mapValuesBilan.put(Constantes.MAP_KEY_TOTAL_DEPENSE, totalDepense);
-        mapValuesBilan.put(Constantes.MAP_KEY_TOTAL_GAINS, totalGains);
-
-        return mapValuesBilan;
     }
 }

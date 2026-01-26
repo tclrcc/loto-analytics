@@ -1,5 +1,6 @@
 package com.analyseloto.loto.dto;
 
+import com.analyseloto.loto.entity.UserBilan;
 import lombok.Data;
 
 import java.util.List;
@@ -24,6 +25,8 @@ public class UserStatsDto {
 
     // Performances du joueur selon le jour
     private Map<String, DayPerformance> performanceParJour;
+
+    private List<UserBilan> historiqueFinancier;
 
     @Data
     public static class StatNumero {

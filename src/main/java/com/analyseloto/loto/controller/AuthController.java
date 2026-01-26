@@ -5,7 +5,9 @@ import com.analyseloto.loto.entity.ConfirmationToken;
 import com.analyseloto.loto.entity.User;
 import com.analyseloto.loto.repository.ConfirmationTokenRepository;
 import com.analyseloto.loto.repository.UserRepository;
+import com.analyseloto.loto.service.ConfirmationTokenService;
 import com.analyseloto.loto.service.EmailService;
+import com.analyseloto.loto.service.UserBilanService;
 import com.analyseloto.loto.service.UserService;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
@@ -17,8 +19,8 @@ import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 
-import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.Objects;
 
 @Controller
 @RequiredArgsConstructor
@@ -29,6 +31,8 @@ public class AuthController {
     // Services
     private final EmailService emailService;
     private final UserService userService;
+    private final UserBilanService userBilanService;
+    private final ConfirmationTokenService confirmationTokenService;
 
     /**
      * Valeur de l'URL de l'appli selon l'environnement
@@ -38,14 +42,14 @@ public class AuthController {
 
     /**
      * Affichage page login
-     * @return
+     * @return page
      */
     @GetMapping("/login")
     public String loginPage() { return "login"; }
 
     /**
      * Affichage page création compte
-     * @return
+     * @return page
      */
     @GetMapping("/register")
     public String registerPage(Model model) {
@@ -56,7 +60,7 @@ public class AuthController {
     /**
      * Action création nouvel utilisateur
      * @param dto données du formulaire
-     * @return
+     * @return page
      */
     @PostMapping("/register")
     public String registerUser(@ModelAttribute("userDto") UserRegistrationDto dto) {
@@ -91,7 +95,7 @@ public class AuthController {
     /**
      * Action confirmation activation du compte (depuis email)
      * @param token token
-     * @return
+     * @return page
      */
     @GetMapping("/confirm")
     @Transactional
@@ -100,27 +104,22 @@ public class AuthController {
         ConfirmationToken confirmToken = tokenRepository.findByToken(token)
                 .orElse(null);
 
-        if (confirmToken == null) {
-            return "redirect:/login?tokenError"; // Token inconnu
-        }
-
-        if (confirmToken.getConfirmedAt() != null) {
-            return "redirect:/login?alreadyConfirmed"; // Déjà cliqué
-        }
-
-        // Récupération date d'expiration
-        LocalDateTime expiredAt = confirmToken.getExpiresAt();
-        if (expiredAt.isBefore(LocalDateTime.now())) {
-            return "redirect:/login?expired"; // Token expiré
+        // Contrôles de conformité
+        String error = confirmationTokenService.checkConformityTokenUser(confirmToken);
+        if (error != null) {
+            return error;
         }
 
         // Validation réussie
-        confirmToken.setConfirmedAt(LocalDateTime.now());
+        Objects.requireNonNull(confirmToken).setConfirmedAt(LocalDateTime.now());
 
         // Activation de l'utilisateur
         User user = confirmToken.getUser();
         user.setEnabled(true);
         userRepository.save(user);
+
+        // Création / Enregistrement du bilan de départ
+        userBilanService.initializeBilanUser(user);
 
         return "redirect:/login?verified";
     }
