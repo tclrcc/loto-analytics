@@ -2,135 +2,246 @@
 <html lang="fr" xmlns:th="http://www.thymeleaf.org">
 <head>
   <meta charset="UTF-8">
-  <title>Analyses Avancées - Loto Master AI</title>
+  <title>Centre d'Analyse - Loto Master AI</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
   <link th:href="@{/css/style.css}" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
 </head>
 <body class="bg-light">
 
 <nav class="navbar navbar-dark navbar-custom shadow-sm mb-4">
   <div class="container">
-    <a class="navbar-brand" th:href="@{/}">
-      <i class="bi bi-arrow-left-circle me-2"></i> Retour au Dashboard
+    <a class="navbar-brand d-flex align-items-center gap-2" th:href="@{/}">
+      <i class="bi bi-arrow-left-circle-fill"></i> Retour au Dashboard
     </a>
-    <span class="navbar-text text-white fw-bold">Centre d'Analyse</span>
+    <span class="text-white fw-bold"><i class="bi bi-radar me-2"></i>Centre d'Analyse IA</span>
   </div>
 </nav>
 
 <div class="container pb-5">
 
-  <div class="card border-0 shadow-sm mb-4 animate-up">
-    <div class="card-header bg-white py-3">
-      <h5 class="fw-bold text-primary mb-0"><i class="bi bi-crosshair me-2"></i>Radar des Opportunités</h5>
-      <small class="text-muted">Identifiez les numéros "sous tension" (Fréquents mais absents récemment)</small>
+  <div class="row g-4 mb-4">
+    <div class="col-md-8">
+      <div>
+        <h2 class="fw-bold text-dark mb-1">Météo Statistique du Jour</h2>
+        <p class="text-muted">Analyse profonde basée sur l'historique complet FDJ (depuis 2008).</p>
+      </div>
     </div>
-    <div class="card-body">
-      <div style="height: 400px;"><canvas id="tensionChart"></canvas></div>
-      <div class="mt-3 text-center small text-muted">
-        <span class="badge bg-success me-2">Zone Cible</span> : Numéros fréquents avec un fort écart actuel.
+    <div class="col-md-4 text-md-end">
+            <span class="badge bg-primary bg-opacity-10 text-primary border border-primary p-2 px-3 fs-6 shadow-sm">
+                <i class="bi bi-hdd-network-fill me-2"></i> Données synchronisées
+            </span>
+    </div>
+  </div>
+
+  <div class="row g-4 mb-4">
+    <div class="col-lg-8 animate-up">
+      <div class="card border-0 shadow-sm h-100 overflow-hidden">
+        <div class="card-header bg-white py-3 border-0 d-flex justify-content-between align-items-center">
+          <div>
+            <h5 class="fw-bold text-primary mb-0"><i class="bi bi-crosshair2 me-2"></i>Matrice de Tension</h5>
+            <small class="text-muted">Croisement entre la Fréquence (axe vertical) et l'Écart (axe horizontal)</small>
+          </div>
+        </div>
+        <div class="card-body position-relative">
+          <div style="height: 400px; width: 100%; position: relative;">
+            <canvas id="tensionChart"></canvas>
+          </div>
+        </div>
+        <div class="card-footer bg-white border-0 text-center pb-3">
+          <span class="badge bg-danger me-1">🔥 Numéros Chauds</span>
+          <span class="badge bg-info me-1">❄️ Numéros Froids</span>
+          <span class="badge" style="background-color: #8b5cf6;">⚡ Numéros en Tension (Cibles IA)</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-4 animate-up delay-1">
+      <div class="card border-0 shadow-sm h-100" style="background: var(--gradient-dark); color: white;">
+        <div class="card-body p-4 d-flex flex-column justify-content-between">
+          <div>
+            <h5 class="fw-bold mb-4"><i class="bi bi-thermometer-half me-2"></i>Les Extrêmes</h5>
+
+            <h6 class="text-white-50 text-uppercase small fw-bold mb-3 mt-4">Top 3 les plus joués</h6>
+            <div id="hotNumbers" class="d-flex gap-2"></div>
+
+            <h6 class="text-white-50 text-uppercase small fw-bold mb-3 mt-4 pt-3 border-top border-secondary">Top 3 les plus en retard</h6>
+            <div id="coldNumbers" class="d-flex gap-2"></div>
+          </div>
+
+          <div class="mt-4 pt-3 border-top border-secondary">
+            <small class="text-white-50 fst-italic">L'IA mixe 2 numéros chauds et 1 froid par grille.</small>
+          </div>
+        </div>
       </div>
     </div>
   </div>
 
-  <div class="card border-0 shadow-sm mb-4 animate-up delay-1">
-    <div class="card-header bg-white py-3">
-      <h5 class="fw-bold text-danger mb-0"><i class="bi bi-fire me-2"></i>Numéros "Amis" (Top Affinités)</h5>
+  <div class="card border-0 shadow-sm mb-4 animate-up delay-2">
+    <div class="card-header bg-white py-3 border-0">
+      <h5 class="fw-bold text-dark mb-0"><i class="bi bi-diagram-3-fill text-warning me-2"></i>Réseau d'Affinité (Les Inéparables)</h5>
+      <small class="text-muted">Les paires de numéros qui sortent le plus souvent ensemble historiquement.</small>
     </div>
-    <div class="card-body">
-      <div class="row g-3" id="affinityContainer">
-        <div class="col-12 text-center text-muted py-5"><div class="spinner-border text-primary"></div> Chargement des affinités...</div>
+    <div class="card-body bg-light rounded-bottom-3 p-4">
+      <div class="row g-4" id="affinityContainer">
       </div>
     </div>
   </div>
 
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-
 <script th:inline="javascript">
-  document.addEventListener("DOMContentLoaded", function() {
-    // --- 1. GRAPHIQUE TENSION (Scatter) ---
-    // On récupère les données brutes depuis le contrôleur
-    const rawStats = /*[[${stats.points}]]*/ [];
+  /*<![CDATA[*/
+  const rawStats = /*[[${stats.points}]]*/ [];
+  const matriceAffinites = /*[[${matrice}]]*/ {};
+  /*]]>*/
+</script>
 
-    // On filtre pour ne garder que les boules (pas les chances)
+<script>
+  document.addEventListener("DOMContentLoaded", function() {
+
+    // --- 1. PRÉPARATION DES DONNÉES (Filtrage des boules 1-49) ---
     const boules = rawStats.filter(s => !s.chance);
 
+    // Tri pour trouver les extrêmes
+    const byFreq = [...boules].sort((a, b) => b.frequence - a.frequence);
+    const byEcart = [...boules].sort((a, b) => b.ecart - a.ecart);
+
+    // --- 2. AFFICHAGE DES EXTRÊMES (Côté Droit) ---
+    const hotDiv = document.getElementById('hotNumbers');
+    byFreq.slice(0, 3).forEach(b => {
+      hotDiv.innerHTML += `
+                <div class="text-center">
+                    <span class="ball-hero d-flex align-items-center justify-content-center shadow" style="width: 50px; height: 50px; font-size: 1.2rem; background: linear-gradient(135deg, #ef4444, #991b1b); color: white;">${b.numero}</span>
+                    <small class="d-block mt-1 text-white-50" style="font-size: 0.7rem;">${b.frequence}x</small>
+                </div>`;
+    });
+
+    const coldDiv = document.getElementById('coldNumbers');
+    byEcart.slice(0, 3).forEach(b => {
+      coldDiv.innerHTML += `
+                <div class="text-center">
+                    <span class="ball-hero d-flex align-items-center justify-content-center shadow" style="width: 50px; height: 50px; font-size: 1.2rem; background: linear-gradient(135deg, #0ea5e9, #0369a1); color: white;">${b.numero}</span>
+                    <small class="d-block mt-1 text-white-50" style="font-size: 0.7rem;">+${b.ecart} j.</small>
+                </div>`;
+    });
+
+    // --- 3. GRAPHIQUE MATRICE DE TENSION (Chart.js Avancé) ---
     const ctx = document.getElementById('tensionChart').getContext('2d');
+
+    // On colore les points selon leur statut (Tension, Froid, Chaud)
+    const getPointColor = (b) => {
+      if (b.ecart > 25 && b.frequence > 100) return '#8b5cf6'; // Violet: Haute Tension (Rare)
+      if (b.ecart > 30) return '#0ea5e9'; // Bleu: Froid
+      if (b.frequence > 120 && b.ecart < 10) return '#ef4444'; // Rouge: Chaud
+      return '#94a3b8'; // Gris: Neutre
+    };
+
+    const getPointSize = (b) => (b.ecart > 25 && b.frequence > 100) ? 10 : 5;
+
     new Chart(ctx, {
       type: 'scatter',
       data: {
         datasets: [{
-          label: 'Numéros (1-49)',
+          label: 'Numéros Loto',
           data: boules.map(b => ({ x: b.ecart, y: b.frequence, num: b.numero })),
-          backgroundColor: 'rgba(79, 70, 229, 0.6)', // Couleur Primary
-          borderColor: 'rgba(79, 70, 229, 1)',
-          pointRadius: 6,
-          pointHoverRadius: 10
+          backgroundColor: boules.map(b => getPointColor(b)),
+          borderColor: 'rgba(255,255,255,0.5)',
+          borderWidth: 1,
+          pointRadius: boules.map(b => getPointSize(b)),
+          pointHoverRadius: 12
         }]
       },
       options: {
         responsive: true,
         maintainAspectRatio: false,
         plugins: {
+          legend: { display: false },
           tooltip: {
+            backgroundColor: 'rgba(15, 23, 42, 0.9)',
+            titleFont: { size: 14, weight: 'bold' },
+            bodyFont: { size: 13 },
+            padding: 12,
             callbacks: {
               label: function(context) {
-                let point = context.raw;
-                return 'Boule #' + point.num + ' (Écart: ' + point.x + ', Freq: ' + point.y + ')';
+                let p = context.raw;
+                return `BOULE N°${p.num} | Écart: ${p.x} jours | Fréquence: ${p.y} sorties`;
               }
             }
           }
         },
         scales: {
-          x: { title: { display: true, text: 'Jours sans sortir (Écart)' } },
-          y: { title: { display: true, text: 'Fréquence de sortie' } }
+          x: {
+            title: { display: true, text: 'Écart (Nombre de tirages sans sortir) ➡️', font: { weight: 'bold' } },
+            grid: { color: 'rgba(0,0,0,0.05)' }
+          },
+          y: {
+            title: { display: true, text: 'Fréquence Absolue ⬆️', font: { weight: 'bold' } },
+            grid: { color: 'rgba(0,0,0,0.05)' }
+          }
         }
       }
     });
 
-    // --- 2. AFFINITÉS (JS pur pour l'instant) ---
-    // Simule l'affichage des meilleures paires basées sur la matrice
-    // Dans une vraie V2, on utiliserait la variable 'matrice' passée par le modèle
-    // Ici, je mets un exemple statique pour le rendu visuel immédiat
-    const container = document.getElementById('affinityContainer');
-    container.innerHTML = `
-            <div class="col-md-4">
-                <div class="p-3 border rounded bg-light text-center">
-                    <h6 class="fw-bold">Le Couple Star</h6>
-                    <div class="d-flex justify-content-center gap-2 mt-2">
-                        <span class="badge rounded-circle bg-dark fs-5" style="width:40px;height:40px;line-height:30px">7</span>
-                        <i class="bi bi-heart-fill text-danger align-self-center"></i>
-                        <span class="badge rounded-circle bg-dark fs-5" style="width:40px;height:40px;line-height:30px">23</span>
+    // --- 4. CALCUL DYNAMIQUE DES AFFINITÉS (La magie) ---
+    // On aplatit la matrice en une liste de paires (num1, num2, force)
+    let pairs = [];
+    for (const [n1, row] of Object.entries(matriceAffinites)) {
+      for (const [n2, force] of Object.entries(row)) {
+        // Pour éviter les doublons (1-2 et 2-1), on ne garde que n1 < n2
+        if (parseInt(n1) < parseInt(n2)) {
+          pairs.push({ n1: parseInt(n1), n2: parseInt(n2), force: force });
+        }
+      }
+    }
+
+    // On trie par force (les plus liés en premier)
+    pairs.sort((a, b) => b.force - a.force);
+
+    // On prend le Top 3
+    const topPairs = pairs.slice(0, 3);
+    const worstPair = pairs[pairs.length - 1]; // Le couple le moins lié (si existant)
+
+    const affDiv = document.getElementById('affinityContainer');
+    affDiv.innerHTML = '';
+
+    [...topPairs, { n1: worstPair.n1, n2: worstPair.n2, force: worstPair.force, isWorst: true }].forEach((pair, index) => {
+      let medal = '';
+      let title = '';
+      let color = 'bg-dark';
+      let icon = 'bi-heart-fill text-danger';
+
+      if (pair.isWorst) {
+        title = "Les Incompatibles";
+        color = 'bg-secondary';
+        icon = 'bi-heartbreak-fill text-muted';
+      } else if (index === 0) {
+        title = "Le Couple Royal"; medal = "🥇"; color = "bg-warning text-dark";
+      } else if (index === 1) {
+        title = "Le Duo Solide"; medal = "🥈"; color = "bg-info text-dark";
+      } else {
+        title = "Les Fidèles"; medal = "🥉";
+      }
+
+      affDiv.innerHTML += `
+                <div class="col-md-3">
+                    <div class="card h-100 border-0 shadow-sm text-center bg-white p-3 hover-scale">
+                        <div class="small fw-bold text-uppercase text-muted mb-3">${medal} ${title}</div>
+                        <div class="d-flex justify-content-center align-items-center gap-3">
+                            <span class="badge rounded-circle ${color} fs-4 shadow-sm d-flex align-items-center justify-content-center" style="width: 50px; height: 50px;">${pair.n1}</span>
+                            <i class="bi ${icon} fs-4"></i>
+                            <span class="badge rounded-circle ${color} fs-4 shadow-sm d-flex align-items-center justify-content-center" style="width: 50px; height: 50px;">${pair.n2}</span>
+                        </div>
+                        <div class="mt-3 small text-muted">
+                            Sortis ensemble <strong class="${pair.isWorst ? 'text-muted' : 'text-success'}">${pair.force} fois</strong>.
+                        </div>
                     </div>
-                    <small class="d-block mt-2 text-muted">Sortis ensemble 14 fois cette année</small>
-                </div>
-            </div>
-            <div class="col-md-4">
-                <div class="p-3 border rounded bg-light text-center">
-                    <h6 class="fw-bold">Le Trio du moment</h6>
-                    <div class="d-flex justify-content-center gap-1 mt-2">
-                        <span class="badge rounded-circle bg-primary fs-6 py-2">12</span>
-                        <span class="badge rounded-circle bg-primary fs-6 py-2">34</span>
-                        <span class="badge rounded-circle bg-primary fs-6 py-2">45</span>
-                    </div>
-                    <small class="d-block mt-2 text-muted">Tendance forte sur les 3 derniers mois</small>
-                </div>
-            </div>
-             <div class="col-md-4">
-                <div class="p-3 border rounded bg-light text-center">
-                    <h6 class="fw-bold">À éviter</h6>
-                    <div class="d-flex justify-content-center gap-2 mt-2 opacity-50">
-                        <span class="badge rounded-circle bg-secondary fs-6 py-2">1</span>
-                        <span class="badge rounded-circle bg-secondary fs-6 py-2">2</span>
-                    </div>
-                    <small class="d-block mt-2 text-muted">Jamais sortis ensemble depuis 2 ans</small>
-                </div>
-            </div>
-        `;
+                </div>`;
+    });
+
   });
 </script>
 </body>

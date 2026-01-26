@@ -16,12 +16,12 @@ public class StatsController {
     @GetMapping
     public String statsPage(Model model) {
         // On récupère les stats globales
-        var stats = lotoService.getStats(null); // null = tous les jours
+        var stats = lotoService.getStats(null);
 
         model.addAttribute("stats", stats);
         // On passe aussi la matrice des affinités pour la Heatmap
         model.addAttribute("matrice", lotoService.getMatriceAffinitesPublic());
 
-        return "stats"; // Pointe vers templates/stats.html
+        return "stats";
     }
 }
