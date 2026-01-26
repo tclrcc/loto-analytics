@@ -15,10 +15,8 @@
     import org.springframework.data.domain.Sort;
     import org.springframework.stereotype.Service;
     import org.springframework.web.multipart.MultipartFile;
-    
-    import java.io.BufferedReader;
-    import java.io.IOException;
-    import java.io.InputStreamReader;
+
+    import java.io.*;
     import java.security.SecureRandom;
     import java.time.DayOfWeek;
     import java.time.LocalDate;
@@ -56,7 +54,9 @@
         @Data
         @AllArgsConstructor
         @NoArgsConstructor
-        public static class AlgoConfig {
+        public static class AlgoConfig implements Serializable {
+            @Serial private static final long serialVersionUID = 1L;
+
             private String nomStrategie;
             private double poidsFreqJour;
             private double poidsForme;

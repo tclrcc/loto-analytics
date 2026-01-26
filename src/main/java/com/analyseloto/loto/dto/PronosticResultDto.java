@@ -3,11 +3,15 @@ package com.analyseloto.loto.dto;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 
+import java.io.Serial;
+import java.io.Serializable;
 import java.util.List;
 
 @Data
 @AllArgsConstructor
-public class PronosticResultDto {
+public class PronosticResultDto implements Serializable {
+    @Serial private static final long serialVersionUID = 1L;
+
     private List<Integer> boules;
     private int numeroChance;
     private double scoreGlobal; // Un score de "qualité" de la grille

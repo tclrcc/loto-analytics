@@ -2,11 +2,15 @@ package com.analyseloto.loto.dto;
 
 import lombok.Data;
 
+import java.io.Serial;
+import java.io.Serializable;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Data
-public class JobScheduleDto {
+public class JobScheduleDto implements Serializable {
+    @Serial private static final long serialVersionUID = 1L;
+
     private String name;
     private String cronExpression;
     private LocalDateTime nextExecution;
