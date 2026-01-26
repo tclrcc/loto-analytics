@@ -92,7 +92,9 @@
          */
         @Data
         @AllArgsConstructor
-        public static class DynamicConstraints {
+        public static class DynamicConstraints implements Serializable {
+            @Serial private static final long serialVersionUID = 1L;
+
             private int minPairs;      // Minimum de nombres pairs requis
             private int maxPairs;      // Maximum de nombres pairs requis
             private boolean allowSuites; // Autorise-t-on les suites (ex: 12, 13) ?
@@ -103,7 +105,9 @@
          * Grille candidate pour l'algorithme génétique
          */
         @AllArgsConstructor
-        private static class GrilleCandidate {
+        private static class GrilleCandidate implements Serializable {
+            @Serial private static final long serialVersionUID = 1L;
+
             List<Integer> boules;
             int chance;
             double fitness;
@@ -111,7 +115,9 @@
     
         @Data
         @AllArgsConstructor
-        public static class ScenarioSimulation {
+        public static class ScenarioSimulation implements Serializable {
+            @Serial private static final long serialVersionUID = 1L;
+
             private LotoTirage tirageReel; // Pour vérifier le gain
             private List<Integer> dernierTirageConnu; // Pour les filtres
     
@@ -127,7 +133,9 @@
     
         @Data
         @AllArgsConstructor
-        public static class RawStatData {
+        public static class RawStatData implements Serializable {
+            @Serial private static final long serialVersionUID = 1L;
+
             private long freqJour;
             private long ecart;
             private boolean isForme;

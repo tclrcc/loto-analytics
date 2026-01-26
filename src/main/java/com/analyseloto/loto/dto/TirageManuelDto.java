@@ -2,10 +2,14 @@ package com.analyseloto.loto.dto;
 
 import lombok.Data;
 
+import java.io.Serial;
+import java.io.Serializable;
 import java.time.LocalDate;
 
 @Data
-public class TirageManuelDto {
+public class TirageManuelDto implements Serializable {
+    @Serial private static final long serialVersionUID = 1L;
+
     private LocalDate dateTirage;
     private int boule1;
     private int boule2;
