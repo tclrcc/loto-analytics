@@ -36,8 +36,9 @@ public class BacktestService {
         log.info("🧬 Démarrage de la Méta-Optimisation IA (Jenetics)...");
         long start = System.currentTimeMillis();
 
-        int depthBacktest = 350;
-        List<LotoService.ScenarioSimulation> scenarios = lotoService.preparerScenariosBacktest(historiqueComplet, depthBacktest, 250);
+        // Entrainement de l'IA sur 500 tirages du passé
+        int depthBacktest = 500;
+        List<LotoService.ScenarioSimulation> scenarios = lotoService.preparerScenariosBacktest(historiqueComplet, depthBacktest, 300);
 
         if (scenarios.isEmpty()) return LotoService.AlgoConfig.defaut();
         log.info("✅ {} Scénarios prêts en mémoire.", scenarios.size());
@@ -49,13 +50,13 @@ public class BacktestService {
                 DoubleChromosome.of(12.0, 18.0), // 1: Poids Forme
                 DoubleChromosome.of(1.5, 2.0),   // 2: Poids Ecart
                 DoubleChromosome.of(10.0, 25.0), // 3: Poids Tension
-                DoubleChromosome.of(0.0, 10.0),  // 4: Poids Markov
+                DoubleChromosome.of(0.0, 15.0),  // 4: Poids Markov
                 DoubleChromosome.of(5.0, 10.0)   // 5: Poids Affinité
         );
 
         // 2. CONFIGURATION DU MOTEUR ÉVOLUTIONNAIRE
         Engine<DoubleGene, Double> engine = Engine.builder(gt -> evaluerFitness(gt, scenarios), gtf)
-                .populationSize(40) // 40 configurations testées par génération
+                .populationSize(60) // 60 configurations testées par génération
                 .survivorsSelector(new TournamentSelector<>(3)) // Sélection des meilleurs
                 .offspringSelector(new RouletteWheelSelector<>()) // Reproduction pondérée
                 .alterers(
@@ -68,7 +69,7 @@ public class BacktestService {
 
         // 3. EXÉCUTION DU MOTEUR (Automatiquement Parallélisé par Jenetics)
         Phenotype<DoubleGene, Double> bestPhenotype = engine.stream()
-                .limit(15) // On s'arrête après 15 générations (40 * 15 = 600 tests hyper-qualitatifs)
+                .limit(25) // On s'arrête après 25 générations
                 .peek(result -> log.info("🏁 Génération {} terminée. Meilleur Bilan Actuel : {} €", result.generation(), String.format("%.2f", result.bestFitness())))
                 .collect(EvolutionResult.toBestPhenotype());
 
