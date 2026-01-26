@@ -50,14 +50,16 @@ jobs:
           script: |
             cd /home/ubuntu/loto-analytics
             
-            # 1. On télécharge les fichiers de configuration (Caddyfile, docker-compose)
-            git pull origin main
+            # 1. On télécharge les infos de GitHub (sans toucher aux fichiers)
+            git fetch origin main
             
-            # 2. On télécharge la nouvelle image Java (Docker Hub)
+            # 2. On supprime les fichiers "parasites" créés à la main (comme le Caddyfile)
+            git clean -fd
+            
+            # 3. On force l'écrasement total pour être le clone parfait de GitHub
+            git reset --hard origin/main
+            
+            # 4. On télécharge la nouvelle image et on redémarre
             docker compose pull loto_app
-            
-            # 3. On redémarre tout
             docker compose up -d
-            
-            # 4. On force Caddy à relire son nouveau fichier de configuration
             docker compose restart caddy
