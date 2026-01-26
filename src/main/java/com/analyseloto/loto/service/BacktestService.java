@@ -19,7 +19,7 @@ public class BacktestService {
     private final LotoService lotoService;
 
     // Constante pour le volume du test de fitness
-    private static final int NB_GRILLES_PAR_TEST = 200;
+    private static final int NB_GRILLES_PAR_TEST = 300;
 
     public BacktestService(@Lazy LotoService lotoService) {
         this.lotoService = lotoService;
@@ -47,20 +47,20 @@ public class BacktestService {
         // L'IA peut choisir n'importe quelle valeur (Double) dans ces intervalles.
         Factory<Genotype<DoubleGene>> gtf = Genotype.of(
                 DoubleChromosome.of(1.0, 5.0),   // 0: Poids FreqJour
-                DoubleChromosome.of(12.0, 18.0), // 1: Poids Forme
+                DoubleChromosome.of(12.0, 25.0), // 1: Poids Forme
                 DoubleChromosome.of(1.5, 2.0),   // 2: Poids Ecart
-                DoubleChromosome.of(10.0, 25.0), // 3: Poids Tension
+                DoubleChromosome.of(10.0, 35.0), // 3: Poids Tension
                 DoubleChromosome.of(0.0, 15.0),  // 4: Poids Markov
                 DoubleChromosome.of(5.0, 10.0)   // 5: Poids Affinité
         );
 
         // 2. CONFIGURATION DU MOTEUR ÉVOLUTIONNAIRE
         Engine<DoubleGene, Double> engine = Engine.builder(gt -> evaluerFitness(gt, scenarios), gtf)
-                .populationSize(60) // 60 configurations testées par génération
+                .populationSize(80) // 80 configurations testées par génération
                 .survivorsSelector(new TournamentSelector<>(3)) // Sélection des meilleurs
                 .offspringSelector(new RouletteWheelSelector<>()) // Reproduction pondérée
                 .alterers(
-                        new Mutator<>(0.15),      // 15% de mutation (exploration)
+                        new Mutator<>(0.20),      // 20% de mutation (exploration)
                         new MeanAlterer<>(0.7)    // 70% de croisement par la moyenne
                 )
                 .build();
@@ -69,7 +69,7 @@ public class BacktestService {
 
         // 3. EXÉCUTION DU MOTEUR (Automatiquement Parallélisé par Jenetics)
         Phenotype<DoubleGene, Double> bestPhenotype = engine.stream()
-                .limit(25) // On s'arrête après 25 générations
+                .limit(30) // On s'arrête après 25 générations
                 .peek(result -> log.info("🏁 Génération {} terminée. Meilleur Bilan Actuel : {} €", result.generation(), String.format("%.2f", result.bestFitness())))
                 .collect(EvolutionResult.toBestPhenotype());
 
