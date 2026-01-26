@@ -21,7 +21,7 @@ services:
       - "5433:5432"
 
   # ----------------------------------------------------
-  # NOUVEAU : SAUVEGARDE AUTOMATIQUE (Toutes les nuits à 3h00)
+  # SAUVEGARDE AUTOMATIQUE (Toutes les nuits à 3h00)
   # ----------------------------------------------------
   db_backup:
     image: prodrigestivill/postgres-backup-local
@@ -62,8 +62,8 @@ services:
       SPRING_MAIL_PASSWORD: ${MAIL_PASSWORD}
       APP_LOTO_RECIPIENT: tonycoloricchio01@gmail.com
     restart: always
-    # NOUVEAU : Plus besoin de "ports: - 8081:8080", l'appli est isolée derrière Caddy.
-    # NOUVEAU : Healthcheck (Docker redémarre l'app si elle plante)
+    # Plus besoin de "ports: - 8081:8080", l'appli est isolée derrière Caddy.
+    # Healthcheck (Docker redémarre l'app si elle plante)
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
       interval: 30s
@@ -75,7 +75,19 @@ services:
           memory: 1536M
 
   # ----------------------------------------------------
-  # NOUVEAU : REVERSE PROXY (Caddy pour le HTTPS auto)
+  # SURVEILLANCE SERVEUR (Uptime Kuma)
+  # ----------------------------------------------------
+  uptime-kuma:
+    image: louislam/uptime-kuma:1
+    container_name: uptime-kuma
+    restart: always
+    ports:
+      - "3001:3001"
+    volumes:
+      - uptime-kuma-data:/app/data
+
+  # ----------------------------------------------------
+  # REVERSE PROXY (Caddy pour le HTTPS auto)
   # ----------------------------------------------------
   caddy:
     image: caddy:2-alpine
@@ -95,3 +107,4 @@ volumes:
   pgdata:
   caddy_data:
   caddy_config:
+  uptime-kuma-data:
