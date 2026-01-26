@@ -1,5 +1,6 @@
 package com.analyseloto.loto.entity;
 
+import com.analyseloto.loto.enums.RoleUser;
 import jakarta.persistence.*;
 import lombok.Data;
 
@@ -37,7 +38,7 @@ public class User {
     private boolean enabled = false;
 
     @Column(nullable = false)
-    private String role = "USER";
+    private String role = RoleUser.USER.name();
 
     @Column(name = "failed_attempt")
     private int failedAttempt = 0;

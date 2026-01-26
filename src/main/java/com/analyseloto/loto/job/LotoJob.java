@@ -5,6 +5,7 @@ import com.analyseloto.loto.dto.PronosticResultDto;
 import com.analyseloto.loto.entity.*;
 import com.analyseloto.loto.enums.BetType;
 import com.analyseloto.loto.enums.JobExecutionStatus;
+import com.analyseloto.loto.enums.RoleUser;
 import com.analyseloto.loto.event.NouveauTirageEvent;
 import com.analyseloto.loto.repository.UserBetRepository;
 import com.analyseloto.loto.repository.UserRepository;
@@ -19,7 +20,6 @@ import org.springframework.stereotype.Component;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
-import java.util.Objects;
 import java.util.Optional;
 
 @Slf4j
@@ -91,7 +91,7 @@ public class LotoJob {
             eventPublisher.publishEvent(new NouveauTirageEvent(this, tirage));
 
             // Notification aux admins (sans user IA)
-            List<User> admins = userRepository.findByRole("ADMIN").stream().
+            List<User> admins = userRepository.findByRole(RoleUser.ADMIN.name()).stream().
                     filter(user -> !user.isSystemAccount()).toList();
 
             if (admins.isEmpty()) {
@@ -144,7 +144,7 @@ public class LotoJob {
             }
 
             // 3. Générer les 10 via l'algorithme (Sans profil astro = Config par défaut)
-            List<PronosticResultDto> pronostics = lotoService.genererMultiplesPronostics(today, 10);
+            List<PronosticResultDto> pronostics = lotoService.genererMultiplesPronostics(today, 5);
 
             // 4. Sauvegarder en base
             for (PronosticResultDto prono : pronostics) {

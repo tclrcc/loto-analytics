@@ -31,5 +31,7 @@ public class UserBilanService {
         bilanInitial.setNbGrillesGagnantes(0);
 
         userBilanRepository.save(bilanInitial);
+
+        log.info("✨ Bilan de l'utilisateur créé avec succès ! (Email: {})", user.getEmail());
     }
 }

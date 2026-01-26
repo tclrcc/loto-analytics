@@ -1,15 +1,13 @@
 package com.analyseloto.loto.config;
 
-import com.analyseloto.loto.entity.User;
 import com.analyseloto.loto.repository.UserRepository;
+import com.analyseloto.loto.service.UserService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 
-import java.time.LocalDate;
 
 @Slf4j
 @Component
@@ -17,8 +15,9 @@ import java.time.LocalDate;
 public class DataInitializer implements CommandLineRunner {
     // Repositories
     private final UserRepository userRepository;
-    // Utils
-    private final PasswordEncoder passwordEncoder;
+    // Services
+    private final UserService userService;
+
     /* Email de l'utilisateur ia */
     @Value("${user.ia.mail}")
     private String mailUserIa;
@@ -26,6 +25,7 @@ public class DataInitializer implements CommandLineRunner {
     @Override
     public void run(String... args) {
         log.info("🚀 Démarrage de l'initialisation des données...");
+
         // Création utilisateur IA
         creerUtilisateurIA();
 
@@ -47,25 +47,7 @@ public class DataInitializer implements CommandLineRunner {
             return;
         }
 
-        // Création de l'utilisateur s'il n'existe pas
-        log.info("🤖 Création de l'utilisateur IA en cours...");
-
-        User aiUser = new User();
-        aiUser.setFirstName("Loto Master");
-        aiUser.setEmail(mailUserIa);
-        aiUser.setUsername("aiLoto");
-
-        // Gestion du mot de passe (encodage)
-        String passwordEncode = passwordEncoder.encode("admin");
-         aiUser.setPassword(passwordEncode);
-
-        // Autres champs obligatoires selon ton Entité
-         aiUser.setRole("ADMIN");
-         aiUser.setSystemAccount(true);
-         aiUser.setSubscribeToEmails(false); // L'IA n'a pas besoin de mails
-         aiUser.setBirthDate(LocalDate.now());
-
-        userRepository.save(aiUser);
-        log.info("✨ Utilisateur IA créé avec succès ! (Email: {})", mailUserIa);
+        // Création de l'utilisateur IA et de son bilan
+        userService.createUserIaAndBilan(mailUserIa);
     }
 }

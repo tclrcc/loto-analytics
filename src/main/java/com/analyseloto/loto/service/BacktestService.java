@@ -5,13 +5,11 @@ import io.jenetics.*;
 import io.jenetics.engine.Engine;
 import io.jenetics.engine.EvolutionResult;
 import io.jenetics.util.Factory;
-import io.jenetics.util.RandomRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
-import java.util.Random;
 
 @Service
 @Slf4j
@@ -25,7 +23,6 @@ public class BacktestService {
         this.lotoService = lotoService;
 
         // On force la propriété système AVANT que Jenetics ne soit chargé en mémoire.
-        // Cela empêche l'erreur "L64X256MixRandom not available" sur les JVM allégées.
         System.setProperty("io.jenetics.util.defaultRandomGenerator", "Random");
     }
 
@@ -114,7 +111,10 @@ public class BacktestService {
     }
 
     /**
-     * Convertit l'ADN Jenetics en objet de configuration Loto
+     * Convertir l'ADN Jenetics en config Loto
+     * @param gt geneteique
+     * @param nom nom
+     * @return Config Algo
      */
     private LotoService.AlgoConfig decoderGenotype(Genotype<DoubleGene> gt, String nom) {
         return new LotoService.AlgoConfig(
@@ -129,13 +129,23 @@ public class BacktestService {
         );
     }
 
-    private double calculerGainRapide(List<Integer> grille, LotoTirage t) {
+    /**
+     * Méthode de calcul rapide d'un gain d'une grille pour simulation tirage
+     * @param grille grille
+     * @param tirage résultat tirage
+     * @return gain potentiel
+     */
+    private double calculerGainRapide(List<Integer> grille, LotoTirage tirage) {
+        // Grilles : 5 numéros + 1 chance
         if (grille.size() < 6) return 0.0;
+
+        // Définition des bons numéros
         List<Integer> boulesJouees = grille.subList(0, 5);
         int chanceJouee = grille.get(5);
-        long bonsNumeros = boulesJouees.stream().filter(t.getBoules()::contains).count();
-        boolean bonneChance = (chanceJouee == t.getNumeroChance());
+        long bonsNumeros = boulesJouees.stream().filter(tirage.getBoules()::contains).count();
+        boolean bonneChance = (chanceJouee == tirage.getNumeroChance());
 
+        // Retourne les gains selon bons numéros + numéro chance
         if (bonsNumeros == 5) return bonneChance ? 2_000_000.0 : 100_000.0;
         if (bonsNumeros == 4) return bonneChance ? 1_000.0 : 500.0;
         if (bonsNumeros == 3) return bonneChance ? 50.0 : 20.0;

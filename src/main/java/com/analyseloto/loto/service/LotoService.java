@@ -297,19 +297,6 @@
                 }
             }
 
-            // Fallback (Au cas où le filtre est trop strict)
-            while (resultats.size() < nombreGrilles) {
-                List<Integer> b = genererGrilleAleatoireSecours(rng);
-                Collections.sort(b);
-
-                boolean existeDeja = grillesRetenues.stream().anyMatch(g -> g.equals(b));
-                if(!existeDeja){
-                    log.warn("⚠️ Utilisation d'une grille de secours (Hasard) pour compléter la liste.");
-                    resultats.add(new PronosticResultDto(b, 1, 0.0, 0.0, 0.0, false, "HASARD_SECOURS"));
-                    grillesRetenues.add(b);
-                }
-            }
-
             return resultats;
         }
     

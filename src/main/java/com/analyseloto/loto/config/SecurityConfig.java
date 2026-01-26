@@ -1,5 +1,6 @@
 package com.analyseloto.loto.config;
 
+import com.analyseloto.loto.enums.RoleUser;
 import com.analyseloto.loto.repository.UserRepository;
 import com.analyseloto.loto.security.CustomLoginFailureHandler;
 import com.analyseloto.loto.security.CustomLoginSuccessHandler;
@@ -36,7 +37,7 @@ public class SecurityConfig {
                         .requestMatchers("/login", "/register", "/confirm", "/forgot-password", "/reset-password", "/css/**", "/js/**", "/images/**").permitAll()
                         .requestMatchers("/api/validation/**").permitAll()
                         // Pages admin
-                        .requestMatchers("/admin/**", "/api/loto/import", "/api/loto/add-result").hasRole("ADMIN")
+                        .requestMatchers("/admin/**", "/api/loto/import", "/api/loto/add-result").hasRole(RoleUser.ADMIN.name())
                         .anyRequest().authenticated()
                 )
                 .formLogin(form -> form
