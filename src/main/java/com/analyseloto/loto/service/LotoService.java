@@ -4,13 +4,14 @@
     import com.analyseloto.loto.entity.*;
     import com.analyseloto.loto.repository.LotoTirageRepository;
     import com.analyseloto.loto.repository.StrategyConfigRepostiroy;
-    import com.analyseloto.loto.repository.UserBetRepository;
     import com.analyseloto.loto.util.Constantes;
     import lombok.AllArgsConstructor;
     import lombok.Data;
     import lombok.NoArgsConstructor;
     import lombok.RequiredArgsConstructor;
     import lombok.extern.slf4j.Slf4j;
+    import org.springframework.cache.annotation.CacheEvict;
+    import org.springframework.cache.annotation.Cacheable;
     import org.springframework.data.domain.Sort;
     import org.springframework.stereotype.Service;
     import org.springframework.web.multipart.MultipartFile;
@@ -33,19 +34,15 @@
     public class LotoService {
         // Repositories
         private final LotoTirageRepository repository;
-        private final UserBetRepository betRepository;
         private final StrategyConfigRepostiroy strategyConfigRepostiroy;
         // Services
         private final AstroService astroService;
         private final BacktestService backtestService;
-        // Variable de classe pour stocker la meilleure config en mémoire (Cache simple)
-        private AlgoConfig cachedBestConfig = null;
-        private LocalDate lastBacktestDate = null;
-        // Cache pour les Stats Globales
-        private StatsReponse cachedGlobalStats = null;
-        // Cache pour les Pronostics du Jour
-        private List<PronosticResultDto> cachedDailyPronos = null;
-        private LocalDate dateCachedPronos = null;
+
+        // --- NOUVEAU : On s'injecte soi-même pour forcer le passage par le Cache (La Secrétaire) ---
+        @org.springframework.beans.factory.annotation.Autowired
+        @org.springframework.context.annotation.Lazy
+        private LotoService self;
     
         /**
          * Configuration dynamique de l'algorithme de génération
@@ -141,23 +138,11 @@
          * @param nombreGrilles nombre grilles à générer
          * @return liste des pronostics
          */
+        @Cacheable(value = "pronosticsIA", key = "#dateCible.toString() + '_' + #nombreGrilles")
         public List<PronosticResultDto> genererMultiplesPronostics(LocalDate dateCible, int nombreGrilles) {
-            // Si on demande les pronos pour la date déjà en cache, on renvoie le cache !
-            if (cachedDailyPronos != null && dateCible.equals(dateCachedPronos) && cachedDailyPronos.size() >= nombreGrilles) {
-                log.debug("🚀 [CACHE] Retour des pronostics en mémoire (pas de recalcul)");
-                // On renvoie une copie ou une sous-liste si on en veut moins
-                return cachedDailyPronos.subList(0, nombreGrilles);
-            }
-    
-            // Sinon, on calcule (c'est le cas lent, une seule fois par jour)
-            log.info("⚙️ [CALCUL] Génération fraîche des pronostics pour le {}", dateCible);
-            List<PronosticResultDto> newsPronos = genererPronosticAvecConfig(dateCible, nombreGrilles, null);
-    
-            // On met en cache
-            this.cachedDailyPronos = newsPronos;
-            this.dateCachedPronos = dateCible;
-    
-            return newsPronos;
+            log.info("⚙️ [CALCUL IA] Génération génétique fraîche pour le {}", dateCible);
+
+            return genererPronosticAvecConfig(dateCible, nombreGrilles, null);
         }
     
         /**
@@ -167,6 +152,7 @@
          * @param profil profil astral
          * @return liste des pronostics
          */
+        @Cacheable(value = "pronosticsAstro", key = "#dateCible.toString() + '_' + #nombreGrilles + '_' + #profil.signe")
         public List<PronosticResultDto> genererPronosticsHybrides(LocalDate dateCible, int nombreGrilles, AstroProfileDto profil) {
             return genererPronosticAvecConfig(dateCible, nombreGrilles, profil);
         }
@@ -185,16 +171,7 @@
             List<Integer> dernierTirage = history.get(0).getBoules();
 
             // 2. Choix de la Config (Sécurisé)
-            AlgoConfig configOptimisee;
-            if (cachedBestConfig != null) {
-                configOptimisee = cachedBestConfig;
-                if (lastBacktestDate != null && lastBacktestDate.isBefore(LocalDate.now().minusDays(7))) {
-                    log.warn("⚠️ [ALGO] Config périmée (>7 jours). Vérifiez le CRON.");
-                }
-            } else {
-                log.info("⏳ [ALGO] Pas de config en cache. Utilisation DÉFAUT.");
-                configOptimisee = AlgoConfig.defaut();
-            }
+            AlgoConfig configOptimisee = self.recupererMeilleureConfig();
 
             log.info("🎯 [ALGO] Stratégie : {} (Bilan Backtest: {} €)",
                     configOptimisee.getNomStrategie(), String.format("%.2f", configOptimisee.getBilanEstime()));
@@ -476,15 +453,6 @@
             }
 
             return score;
-        }
-    
-        // Méthode de secours ultime : 5 chiffres au hasard
-        private List<Integer> genererGrilleAleatoireSecours(Random rng) {
-            Set<Integer> b = new HashSet<>();
-            while (b.size() < 5) {
-                b.add(rng.nextInt(49) + 1);
-            }
-            return new ArrayList<>(b);
         }
     
         // ==================================================================================
@@ -780,8 +748,15 @@
         public Map<Integer, Map<Integer, Integer>> getMatriceAffinitesPublic() {
             return construireMatriceAffinitesPonderee(repository.findAll(), LocalDate.now().getDayOfWeek());
         }
-    
-        private boolean estGrilleCoherente(List<Integer> boules, List<Integer> dernierTirage, DynamicConstraints rules) {
+
+        /**
+         * Vérifie la cohérence de la grille
+         * @param boules boules
+         * @param dernierTirage dernierTirage
+         * @param rules contraintes
+         * @return true => est cohérente, false sinon
+         */
+        public boolean estGrilleCoherente(List<Integer> boules, List<Integer> dernierTirage, DynamicConstraints rules) {
             if (boules == null || boules.size() != 5) return false;
     
             Collections.sort(boules);
@@ -931,7 +906,8 @@
             double ratio = (nbreAttendu > 0) ? (nbreReel / nbreAttendu) : 0.0;
             group.setRatio(Math.round(ratio * 100.0) / 100.0);
         }
-    
+
+        @CacheEvict(value = {"statsGlobales", "pronosticsIA", "pronosticsAstro"}, allEntries = true)
         public void importCsv(MultipartFile file) throws IOException {
             try (BufferedReader reader = new BufferedReader(new InputStreamReader(file.getInputStream()))) {
                 List<String> lines = reader.lines().toList();
@@ -1012,7 +988,8 @@
             }
             return 0.0;
         }
-    
+
+        @CacheEvict(value = {"statsGlobales", "pronosticsIA", "pronosticsAstro"}, allEntries = true)
         public LotoTirage ajouterTirageManuel(TirageManuelDto dto) {
             if (repository.existsByDateTirage(dto.getDateTirage())) throw new RuntimeException("Ce tirage existe déjà");
             LotoTirage t = new LotoTirage();
@@ -1022,12 +999,10 @@
             repository.save(t);
             return t;
         }
-    
+
+        @Cacheable(value = "statsGlobales", key = "#jourFiltre ?: 'TOUS_LES_JOURS'")
         public StatsReponse getStats(String jourFiltre) {
-            // Si pas de filtre jour (cas de la page d'accueil) et cache dispo
-            if (jourFiltre == null && cachedGlobalStats != null) {
-                return cachedGlobalStats;
-            }
+            log.info("⚙️ [DB] Calcul lourd des statistiques pour : {}", jourFiltre);
     
             // Récupération des tirages triés par ordre décroissant de date
             List<LotoTirage> all = repository.findAll(Sort.by(Sort.Direction.DESC, "dateTirage"));
@@ -1072,13 +1047,7 @@
             }
     
             // Construction de l'objet contenant la réponse des stats
-            StatsReponse response = new StatsReponse(stats, minDate.format(fmt), maxDate.format(fmt), all.size());
-    
-            // Si c'était le calcul global (sans filtre), on le garde en mémoire !
-            if (jourFiltre == null) {
-                this.cachedGlobalStats = response;
-            }
-            return response;
+            return new StatsReponse(stats, minDate.format(fmt), maxDate.format(fmt), all.size());
         }
     
         private int selectionnerChanceOptimisee(List<Integer> boules, Map<Integer, Double> scoresChanceBase,
@@ -1210,70 +1179,61 @@
             }
             return matrixResult;
         }
-    
-        @jakarta.annotation.PostConstruct
-        public void initConfigFromDb() {
-            log.info("🔌 Démarrage : Recherche d'une stratégie existante en base...");
-    
-            strategyConfigRepostiroy.findTopByOrderByDateCalculDesc().ifPresentOrElse(
-                    lastStrategy -> {
-                        // On convertit l'entité BDD en objet de config RAM
-                        this.cachedBestConfig = new AlgoConfig(
-                                lastStrategy.getNomStrategie(),
-                                lastStrategy.getPoidsFreqJour(),
-                                lastStrategy.getPoidsForme(),
-                                lastStrategy.getPoidsEcart(),
-                                lastStrategy.getPoidsTension(),
-                                lastStrategy.getPoidsMarkov(),
-                                lastStrategy.getPoidsAffinite(),
-                                false
-                        );
-                        // On considère que le cache est valide pour aujourd'hui
-                        this.lastBacktestDate = lastStrategy.getDateCalcul().toLocalDate();
-                        log.info("✅ Stratégie chargée depuis la BDD (Date: {}). Prêt immédiat !", lastStrategy.getDateCalcul());
-                    },
-                    () -> log.warn("⚠️ Aucune stratégie en base. Le premier utilisateur déclenchera le calcul.")
-            );
-        }
-    
+
+        /**
+         * Méthode vérification au démarrage du serveur pour calculer si besoin la config
+         */
         public void verificationAuDemarrage() {
-            // Si une config est déjà chargée (via @PostConstruct) et qu'elle date d'aujourd'hui
-            if (this.cachedBestConfig != null && LocalDate.now().equals(this.lastBacktestDate)) {
-                log.info("✋ [WARMUP] Stratégie du jour déjà présente en mémoire/BDD. Calcul inutile.");
-    
-                // On peut regénérer les pronostics du jour ici si le cache est vide,
-                // c'est rapide (0ms) et ça préchauffe le cache "DailyPronos"
-                genererMultiplesPronostics(recupererDateProchainTirage(), 5);
-                return;
+            log.info("✋ [WARMUP] Vérification de la configuration du jour...");
+
+            // 1. On regarde dans la BDD si le dernier calcul date d'aujourd'hui
+            boolean configAjour = strategyConfigRepostiroy.findTopByOrderByDateCalculDesc()
+                    .map(last -> last.getDateCalcul().toLocalDate().equals(LocalDate.now()))
+                    .orElse(false);
+
+            if (configAjour) {
+                log.info("✅ [WARMUP] La configuration du jour existe déjà en BDD. Préchauffage du cache Redis...");
+                // On appelle le getter via 'self' (la secrétaire) pour que Redis la garde en mémoire
+                self.recupererMeilleureConfig();
+
+                // Bonus : On précalcule les 5 pronostics pour que le site soit instantané
+                self.genererMultiplesPronostics(recupererDateProchainTirage(), 5);
+            } else {
+                log.info("⚠️ [WARMUP] Aucune stratégie pour aujourd'hui. Lancement du calcul...");
+                forceDailyOptimization();
             }
-    
-            // Sinon, c'est que la base est vide ou date d'hier : on lance le calcul
-            log.info("⚠️ [WARMUP] Aucune stratégie valide pour ce jour. Lancement du calcul...");
-            forceDailyOptimization();
+        }
+
+        // NOUVEAU : Récupère la config et la garde dans Redis
+        @Cacheable(value = "algoConfig", key = "'CURRENT_CONFIG'")
+        public AlgoConfig recupererMeilleureConfig() {
+            log.info("🔍 [DB] Chargement de la configuration IA depuis la base de données...");
+
+            // Retourne la stratégie la plus récente en BDD, sinon valeur défaut
+            return strategyConfigRepostiroy.findTopByOrderByDateCalculDesc()
+                    .map(last -> new AlgoConfig(
+                            last.getNomStrategie(), last.getPoidsFreqJour(), last.getPoidsForme(),
+                            last.getPoidsEcart(), last.getPoidsTension(), last.getPoidsMarkov(),
+                            last.getPoidsAffinite(), false
+                    ))
+                    .orElse(AlgoConfig.defaut());
         }
     
         /**
          * Méthode appelée par le scheduler pour forcer l'optimisation quotidienne
          */
+        @CacheEvict(value = "algoConfig", allEntries = true)
         public void forceDailyOptimization() {
             log.info("🌙 [CRON] Optimisation et Nettoyage des caches...");
-    
-            // 1. Vidage des caches
-            this.cachedGlobalStats = null;
-            this.cachedDailyPronos = null;
     
             long start = System.currentTimeMillis();
             List<LotoTirage> history = repository.findAll(Sort.by(Sort.Direction.DESC, "dateTirage"));
     
             if (!history.isEmpty()) {
-                // 2. Calcul de la meilleure configuration
+                // Calcul de la meilleure configuration
                 AlgoConfig newConfig = backtestService.trouverMeilleureConfig(history);
     
-                // 3. Mise à jour RAM (Immédiat)
-                this.cachedBestConfig = newConfig;
-                this.lastBacktestDate = LocalDate.now();
-    
-                // 4. SAUVEGARDE BDD (Pour le futur/redémarrage)
+                // SAUVEGARDE BDD (Pour le futur/redémarrage)
                 StrategyConfig entity = new StrategyConfig();
                 entity.setDateCalcul(LocalDateTime.now());
                 entity.setNomStrategie(newConfig.getNomStrategie());
@@ -1556,7 +1516,7 @@
          * Prépare les données de la stratégie pour l'affichage utilisateur (Dashboard)
          */
         public StrategyDisplayDto getStrategieDuJourPourAffichage() {
-            AlgoConfig config = (this.cachedBestConfig != null) ? this.cachedBestConfig : AlgoConfig.defaut();
+            AlgoConfig config = self.recupererMeilleureConfig();
 
             // 1. Normalisation pour le Radar Chart (Note sur 10 pour que ce soit joli)
             // Forme (max ~20) -> on divise par 2
