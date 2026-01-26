@@ -61,6 +61,7 @@ services:
       SPRING_MAIL_USERNAME: tonycoloricchio01@gmail.com
       SPRING_MAIL_PASSWORD: ${MAIL_PASSWORD}
       APP_LOTO_RECIPIENT: tonycoloricchio01@gmail.com
+      AI_PASSWORD: admin
     restart: always
     # Plus besoin de "ports: - 8081:8080", l'appli est isolée derrière Caddy.
     # Healthcheck (Docker redémarre l'app si elle plante)

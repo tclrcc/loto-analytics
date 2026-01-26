@@ -7,6 +7,7 @@ import com.analyseloto.loto.enums.RoleUser;
 import com.analyseloto.loto.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
@@ -24,6 +25,9 @@ public class UserService {
     private final UserBilanService userBilanService;
     // Utils
     private final PasswordEncoder passwordEncoder;
+
+    @Value("${app.ai.password:ai_default_secret_2026}")
+    private String aiPassword;
 
     /**
      * Création d'un nouvel utilisateur
@@ -70,7 +74,7 @@ public class UserService {
         aiUser.setUsername("aiLoto");
 
         // Gestion du mot de passe (encodage)
-        String passwordEncode = passwordEncoder.encode("admin");
+        String passwordEncode = passwordEncoder.encode(aiPassword);
         aiUser.setPassword(passwordEncode);
 
         // Autres champs obligatoires selon ton Entité

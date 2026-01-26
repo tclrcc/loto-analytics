@@ -70,8 +70,10 @@ public class LotoController {
         List<GraphDto.Edge> edges = new ArrayList<>();
 
         // Création des Liens (On ne garde que les liens forts pour éviter un fouillis)
-        for (Integer source : matrix.keySet()) {
-            Map<Integer, Integer> cibles = matrix.get(source);
+        for (Map.Entry<Integer, Map<Integer, Integer>> sourceEntry : matrix.entrySet()) {
+            Integer source = sourceEntry.getKey();
+            Map<Integer, Integer> cibles = sourceEntry.getValue();
+
             for (Map.Entry<Integer, Integer> entry : cibles.entrySet()) {
                 Integer target = entry.getKey();
                 Integer weight = entry.getValue();

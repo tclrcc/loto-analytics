@@ -4,7 +4,7 @@ import com.analyseloto.loto.enums.RoleUser;
 import com.analyseloto.loto.repository.UserRepository;
 import com.analyseloto.loto.security.CustomLoginFailureHandler;
 import com.analyseloto.loto.security.CustomLoginSuccessHandler;
-import org.springframework.beans.factory.annotation.Autowired;
+import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -19,17 +19,14 @@ import org.springframework.security.web.SecurityFilterChain;
 
 @Configuration
 @EnableWebSecurity
+@RequiredArgsConstructor
 public class SecurityConfig {
-    @Autowired
-    private CustomLoginFailureHandler failureHandler;
-    @Autowired
-    private CustomLoginSuccessHandler successHandler;
-
-    @Value("${loto.security.remember-key}")
-    private String rememberKey;
+    private final CustomLoginFailureHandler failureHandler;
+    private final CustomLoginSuccessHandler successHandler;
 
     @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+    public SecurityFilterChain securityFilterChain(HttpSecurity http,
+            @Value("${loto.security.remember-key}") String rememberKey) {
         http
                 .csrf(AbstractHttpConfigurer::disable) // Désactivé pour simplifier les appels API
                 .authorizeHttpRequests(auth -> auth

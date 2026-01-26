@@ -19,6 +19,7 @@
     import java.io.BufferedReader;
     import java.io.IOException;
     import java.io.InputStreamReader;
+    import java.security.SecureRandom;
     import java.time.DayOfWeek;
     import java.time.LocalDate;
     import java.time.LocalDateTime;
@@ -38,11 +39,16 @@
         // Services
         private final AstroService astroService;
         private final BacktestService backtestService;
+        // Utils
+        private final Random rng = new SecureRandom();
 
         // --- NOUVEAU : On s'injecte soi-même pour forcer le passage par le Cache (La Secrétaire) ---
         @org.springframework.beans.factory.annotation.Autowired
         @org.springframework.context.annotation.Lazy
         private LotoService self;
+
+        // Constantes
+        private static final String FIELD_DATE_TIRAGE = "dateTirage";
     
         /**
          * Configuration dynamique de l'algorithme de génération
@@ -166,7 +172,7 @@
          */
         private List<PronosticResultDto> genererPronosticAvecConfig(LocalDate dateCible, int nombreGrilles, AstroProfileDto profilAstro) {
             // 1. Chargement Historique
-            List<LotoTirage> history = repository.findAll(Sort.by(Sort.Direction.DESC, "dateTirage"));
+            List<LotoTirage> history = repository.findAll(Sort.by(Sort.Direction.DESC, FIELD_DATE_TIRAGE));
             if (history.isEmpty()) return new ArrayList<>();
             List<Integer> dernierTirage = history.get(0).getBoules();
 
@@ -197,8 +203,6 @@
             for(int i=0; i<limitHistoryCheck; i++) {
                 historiqueBitMasks.add(calculerBitMask(history.get(i).getBoules()));
             }
-
-            Random rng = new Random();
 
             // ---------------------------------------------------------
             // 4. GÉNÉRATION : MOTEUR GÉNÉTIQUE IA
@@ -1005,7 +1009,7 @@
             log.info("⚙️ [DB] Calcul lourd des statistiques pour : {}", jourFiltre);
     
             // Récupération des tirages triés par ordre décroissant de date
-            List<LotoTirage> all = repository.findAll(Sort.by(Sort.Direction.DESC, "dateTirage"));
+            List<LotoTirage> all = repository.findAll(Sort.by(Sort.Direction.DESC, FIELD_DATE_TIRAGE));
     
             if (jourFiltre != null && !jourFiltre.isEmpty()) {
                 try {
@@ -1227,7 +1231,7 @@
             log.info("🌙 [CRON] Optimisation et Nettoyage des caches...");
     
             long start = System.currentTimeMillis();
-            List<LotoTirage> history = repository.findAll(Sort.by(Sort.Direction.DESC, "dateTirage"));
+            List<LotoTirage> history = repository.findAll(Sort.by(Sort.Direction.DESC, FIELD_DATE_TIRAGE));
     
             if (!history.isEmpty()) {
                 // Calcul de la meilleure configuration
@@ -1352,14 +1356,16 @@
             }
             return map;
         }
-    
+
         /**
-         * ÉTAPE 2 : Génération Ultra-Rapide
-         * Applique la Config (Poids) sur les Données Pré-calculées (Scenario)
+         * Applique la config à partir des poids calculés
+         * @param sc scénario
+         * @param config config
+         * @param nbGrilles nombre grilles
+         * @return Liste des grilles
          */
         public List<List<Integer>> genererGrillesDepuisScenario(ScenarioSimulation sc, AlgoConfig config, int nbGrilles) {
             List<List<Integer>> resultats = new ArrayList<>();
-            Random rng = new Random();
     
             // 1. Calcul des Scores (Multiplication simple Poids * RawData)
             Map<Integer, Double> scoresBoules = sc.rawStatsBoules.entrySet().stream().collect(Collectors.toMap(

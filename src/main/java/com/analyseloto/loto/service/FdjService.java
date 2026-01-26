@@ -17,6 +17,7 @@ import org.springframework.web.util.UriComponentsBuilder;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
+import java.security.SecureRandom;
 import java.time.LocalDate;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
@@ -32,6 +33,9 @@ public class FdjService {
     private final LotoTirageRepository tirageRepository;
     // Services
     private final LotoService lotoService;
+    // Utils
+    private final Random rng = new SecureRandom();
+
     // Constantes
     @Value("${fdj.api.url}")
     private String fdjApiUrl;
@@ -64,7 +68,7 @@ public class FdjService {
             HttpHeaders headers = new HttpHeaders();
 
             // 🎯 LE CAMOUFLAGE : On tire un navigateur au hasard pour chaque requête
-            String fauxNavigateur = USER_AGENTS_CAMOUFLAGE.get(new Random().nextInt(USER_AGENTS_CAMOUFLAGE.size()));
+            String fauxNavigateur = USER_AGENTS_CAMOUFLAGE.get(rng.nextInt(USER_AGENTS_CAMOUFLAGE.size()));
             headers.set("User-Agent", fauxNavigateur);
 
             // On simule une langue française pour être crédible
