@@ -486,3 +486,36 @@ a { text-decoration: none; }
         height: 50px;
     }
 }
+
+/* Correction de l'alignement DataTables */
+div.dataTables_wrapper div.dataTables_info,
+div.dataTables_wrapper div.dataTables_length {
+    padding-top: 0 !important; /* Annule le décalage vers le bas du texte */
+    margin-bottom: 0 !important;
+}
+
+div.dataTables_length label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem; /* Espace entre le texte et le selecteur */
+    margin-bottom: 0;
+}
+
+
+.loto-badge {
+    width: 28px;
+    height: 28px;
+    line-height: 24px;
+    font-size: 0.85rem;
+    display: inline-block;
+    padding: 0;
+    text-align: center;
+}
+
+.ai-ball {
+    width: 28px;
+    height: 28px;
+    line-height: 28px;
+    font-size: 0.85rem;
+    display: inline-block;
+}

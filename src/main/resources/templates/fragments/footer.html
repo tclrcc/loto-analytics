@@ -1,0 +1,16 @@
+<footer th:fragment="footer" class="footer mt-auto">
+  <footer class="footer mt-auto">
+    <div class="container">
+      <div class="row align-items-center">
+        <div class="col-md-6 text-center text-md-start mb-3 mb-md-0">
+          <p class="mb-0 fw-bold text-dark">Loto Master AI <span class="badge bg-light text-secondary border ms-1">v3.0</span></p>
+          <small class="d-block mt-1">&copy; <span th:text="${#dates.format(#dates.createNow(), 'yyyy')}">2025</span> - Développé avec <i class="bi bi-heart-fill text-danger mx-1" style="font-size:10px;"></i> et Spring Boot.</small>
+        </div>
+        <div class="col-md-6 text-center text-md-end">
+          <div class="mb-2"><a href="#" class="mx-2 small">Mentions</a><a href="#" class="mx-2 small">Confidentialité</a></div>
+          <div><a href="#" class="footer-social-btn"><i class="bi bi-github"></i></a></div>
+        </div>
+      </div>
+    </div>
+  </footer>
+</footer>
