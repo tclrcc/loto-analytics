@@ -19,7 +19,7 @@ public class BacktestService {
     private final LotoService lotoService;
 
     // Constante pour le volume du test de fitness
-    private static final int NB_GRILLES_PAR_TEST = 300;
+    private static final int NB_GRILLES_PAR_TEST = 400;
 
     public BacktestService(@Lazy LotoService lotoService) {
         this.lotoService = lotoService;
@@ -36,8 +36,8 @@ public class BacktestService {
         log.info("🧬 Démarrage de la Méta-Optimisation IA (Jenetics)...");
         long start = System.currentTimeMillis();
 
-        // Entrainement de l'IA sur 500 tirages du passé
-        int depthBacktest = 500;
+        // Entrainement de l'IA sur 650 tirages du passé
+        int depthBacktest = 650;
         List<LotoService.ScenarioSimulation> scenarios = lotoService.preparerScenariosBacktest(historiqueComplet, depthBacktest, 300);
 
         if (scenarios.isEmpty()) return LotoService.AlgoConfig.defaut();
@@ -56,7 +56,7 @@ public class BacktestService {
 
         // 2. CONFIGURATION DU MOTEUR ÉVOLUTIONNAIRE
         Engine<DoubleGene, Double> engine = Engine.builder(gt -> evaluerFitness(gt, scenarios), gtf)
-                .populationSize(80) // 80 configurations testées par génération
+                .populationSize(100) // 100 configurations testées par génération
                 .survivorsSelector(new TournamentSelector<>(3)) // Sélection des meilleurs
                 .offspringSelector(new RouletteWheelSelector<>()) // Reproduction pondérée
                 .alterers(
@@ -65,11 +65,11 @@ public class BacktestService {
                 )
                 .build();
 
-        log.info("🚀 Lancement de l'évolution sur 15 générations...");
+        log.info("🚀 Lancement de l'évolution sur 45 générations...");
 
         // 3. EXÉCUTION DU MOTEUR (Automatiquement Parallélisé par Jenetics)
         Phenotype<DoubleGene, Double> bestPhenotype = engine.stream()
-                .limit(30) // On s'arrête après 25 générations
+                .limit(45) // On s'arrête après 45 générations
                 .peek(result -> log.info("🏁 Génération {} terminée. Meilleur Bilan Actuel : {} €", result.generation(), String.format("%.2f", result.bestFitness())))
                 .collect(EvolutionResult.toBestPhenotype());
 
