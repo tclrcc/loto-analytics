@@ -39,17 +39,37 @@ public class FdjService {
     // Regex pour détecter un code loto : 1 Lettre, espace optionnel, 8 chiffres (ex: A 1234 5678 ou A12345678)
     private static final Pattern CODE_LOTO_PATTERN = Pattern.compile("^[A-Z]\\s?[0-9]{4}\\s?[0-9]{4}$|^[A-Z][0-9]{8}$");
 
+    // User-Agents pour appel API FDJ
+    private static final List<String> USER_AGENTS_CAMOUFLAGE = List.of(
+            // 1. Un iPhone récent sur Safari
+            "Mozilla/5.0 (iPhone; CPU iPhone OS 17_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Mobile/15E148 Safari/604.1",
+            // 2. Un PC Windows 11 sur Google Chrome
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
+            // 3. Un Mac M2 sur Safari
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Safari/605.1.15",
+            // 4. Un Samsung Galaxy sur Chrome Android
+            "Mozilla/5.0 (Linux; Android 13; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Mobile Safari/537.36",
+            // 5. Un PC sous Firefox
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/119.0"
+    );
+
     /**
      * Méthode récupérant automatiquement le dernier tirage du Loto via API
-     * @return
+     * @return Dernier tirage si existant
      */
     public Optional<LotoTirage> recupererDernierTirage(boolean manuel) {
         log.info("🌍 Appel API FDJ (Recherche intelligente)...");
         try {
             RestTemplate restTemplate = new RestTemplate();
             HttpHeaders headers = new HttpHeaders();
-            // User-Agent standard pour éviter d'être bloqué
-            headers.set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
+
+            // 🎯 LE CAMOUFLAGE : On tire un navigateur au hasard pour chaque requête
+            String fauxNavigateur = USER_AGENTS_CAMOUFLAGE.get(new Random().nextInt(USER_AGENTS_CAMOUFLAGE.size()));
+            headers.set("User-Agent", fauxNavigateur);
+
+            // On simule une langue française pour être crédible
+            headers.set("Accept-Language", "fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7");
+            headers.set("Accept", "application/json");
 
             // On demande les 4 derniers tirages
             String urlComplete = UriComponentsBuilder.fromUriString(fdjApiUrl)

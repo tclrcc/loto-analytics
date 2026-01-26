@@ -3,7 +3,11 @@ package com.analyseloto.loto.controller;
 import com.analyseloto.loto.dto.*;
 import com.analyseloto.loto.service.AstroService;
 import com.analyseloto.loto.service.LotoService;
+import com.analyseloto.loto.service.RateLimiterService;
+import io.github.bucket4j.Bucket;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -17,8 +21,10 @@ import java.util.Map;
 @RequestMapping("/api/loto")
 @RequiredArgsConstructor
 public class LotoController {
+    // Services
     private final LotoService service;
     private final AstroService astroService;
+    private final RateLimiterService rateLimiterService;
 
     @PostMapping("/import")
     public ResponseEntity<String> uploadFile(@RequestParam("file") MultipartFile file) {
@@ -95,11 +101,22 @@ public class LotoController {
     }
 
     @GetMapping("/generate")
-    public ResponseEntity<List<PronosticResultDto>> generateGrid(
+    public ResponseEntity<?> generateGrid(
             @RequestParam("date") String dateStr,
-            @RequestParam(value = "count", defaultValue = "1") int count) {
+            @RequestParam(value = "count", defaultValue = "1") int count,
+            HttpServletRequest request) {
+        // 3. LE BOUCLIER
+        Bucket bucket = rateLimiterService.resolveBucket(request);
+        if (!bucket.tryConsume(1)) {
+            // Si le seau est vide, on renvoie une erreur 429 (Too Many Requests)
+            return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                    .body("Veuillez ralentir ! Limite de 10 générations par minute atteinte.");
+        }
 
+        // Date du tirage
         LocalDate date = LocalDate.parse(dateStr);
+
+        // Réponse pronostics JSON
         return ResponseEntity.ok(service.genererMultiplesPronostics(date, count));
     }
 
