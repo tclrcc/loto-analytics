@@ -6,6 +6,7 @@ import com.analyseloto.loto.entity.UserBet;
 import com.analyseloto.loto.entity.UserBilan;
 import com.analyseloto.loto.event.NouveauTirageEvent;
 import com.analyseloto.loto.repository.UserBetRepository;
+import com.analyseloto.loto.repository.UserBilanRepository;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -23,6 +24,7 @@ import java.util.stream.Collectors;
 public class GainCalculatorService {
     // Repositories
     private final UserBetRepository userBetRepository;
+    private final UserBilanRepository userBilanRepository;
     // Services
     private final LotoService lotoService;
     private final EmailService emailService;
