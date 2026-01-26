@@ -297,6 +297,34 @@
                 }
             }
 
+            // ---------------------------------------------------------
+            // 6. LE PLAN B : SÉCURITÉ ANTI-CONSANGUINITÉ
+            // ---------------------------------------------------------
+            int grillesManquantes = nombreGrilles - resultats.size();
+
+            if (grillesManquantes > 0) {
+                log.warn("⚠️ Pas assez de diversité. Activation du PLAN B : Ajout des {} meilleures grilles restantes.", grillesManquantes);
+
+                for (GrilleCandidate cand : population) {
+                    if (resultats.size() >= nombreGrilles) break; // On a atteint les 5, on sort !
+
+                    // On vérifie qu'on n'a pas déjà ajouté cette grille via le Tri Glouton
+                    if (!grillesRetenues.contains(cand.boules)) {
+                        grillesRetenues.add(cand.boules);
+
+                        SimulationResultDto simu = simulerGrilleDetaillee(cand.boules, dateCible, history);
+                        double maxDuo = simu.getPairs().stream().mapToDouble(MatchGroup::getRatio).max().orElse(0.0);
+
+                        resultats.add(new PronosticResultDto(
+                                cand.boules, cand.chance,
+                                Math.round(cand.fitness * 100.0) / 100.0,
+                                maxDuo, 0.0, !simu.getQuintuplets().isEmpty(),
+                                "IA_SECOURS (PLAN B)" // On le signale visuellement
+                        ));
+                    }
+                }
+            }
+
             return resultats;
         }
     
@@ -1489,8 +1517,8 @@
                     List<Integer> boulesEnfant = new ArrayList<>(genesEnfant);
                     Collections.sort(boulesEnfant);
 
-                    // C. MUTATION (15% de chance de modifier un numéro aléatoirement)
-                    if (rng.nextDouble() < 0.15) {
+                    // C. MUTATION (30% de chance de modifier un numéro aléatoirement)
+                    if (rng.nextDouble() < 0.30) {
                         int idxToMutate = rng.nextInt(5);
                         int mutation = rng.nextInt(49) + 1;
                         while (boulesEnfant.contains(mutation)) mutation = rng.nextInt(49) + 1;
