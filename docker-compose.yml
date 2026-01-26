@@ -36,7 +36,7 @@ services:
       BACKUP_KEEP_DAYS: 7
       TZ: Europe/Paris
     volumes:
-      - /opt/loto_master/backups:/backups
+      - ./backups:/backups
 
   # ----------------------------------------------------
   # 2. APPLICATION SPRING BOOT (Avec Healthcheck)
