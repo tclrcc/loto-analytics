@@ -19,6 +19,8 @@
         <link rel="manifest" th:href="@{/manifest.json}">
         <meta name="theme-color" content="#4338ca">
         <link rel="apple-touch-icon" th:href="@{/images/icons/icon-192x192.png}">
+
+        <script src="https://unpkg.com/@lottiefiles/lottie-player@latest/dist/lottie-player.js"></script>
     </head>
 <body>
 
@@ -119,9 +121,12 @@
     <div th:if="${!#lists.isEmpty(aiBetsDernierTirage)}" class="card border-0 shadow-sm mb-4 animate-up delay-1">
         <div class="card-header bg-white py-3 border-bottom-0 d-flex align-items-center justify-content-between">
             <div>
-                <h5 class="mb-0 fw-bold text-primary">
-                    <i class="bi bi-robot me-2"></i>Pronostics de l'IA
-                </h5>
+                <div class="d-flex align-items-center">
+                    <lottie-player id="ai-robot-lottie" src="https://assets2.lottiefiles.com/packages/lf20_t2xgmchu.json"
+                                   background="transparent" speed="1" style="width: 40px; height: 40px; margin-right: 10px;" loop autoplay>
+                    </lottie-player>
+                    <h5 class="mb-0 fw-bold text-primary">Pronostics de l'IA</h5>
+                </div>
                 <small class="text-muted fw-normal" style="font-size: 0.75rem;">
                     pour le <span class="fw-bold text-dark" th:text="${#temporals.format(dateDernierTirage, 'EEEE d MMMM')}">...</span>
                 </small>

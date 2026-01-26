@@ -1,5 +1,50 @@
-document.addEventListener('DOMContentLoaded', () => {
+// --- AUDIO MANAGER (Sons d'interface discrets) ---
+const SoundManager = {
+    // Fichiers audio libres de droit très courts
+    click: new Audio('https://assets.mixkit.co/active_storage/sfx/2568/2568-preview.mp3'), // Clic moderne
+    magic: new Audio('https://assets.mixkit.co/active_storage/sfx/1435/1435-preview.mp3'), // Son magique IA
+    win: new Audio('https://assets.mixkit.co/active_storage/sfx/2013/2013-preview.mp3'),   // Confetti success
 
+    play: function(soundName) {
+        let sound = this[soundName];
+        if (sound) {
+            sound.volume = 0.3; // Volume discret (30%)
+            sound.currentTime = 0;
+            sound.play().catch(e => console.log("Son bloqué par le navigateur", e));
+        }
+    }
+};
+
+// --- GESTION DU DARK MODE ---
+function initDarkMode() {
+    const toggleBtn = document.getElementById('themeToggle');
+    const icon = toggleBtn ? toggleBtn.querySelector('i') : null;
+
+    // Vérifier la préférence sauvegardée
+    const isDark = localStorage.getItem('loto-theme') === 'dark';
+    if (isDark) {
+        document.documentElement.setAttribute('data-theme', 'dark');
+        if(icon) icon.className = 'bi bi-sun-fill text-warning';
+    }
+
+    if (toggleBtn) {
+        toggleBtn.addEventListener('click', () => {
+            const currentTheme = document.documentElement.getAttribute('data-theme');
+            if (currentTheme === 'dark') {
+                document.documentElement.removeAttribute('data-theme');
+                localStorage.setItem('loto-theme', 'light');
+                icon.className = 'bi bi-moon-stars-fill';
+            } else {
+                document.documentElement.setAttribute('data-theme', 'dark');
+                localStorage.setItem('loto-theme', 'dark');
+                icon.className = 'bi bi-sun-fill text-warning';
+            }
+            SoundManager.play('click'); // Petit clic à l'activation
+        });
+    }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
     // --- Variables Globales ---
     let currentChart = null;
     let radarChart = null;
@@ -11,6 +56,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentGridsData = [];
 
     // --- FONCTIONS GLOBALES (Accessibles depuis le HTML) ---
+    initDarkMode();
 
     // 1. Initialisation des données depuis le HTML (Thymeleaf)
     window.setCurrentGridsData = function(data) {
@@ -344,6 +390,8 @@ document.addEventListener('DOMContentLoaded', () => {
                         bootstrap.Modal.getInstance(document.getElementById('modalBulkBet')).hide();
                         confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
                         setTimeout(() => window.location.reload(), 1500);
+
+                        SoundManager.play('win');
                     } else {
                         throw new Error("Erreur serveur lors de la sauvegarde.");
                     }
@@ -378,6 +426,7 @@ document.addEventListener('DOMContentLoaded', () => {
         listDiv.innerHTML = '<div class="text-center py-3"><div class="spinner-border text-primary"></div><div class="small mt-2 text-muted">L\'IA optimise les combinaisons...</div></div>';
 
         try {
+            SoundManager.play('magic');
             // Appel API
             const res = await fetch(`/api/loto/generate?date=${dateInput.value}&count=${countInput.value}`);
             if(!res.ok) throw new Error("Erreur API");
@@ -661,6 +710,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function checkWinEffect() {
         const urlParams = new URLSearchParams(window.location.search);
         if (urlParams.has('win')) {
+            SoundManager.play('win');
             lancerConfettis();
             const toastEl = document.getElementById('winToast');
             if(toastEl) {
