@@ -19,9 +19,11 @@ jobs:
           distribution: 'temurin'
           cache: maven
 
-      - name: 🛡️ Lancement des Tests (Sécurité)
-        run: mvn clean test
-        # Si un test échoue, le processus s'arrête ici. Le site ne sera pas cassé.
+      - name: 🧪 Tests et Audit de Code (SonarCloud)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: mvn -B verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar
 
       - name: 🔐 Connexion à Docker Hub
         uses: docker/login-action@v2
