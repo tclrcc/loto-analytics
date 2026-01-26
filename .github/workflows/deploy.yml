@@ -1,24 +1,55 @@
-name: Deploiement Automatique VPS
+name: CI/CD Pipeline Loto Master
 
-# 1. Le déclencheur : À chaque 'push' sur la branche principale main
 on:
   push:
-    branches:
-      - main
+    branches: [ "main" ]
 
 jobs:
-  deploy:
+  # PHASE 1 : CONSTRUCTION & TESTS (Sur les serveurs de GitHub)
+  build-and-push:
     runs-on: ubuntu-latest
-
     steps:
-      - name: 🚀 Lancement du déploiement via SSH
+      - name: 📥 Récupération du code
+        uses: actions/checkout@v3
+
+      - name: ☕ Installation de Java 17
+        uses: actions/setup-java@v3
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: 🛡️ Lancement des Tests (Sécurité)
+        run: mvn clean test
+        # Si un test échoue, le processus s'arrête ici. Le site ne sera pas cassé.
+
+      - name: 🔐 Connexion à Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: 🏗️ Compilation et Envoi sur Docker Hub
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          push: true
+          tags: tclrcc/loto-app:latest
+
+  # PHASE 2 : DEPLOIEMENT (Sur votre VPS)
+  deploy:
+    needs: build-and-push # Ne se lance QUE si la phase 1 a réussi
+    runs-on: ubuntu-latest
+    steps:
+      - name: 🚀 Mise à jour du VPS
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USERNAME }}
           key: ${{ secrets.VPS_SSH_KEY }}
           script: |
-            # On va dans le dossier et on lance votre script magique !
             cd /home/ubuntu/loto-analytics
-            chmod +x deploy.sh
-            ./deploy.sh
+            # 1. On télécharge la nouvelle image toute prête (Zéro compilation CPU)
+            docker compose pull loto_app
+            # 2. On redémarre instantanément
+            docker compose up -d

@@ -44,7 +44,7 @@ services:
   # 2. APPLICATION SPRING BOOT (Avec Healthcheck)
   # ----------------------------------------------------
   loto_app:
-    build: .
+    image: tclrcc/loto-app:latest
     container_name: loto_app
     depends_on:
       - loto_db
