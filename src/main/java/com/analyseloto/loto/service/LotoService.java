@@ -1380,17 +1380,20 @@
                     Map.Entry::getKey,
                     e -> calculerScoreFinal(e.getValue(), config)
             ));
-    
-            Map<Integer, Double> scoresChance = sc.rawStatsChance.entrySet().stream().collect(Collectors.toMap(
-                    Map.Entry::getKey,
-                    e -> calculerScoreFinal(e.getValue(), config)
-            ));
-    
+
+            double[] scoresChanceArr = new double[11];
+            for (int i = 1; i <= 10; i++) {
+                scoresChanceArr[i] = calculerScoreFinal(sc.getRawStatsChance().get(i), config);
+            }
+
             // 2. Buckets
             Map<String, List<Integer>> buckets = creerBuckets(scoresBoules);
     
             // 3. Génération (Identique à avant, mais utilisant les matrices pré-calculées du scénario)
             int essais = 0;
+            Map<Integer, Double> scoresChanceMap = new HashMap<>(16);
+            for (int i = 1; i <= 10; i++) scoresChanceMap.put(i, scoresChanceArr[i]);
+
             while(resultats.size() < nbGrilles && essais < 200) { // Limite essais pour vitesse
                 essais++;
                 // On réutilise votre méthode genererGrilleParAffinite qui prend déjà les maps en entrée !
@@ -1398,11 +1401,12 @@
     
                 if (estGrilleCoherente(boules, sc.dernierTirageConnu, sc.contraintes)) {
                     // Fitness Check rapide
-                    int chance = selectionnerChanceOptimisee(boules, scoresChance, sc.matriceChance, rng);
-    
-                    Collections.sort(boules);
-                    boules.add(chance);
-                    resultats.add(boules);
+                    int chance = selectionnerChanceOptimisee(boules, scoresChanceMap, sc.matriceChance, rng);
+
+                    List<Integer> grilleComplete = new ArrayList<>(boules);
+                    Collections.sort(grilleComplete);
+                    grilleComplete.add(chance);
+                    resultats.add(grilleComplete);
                 }
             }
             return resultats;

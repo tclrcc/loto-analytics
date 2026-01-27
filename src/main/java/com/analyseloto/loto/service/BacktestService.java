@@ -10,6 +10,7 @@ import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.concurrent.Executors;
 
 @Service
 @Slf4j
@@ -17,7 +18,7 @@ public class BacktestService {
     private final LotoService lotoService;
 
     // Constante pour le volume du test de fitness
-    private static final int NB_GRILLES_PAR_TEST = 400;
+    private static final int NB_GRILLES_PAR_TEST = 100;
 
     public BacktestService(@Lazy LotoService lotoService) {
         this.lotoService = lotoService;
@@ -33,9 +34,9 @@ public class BacktestService {
         log.info("🧬 Démarrage de la Méta-Optimisation IA (Jenetics)...");
         long start = System.currentTimeMillis();
 
-        // Entrainement de l'IA sur 650 tirages du passé
-        int depthBacktest = 650;
-        List<LotoService.ScenarioSimulation> scenarios = lotoService.preparerScenariosBacktest(historiqueComplet, depthBacktest, 300);
+        // Entrainement de l'IA sur 150 tirages du passé
+        int depthBacktest = 150;
+        List<LotoService.ScenarioSimulation> scenarios = lotoService.preparerScenariosBacktest(historiqueComplet, depthBacktest, 200);
 
         if (scenarios.isEmpty()) return LotoService.AlgoConfig.defaut();
         log.info("✅ {} Scénarios prêts en mémoire.", scenarios.size());
@@ -53,20 +54,21 @@ public class BacktestService {
 
         // 2. CONFIGURATION DU MOTEUR ÉVOLUTIONNAIRE
         Engine<DoubleGene, Double> engine = Engine.builder(gt -> evaluerFitness(gt, scenarios), gtf)
-                .populationSize(100) // 100 configurations testées par génération
+                .populationSize(50) // 50 configurations testées par génération
+                .executor(Executors.newWorkStealingPool())
                 .survivorsSelector(new TournamentSelector<>(3)) // Sélection des meilleurs
                 .offspringSelector(new RouletteWheelSelector<>()) // Reproduction pondérée
                 .alterers(
-                        new Mutator<>(0.20),      // 20% de mutation (exploration)
-                        new MeanAlterer<>(0.7)    // 70% de croisement par la moyenne
+                        new Mutator<>(0.15),      // 15% de mutation (exploration)
+                        new MeanAlterer<>(0.6)    // 60% de croisement par la moyenne
                 )
                 .build();
 
-        log.info("🚀 Lancement de l'évolution sur 45 générations...");
+        log.info("🚀 Lancement de l'évolution sur 20 générations...");
 
         // 3. EXÉCUTION DU MOTEUR (Automatiquement Parallélisé par Jenetics)
         Phenotype<DoubleGene, Double> bestPhenotype = engine.stream()
-                .limit(45) // On s'arrête après 45 générations
+                .limit(20) // On s'arrête après 20 générations
                 .peek(result -> log.info("🏁 Génération {} terminée. Meilleur Bilan Actuel : {} €", result.generation(), String.format("%.2f", result.bestFitness())))
                 .collect(EvolutionResult.toBestPhenotype());
 
