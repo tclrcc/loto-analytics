@@ -21,6 +21,7 @@ import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 @Slf4j
 @Component
@@ -36,6 +37,7 @@ public class LotoJob {
     private final UserBetRepository betRepository;
     // Event
     private final ApplicationEventPublisher eventPublisher;
+    private final AtomicBoolean isOptimizing = new AtomicBoolean(false); // Le verrou
     /* Email de l'utilisateur ia */
     @Value("${user.ia.mail}")
     private String mailUserIa;
@@ -303,9 +305,16 @@ public class LotoJob {
     public void optimisationQuotidienne() {
         log.info("⏰ Réveil du Job d'Optimisation IA...");
 
+        // Gestion du verrou
+        if (isOptimizing.get()) {
+            log.warn("⚠️ Une optimisation est déjà en cours. On annule ce lancement.");
+            return;
+        }
+
         // Enregistrement début job
         JobLog jobLog = jobMonitorService.startJob("OPTIMISATION_QUOTIDIENNE_IA");
         try {
+            isOptimizing.set(true);
             // Appelle méthode traitement
             lotoService.forceDailyOptimization();
 
@@ -314,6 +323,8 @@ public class LotoJob {
         } catch (Exception e) {
             log.error("❌ Echec de l'optimisation nocturne", e);
             jobMonitorService.endJob(jobLog, JobExecutionStatus.FAILURE.getCode(), "Erreur : " + e.getMessage());
+        } finally {
+            isOptimizing.set(false);
         }
     }
 }

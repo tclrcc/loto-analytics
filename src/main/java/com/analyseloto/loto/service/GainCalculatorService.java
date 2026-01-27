@@ -14,6 +14,7 @@ import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -38,68 +39,81 @@ public class GainCalculatorService {
     @Transactional
     public void onNouveauTirage(NouveauTirageEvent event) {
         LotoTirage tirage = event.getTirage();
+        LocalDate dateTirage = tirage.getDateTirage();
 
-        // 1. PHASE DE CALCUL : On ne prend QUE ceux qui n'ont pas de gain (Optimisation)
-        List<UserBet> parisATraiter = userBetRepository.findByDateJeuAndGainIsNull(tirage.getDateTirage());
-
-        if (parisATraiter.isEmpty()) {
-            log.info("Aucun pari en attente de traitement pour ce tirage.");
-        } else {
-            // Calcul et Mise à jour
+        // 1. CALCUL DES GAINS
+        List<UserBet> parisATraiter = userBetRepository.findByDateJeuAndGainIsNull(dateTirage);
+        if (!parisATraiter.isEmpty()) {
             for (UserBet bet : parisATraiter) {
-                double gain = lotoService.calculerGainSimule(bet, tirage);
-                bet.setGain(gain);
+                bet.setGain(lotoService.calculerGainSimule(bet, tirage));
                 userBetRepository.save(bet);
             }
             log.info("✅ {} paris mis à jour.", parisATraiter.size());
         }
 
-        // 2. PHASE D'ENVOI D'EMAILS : On récupère TOUT pour avoir un bilan complet
-        // C'est important de refaire une requête ici pour avoir l'ensemble des grilles (anciennes + nouvelles)
-        List<UserBet> tousLesParisDuJour = userBetRepository.findByDateJeu(tirage.getDateTirage());
-
-        // Regroupement par utilisateur
+        // 2. RÉCUPÉRATION GLOBALE POUR EMAILS ET BILANS
+        List<UserBet> tousLesParisDuJour = userBetRepository.findByDateJeu(dateTirage);
         Map<User, List<UserBet>> parisParUtilisateur = tousLesParisDuJour.stream()
                 .collect(Collectors.groupingBy(UserBet::getUser));
 
-        // Envoi
         parisParUtilisateur.forEach((user, bets) -> {
-            if (user.isSubscribeToEmails()) {
-                try {
-                    emailService.sendDrawResultNotification(user, tirage, bets);
-                } catch (Exception e) {
-                    log.error("Erreur mail {}", user.getEmail(), e);
-                }
-            }
+            // A. Envoi Email
+            envoyerNotificationEmail(user, tirage, bets);
+
+            // B. Mise à jour du Bilan (LA CORRECTION EST ICI)
+            mettreAJourBilanFinancier(user, dateTirage, bets);
         });
 
-        // Enregistrement du bilan financier
-        parisParUtilisateur.forEach((user, bets) -> {
+        log.info("📈 Traitement terminé pour {} utilisateurs.", parisParUtilisateur.size());
+    }
 
-            // On recalcule LE TOTAL historique (une seule fois par jour)
-            List<UserBet> toutHistorique = userBetRepository.findByUser(user);
-
-            double totalDepense = toutHistorique.stream().mapToDouble(UserBet::getMise).sum();
-            double totalGains = toutHistorique.stream().filter(b -> b.getGain() != null).mapToDouble(UserBet::getGain).sum();
-            long grillesGagnantes = toutHistorique.stream().filter(b -> b.getGain() != null && b.getGain() > 0).count();
-
-            // Création du Bilan du jour
-            UserBilan bilanDuJour = new UserBilan(user, tirage.getDateTirage());
-            bilanDuJour.setTotalDepense(totalDepense);
-            bilanDuJour.setTotalGains(totalGains);
-            bilanDuJour.setSolde(totalGains - totalDepense);
-            bilanDuJour.setNbGrillesJouees(toutHistorique.size());
-            bilanDuJour.setNbGrillesGagnantes((int) grillesGagnantes);
-
-            // Calcul ROI
-            if (totalDepense > 0) {
-                bilanDuJour.setRoi((bilanDuJour.getSolde() / totalDepense) * 100);
+    private void envoyerNotificationEmail(User user, LotoTirage tirage, List<UserBet> bets) {
+        if (user.isSubscribeToEmails()) {
+            try {
+                emailService.sendDrawResultNotification(user, tirage, bets);
+            } catch (Exception e) {
+                log.error("Erreur mail {}", user.getEmail(), e);
             }
+        }
+    }
 
-            // Sauvegarde en BDD (Nécessite de créer un UserBilanRepository)
-            userBilanRepository.save(bilanDuJour);
-        });
+    private void mettreAJourBilanFinancier(User user, LocalDate dateTirage, List<UserBet> parisDuJour) {
+        // 1. On récupère le cumul historique jusqu'au tirage PRÉCÉDENT
+        UserBilan precedent = userBilanRepository
+                .findTopByUserAndDateBilanBeforeOrderByDateBilanDesc(user, dateTirage)
+                .orElse(null);
 
-        log.info("📈 Bilans financiers mis à jour pour {} utilisateurs.", parisParUtilisateur.size());
+        // 2. On cherche si un bilan existe déjà pour AUJOURD'HUI (cas du re-run)
+        UserBilan actuel = userBilanRepository.findByUserAndDateBilan(user, dateTirage)
+                .orElse(new UserBilan(user, dateTirage));
+
+        // 3. Calcul du delta (uniquement ce qui s'est passé sur ce tirage)
+        double gainsAujourdhui = parisDuJour.stream()
+                .filter(b -> b.getGain() != null)
+                .mapToDouble(UserBet::getGain).sum();
+        double depenseAujourdhui = parisDuJour.stream()
+                .mapToDouble(UserBet::getMise).sum();
+        int gagnantsAujourdhui = (int) parisDuJour.stream()
+                .filter(b -> b.getGain() != null && b.getGain() > 0).count();
+
+        // 4. Initialisation des cumuls (Base précédente ou 0)
+        double baseDepense = (precedent != null) ? precedent.getTotalDepense() : 0.0;
+        double baseGains = (precedent != null) ? precedent.getTotalGains() : 0.0;
+        int baseNbGrilles = (precedent != null) ? precedent.getNbGrillesJouees() : 0;
+        int baseNbGagnantes = (precedent != null) ? precedent.getNbGrillesGagnantes() : 0;
+
+        // 5. Mise à jour du bilan actuel avec le cumul
+        actuel.setTotalDepense(baseDepense + depenseAujourdhui);
+        actuel.setTotalGains(baseGains + gainsAujourdhui);
+        actuel.setSolde(actuel.getTotalGains() - actuel.getTotalDepense());
+        actuel.setNbGrillesJouees(baseNbGrilles + parisDuJour.size());
+        actuel.setNbGrillesGagnantes(baseNbGagnantes + gagnantsAujourdhui);
+
+        // Calcul du ROI global
+        if (actuel.getTotalDepense() > 0) {
+            actuel.setRoi((actuel.getSolde() / actuel.getTotalDepense()) * 100);
+        }
+
+        userBilanRepository.save(actuel);
     }
 }
