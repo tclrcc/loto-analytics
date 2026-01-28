@@ -17,14 +17,11 @@ import java.util.concurrent.Executors;
 public class BacktestService {
     private final LotoService lotoService;
 
-    // --- RETOUR A LA PUISSANCE MAXIMALE (Optimisée) ---
-
-    // On remonte à 50 grilles pour avoir une vraie fiabilité statistique
+    // 50 grilles par test est un bon équilibre statistique, on garde.
     private static final int NB_GRILLES_PAR_TEST = 50;
 
-    // On analyse sur 200 tirages (environ 1 an et demi) pour capter les cycles longs (Ecart/Tension)
-    // C'est ce qui permettait à ta config précédente d'être performante.
-    private static final int DEPTH_BACKTEST = 250;
+    // On augmente la profondeur pour une robustesse maximale (2.5 ans)
+    private static final int DEPTH_BACKTEST = 300;
 
     public BacktestService(@Lazy LotoService lotoService) {
         this.lotoService = lotoService;
@@ -35,9 +32,8 @@ public class BacktestService {
         log.info("🧬 Démarrage de la Méta-Optimisation IA (Deep Learning)...");
         long start = System.currentTimeMillis();
 
-        // 1. Préparation massive (350 snapshots comme avant)
-        // Grâce à l'optimisation rawStats, cela prendra quelques secondes seulement.
-        List<LotoService.ScenarioSimulation> scenarios = lotoService.preparerScenariosBacktest(historiqueComplet, 350, DEPTH_BACKTEST);
+        // 1. Préparation (400 snapshots pour avoir de la marge sur les 300 demandés)
+        List<LotoService.ScenarioSimulation> scenarios = lotoService.preparerScenariosBacktest(historiqueComplet, 400, DEPTH_BACKTEST);
 
         if (scenarios.isEmpty()) return LotoService.AlgoConfig.defaut();
         log.info("✅ {} Scénarios chargés. Utilisation de 3 Cores pour le calcul.", scenarios.size());
@@ -54,7 +50,7 @@ public class BacktestService {
 
         // 3. Moteur Evolutionnaire "Heavy Duty"
         Engine<DoubleGene, Double> engine = Engine.builder(gt -> evaluerFitness(gt, scenarios), gtf)
-                .populationSize(50) // On remet 50 individus pour la diversité
+                .populationSize(100) // On remet 100 individus pour la diversité
                 .executor(Executors.newFixedThreadPool(3))
                 // On laisse 1 cœur libre pour le système/BDD
                 .survivorsSelector(new TournamentSelector<>(3))
@@ -65,12 +61,10 @@ public class BacktestService {
                 )
                 .build();
 
-        // 4. Exécution (20 générations)
-        // Avec l'optimisation int[][], 50 pop * 20 gen * 200 scenarios * 50 grilles = 10M calculs.
-        // Cela devrait prendre environ 2-4 minutes sur ton serveur.
+        // 4. Exécution (50 générations)
         Phenotype<DoubleGene, Double> bestPhenotype = engine.stream()
-                .limit(30)
-                .peek(r -> log.info("🏁 Gen {}/30 - Bilan: {} €", r.generation(), String.format("%.2f", r.bestFitness())))
+                .limit(50)
+                .peek(r -> log.info("🏁 Gen {}/50 - Bilan: {} €", r.generation(), String.format("%.2f", r.bestFitness())))
                 .collect(EvolutionResult.toBestPhenotype());
 
         LotoService.AlgoConfig gagnante = decoderGenotype(bestPhenotype.genotype(), "AUTO_ML_DEEP");
