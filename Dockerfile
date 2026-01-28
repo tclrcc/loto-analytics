@@ -27,6 +27,6 @@ COPY --from=build /app/target/*.jar app.jar
 
 EXPOSE 8080
 
-# ON SIMPLIFIE L'ENTRYPOINT : Plus de configuration manuelle des certificats !
-# On garde juste l'option pour l'aléatoire (/dev/urandom) pour la rapidité
-ENTRYPOINT ["java", "-Djava.security.egd=file:/dev/./urandom", "-jar", "app.jar"]
+# On utilise 'sh -c' pour que la variable $JAVA_OPTS soit bien lue.
+# On utilise 'exec' pour que Java remplace le shell et reçoive les signaux d'arrêt correctement.
+ENTRYPOINT ["sh", "-c", "exec java $JAVA_OPTS -Djava.security.egd=file:/dev/./urandom -jar app.jar"]
