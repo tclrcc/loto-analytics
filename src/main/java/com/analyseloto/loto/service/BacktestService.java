@@ -20,11 +20,11 @@ public class BacktestService {
     // --- RETOUR A LA PUISSANCE MAXIMALE (Optimisée) ---
 
     // On remonte à 50 grilles pour avoir une vraie fiabilité statistique
-    private static final int NB_GRILLES_PAR_TEST = 50;
+    private static final int NB_GRILLES_PAR_TEST = 30;
 
     // On analyse sur 200 tirages (environ 1 an et demi) pour capter les cycles longs (Ecart/Tension)
     // C'est ce qui permettait à ta config précédente d'être performante.
-    private static final int DEPTH_BACKTEST = 200;
+    private static final int DEPTH_BACKTEST = 250;
 
     public BacktestService(@Lazy LotoService lotoService) {
         this.lotoService = lotoService;
@@ -54,8 +54,10 @@ public class BacktestService {
 
         // 3. Moteur Evolutionnaire "Heavy Duty"
         Engine<DoubleGene, Double> engine = Engine.builder(gt -> evaluerFitness(gt, scenarios), gtf)
-                .populationSize(50) // On remet 50 individus pour la diversité
-                .executor(Executors.newWorkStealingPool())
+                .populationSize(40) // On remet 50 individus pour la diversité
+                // Au lieu de prendre tous les cœurs (qui peut bloquer le serveur)
+                .executor(Executors.newFixedThreadPool(Math.max(1, Runtime.getRuntime().availableProcessors() - 1)))
+                // On laisse 1 cœur libre pour le système/BDD
                 .survivorsSelector(new TournamentSelector<>(3))
                 .offspringSelector(new RouletteWheelSelector<>())
                 .alterers(
@@ -68,8 +70,8 @@ public class BacktestService {
         // Avec l'optimisation int[][], 50 pop * 20 gen * 200 scenarios * 50 grilles = 10M calculs.
         // Cela devrait prendre environ 2-4 minutes sur ton serveur.
         Phenotype<DoubleGene, Double> bestPhenotype = engine.stream()
-                .limit(20)
-                .peek(r -> log.info("🏁 Gen {}/20 - Bilan: {} €", r.generation(), String.format("%.2f", r.bestFitness())))
+                .limit(30)
+                .peek(r -> log.info("🏁 Gen {}/30 - Bilan: {} €", r.generation(), String.format("%.2f", r.bestFitness())))
                 .collect(EvolutionResult.toBestPhenotype());
 
         LotoService.AlgoConfig gagnante = decoderGenotype(bestPhenotype.genotype(), "AUTO_ML_DEEP");
