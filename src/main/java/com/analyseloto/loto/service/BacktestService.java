@@ -17,61 +17,67 @@ import java.util.concurrent.Executors;
 public class BacktestService {
     private final LotoService lotoService;
 
-    // --- OPTIMISATION VITESSE ---
-    // On teste sur 25 grilles au lieu de 100 (suffisant pour la tendance)
-    private static final int NB_GRILLES_PAR_TEST = 25;
-    // On regarde les 60 derniers tirages (6 mois) au lieu de 150 (trop loin)
-    private static final int DEPTH_BACKTEST = 60;
+    // --- RETOUR A LA PUISSANCE MAXIMALE (Optimisée) ---
+
+    // On remonte à 50 grilles pour avoir une vraie fiabilité statistique
+    private static final int NB_GRILLES_PAR_TEST = 50;
+
+    // On analyse sur 200 tirages (environ 1 an et demi) pour capter les cycles longs (Ecart/Tension)
+    // C'est ce qui permettait à ta config précédente d'être performante.
+    private static final int DEPTH_BACKTEST = 200;
 
     public BacktestService(@Lazy LotoService lotoService) {
         this.lotoService = lotoService;
-        // Random standard pour la vitesse (SecureRandom est trop lent pour l'IA)
         System.setProperty("io.jenetics.util.defaultRandomGenerator", "Random");
     }
 
     public LotoService.AlgoConfig trouverMeilleureConfig(List<LotoTirage> historiqueComplet) {
-        log.info("🧬 Démarrage de la Méta-Optimisation IA (Jenetics)...");
+        log.info("🧬 Démarrage de la Méta-Optimisation IA (Deep Learning)...");
         long start = System.currentTimeMillis();
 
-        // 1. Préparation des données (Snapshot léger)
-        List<LotoService.ScenarioSimulation> scenarios = lotoService.preparerScenariosBacktest(historiqueComplet, 120, DEPTH_BACKTEST);
+        // 1. Préparation massive (350 snapshots comme avant)
+        // Grâce à l'optimisation rawStats, cela prendra quelques secondes seulement.
+        List<LotoService.ScenarioSimulation> scenarios = lotoService.preparerScenariosBacktest(historiqueComplet, 350, DEPTH_BACKTEST);
 
         if (scenarios.isEmpty()) return LotoService.AlgoConfig.defaut();
-        log.info("✅ {} Scénarios chargés. Lancement évolution...", scenarios.size());
+        log.info("✅ {} Scénarios complexes chargés. L'IA va creuser profond.", scenarios.size());
 
-        // 2. Génome (Poids)
+        // 2. Génome (Intervalles élargis pour retrouver tes poids extrêmes)
         Factory<Genotype<DoubleGene>> gtf = Genotype.of(
-                DoubleChromosome.of(1.0, 5.0),   // FreqJour
-                DoubleChromosome.of(10.0, 30.0), // Forme (Plus agressif)
-                DoubleChromosome.of(0.5, 3.0),   // Ecart
-                DoubleChromosome.of(5.0, 20.0),  // Tension
-                DoubleChromosome.of(0.0, 10.0),  // Markov
-                DoubleChromosome.of(2.0, 10.0)   // Affinité
+                DoubleChromosome.of(0.0, 10.0),   // FreqJour
+                DoubleChromosome.of(5.0, 30.0),   // Forme (Ta config était à 17.3)
+                DoubleChromosome.of(0.1, 5.0),    // Ecart (Ta config était à 1.98)
+                DoubleChromosome.of(5.0, 25.0),   // Tension (Ta config était à 16.2)
+                DoubleChromosome.of(0.0, 15.0),   // Markov (Ta config était à 4.14)
+                DoubleChromosome.of(1.0, 15.0)    // Affinité (Ta config était à 6.0)
         );
 
-        // 3. Moteur Evolutionnaire (Allégé)
+        // 3. Moteur Evolutionnaire "Heavy Duty"
         Engine<DoubleGene, Double> engine = Engine.builder(gt -> evaluerFitness(gt, scenarios), gtf)
-                .populationSize(20) // 20 individus suffisent pour converger vite
+                .populationSize(50) // On remet 50 individus pour la diversité
                 .executor(Executors.newWorkStealingPool())
-                .survivorsSelector(new TournamentSelector<>(2))
+                .survivorsSelector(new TournamentSelector<>(3))
                 .offspringSelector(new RouletteWheelSelector<>())
-                .alterers(new Mutator<>(0.20), new MeanAlterer<>(0.5))
+                .alterers(
+                        new Mutator<>(0.15),
+                        new MeanAlterer<>(0.6)
+                )
                 .build();
 
-        // 4. Exécution (10 générations max = très rapide)
+        // 4. Exécution (20 générations)
+        // Avec l'optimisation int[][], 50 pop * 20 gen * 200 scenarios * 50 grilles = 10M calculs.
+        // Cela devrait prendre environ 2-4 minutes sur ton serveur.
         Phenotype<DoubleGene, Double> bestPhenotype = engine.stream()
-                .limit(10)
-                .peek(r -> {
-                    if(r.generation() == 1 || r.generation() % 5 == 0)
-                        log.info("🏁 Gen {}/10 - Bilan: {} €", r.generation(), String.format("%.2f", r.bestFitness()));
-                })
+                .limit(20)
+                .peek(r -> log.info("🏁 Gen {}/20 - Bilan: {} €", r.generation(), String.format("%.2f", r.bestFitness())))
                 .collect(EvolutionResult.toBestPhenotype());
 
-        LotoService.AlgoConfig gagnante = decoderGenotype(bestPhenotype.genotype(), "AUTO_ML_FAST");
+        LotoService.AlgoConfig gagnante = decoderGenotype(bestPhenotype.genotype(), "AUTO_ML_DEEP");
         gagnante.setBilanEstime(bestPhenotype.fitness());
         gagnante.setNbTiragesTestes(scenarios.size());
 
-        log.info("🏆 Optimisation terminée en {} ms.", (System.currentTimeMillis() - start));
+        long duration = System.currentTimeMillis() - start;
+        log.info("🏆 Deep Optimisation terminée en {} ms.", duration);
         return gagnante;
     }
 
@@ -81,13 +87,28 @@ public class BacktestService {
         double depense = 0;
 
         for (LotoService.ScenarioSimulation scenar : scenarios) {
-            // Génération purement RAM (très rapide)
             List<List<Integer>> grilles = lotoService.genererGrillesDepuisScenario(scenar, config, NB_GRILLES_PAR_TEST);
             depense += (grilles.size() * 2.20);
 
+            // Optimisation locale pour éviter getTirageReel() répété
             LotoTirage target = scenar.getTirageReel();
+            int b1 = target.getBoule1(); int b2 = target.getBoule2(); int b3 = target.getBoule3();
+            int b4 = target.getBoule4(); int b5 = target.getBoule5(); int bc = target.getNumeroChance();
+
             for (List<Integer> g : grilles) {
-                bilan += calculerGainRapide(g, target);
+                // Inlining du calcul de gain pour performance extrême
+                int matches = 0;
+                for(int i=0; i<5; i++) {
+                    int n = g.get(i);
+                    if (n == b1 || n == b2 || n == b3 || n == b4 || n == b5) matches++;
+                }
+                boolean chanceMatch = (g.get(5) == bc);
+
+                if (matches == 5) bilan += chanceMatch ? 2000000.0 : 100000.0;
+                else if (matches == 4) bilan += chanceMatch ? 1000.0 : 500.0;
+                else if (matches == 3) bilan += chanceMatch ? 50.0 : 20.0;
+                else if (matches == 2) bilan += chanceMatch ? 10.0 : 5.0;
+                else if (chanceMatch) bilan += 2.20;
             }
         }
         return bilan - depense;
@@ -98,24 +119,5 @@ public class BacktestService {
                 gt.get(0).get(0).doubleValue(), gt.get(1).get(0).doubleValue(),
                 gt.get(2).get(0).doubleValue(), gt.get(3).get(0).doubleValue(),
                 gt.get(4).get(0).doubleValue(), gt.get(5).get(0).doubleValue(), false);
-    }
-
-    private double calculerGainRapide(List<Integer> grille, LotoTirage tirage) {
-        if (grille.size() < 6) return 0.0;
-        int matches = 0;
-        // Boucle primitive sans stream pour performance max
-        for(int i=0; i<5; i++) {
-            int n = grille.get(i);
-            if (n == tirage.getBoule1() || n == tirage.getBoule2() || n == tirage.getBoule3() ||
-                    n == tirage.getBoule4() || n == tirage.getBoule5()) matches++;
-        }
-        boolean chanceMatch = (grille.get(5) == tirage.getNumeroChance());
-
-        if (matches == 5) return chanceMatch ? 2_000_000.0 : 100_000.0;
-        if (matches == 4) return chanceMatch ? 1_000.0 : 500.0;
-        if (matches == 3) return chanceMatch ? 50.0 : 20.0;
-        if (matches == 2) return chanceMatch ? 10.0 : 5.0;
-        if (chanceMatch) return 2.20;
-        return 0.0;
     }
 }

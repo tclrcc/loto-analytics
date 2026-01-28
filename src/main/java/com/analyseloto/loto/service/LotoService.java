@@ -83,7 +83,21 @@ public class LotoService {
         }
 
         public static AlgoConfig defaut() {
-            return new AlgoConfig("1_STANDARD", 3.0, 15.0, 0.4, 12.0, 5.0, 1.0, false);
+            // On remplace la config "Standard" par ta "Golden Config" du 25/01
+            AlgoConfig config = new AlgoConfig(
+                    "ULTRA_PERFORMANT_LEGACY",
+                    1.5590743198908432,  // Poids FreqJour
+                    17.302739757222867,  // Poids Forme
+                    1.9849477293274276,  // Poids Ecart
+                    16.207007114530995,  // Poids Tension
+                    4.148720500581412,   // Poids Markov
+                    6.001727339515247,   // Poids Affinite
+                    false
+            );
+            // On met tes stats historiques pour l'affichage
+            config.setBilanEstime(-11481.40);
+            config.setNbTiragesTestes(350);
+            return config;
         }
     }
 
