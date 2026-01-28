@@ -45,10 +45,4 @@ public class AdminController {
     public List<JobLog> getAllHistory() {
         return jobMonitorService.getHistory();
     }
-
-    @GetMapping("/strategie")
-    public String afficherPageStrategie(Model model) {
-        model.addAttribute("strategie", lotoService.getStrategieDuJourPourAffichage());
-        return "strategie"; // Renvoie vers strategie.html
-    }
 }
