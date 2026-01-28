@@ -120,12 +120,16 @@ public class LotoService {
     public static class ScenarioSimulation implements Serializable {
         @Serial private static final long serialVersionUID = 1L;
 
-        private LotoTirage tirageReel;
+        private LotoTirage tirageReel; // Le résultat qu'on essaie de deviner
         private List<Integer> dernierTirageConnu;
 
-        // Données pré-calculées
-        private Map<Integer, Map<Integer, Integer>> matriceAffinites;
+        // Matrices pré-calculées pour ce scénario spécifique (snapshot du passé)
+        private int[][] matriceAffinites;
         private Map<Integer, Map<Integer, Integer>> matriceChance;
+        private double[][] matriceMarkov; // AJOUTÉ : La matrice de transition du passé
+        private int etatDernierTirage;    // AJOUTÉ : L'état Markov du dernier tirage
+
+        // Stats brutes (sans poids) pour application rapide des coefficients génétiques
         private Map<Integer, RawStatData> rawStatsBoules;
         private Map<Integer, RawStatData> rawStatsChance;
 
@@ -313,6 +317,256 @@ public class LotoService {
         // Tri final
         population.sort((g1, g2) -> Double.compare(g2.fitness, g1.fitness));
         return population;
+    }
+
+    // ==================================================================================
+    // 7. MÉTHODES POUR LE CONTROLLER (Visualization Graph)
+    // ==================================================================================
+
+    /**
+     * Récupère la matrice d'affinité pour l'affichage graphique (Controller).
+     * Utilise le cache pour ne pas recalculer à chaque rafraîchissement de page.
+     */
+    @Cacheable(value = "statsGlobales", key = "'MATRICE_GRAPHE_PUBLIC'")
+    public Map<Integer, Map<Integer, Integer>> getMatriceAffinitesPublic() {
+        // On charge l'historique brut
+        List<LotoTirage> history = repository.findAll();
+
+        // On construit la matrice pondérée basée sur le jour actuel
+        // (Cela permet de voir les affinités pertinentes pour le tirage d'aujourd'hui)
+        return construireMatriceAffinitesPonderee(history, LocalDate.now().getDayOfWeek());
+    }
+
+    // ==================================================================================
+    // 8. CALCUL DES GAINS UTILISATEURS (Simulé ou Réel)
+    // ==================================================================================
+
+    /**
+     * Calcule le gain exact d'une grille utilisateur par rapport à un tirage officiel.
+     * Gère les codes Loto et les rangs variables.
+     * @param bet Le pari de l'utilisateur
+     * @param tirage Le tirage officiel
+     * @return Le montant gagné (0.0 si perdu)
+     */
+    public double calculerGainSimule(UserBet bet, LotoTirage tirage) {
+        if (tirage == null || bet == null) return 0.0;
+
+        // 1. GESTION DU CODE LOTO (Gagnant = 20 000 €)
+        // Le code loto est indépendant des boules
+        if (bet.getCodeLoto() != null && !bet.getCodeLoto().isEmpty()) {
+            String userCode = bet.getCodeLoto().replaceAll("\\s", "").toUpperCase();
+            List<String> winningCodes = tirage.getWinningCodes();
+
+            if (winningCodes != null && winningCodes.contains(userCode)) {
+                return 20000.0;
+            }
+        }
+
+        // 2. RÉCUPÉRATION DES BOULES DU TIRAGE
+        // Sécurité pour gérer les anciens imports ou formats différents
+        List<Integer> tirageBoules = tirage.getBoules();
+        if (tirageBoules == null || tirageBoules.isEmpty()) {
+            tirageBoules = List.of(tirage.getBoule1(), tirage.getBoule2(), tirage.getBoule3(), tirage.getBoule4(), tirage.getBoule5());
+        }
+
+        // 3. COMPTAGE DES MATCHES
+        int matches = 0;
+        if (tirageBoules.contains(bet.getB1())) matches++;
+        if (tirageBoules.contains(bet.getB2())) matches++;
+        if (tirageBoules.contains(bet.getB3())) matches++;
+        if (tirageBoules.contains(bet.getB4())) matches++;
+        if (tirageBoules.contains(bet.getB5())) matches++;
+
+        boolean chanceMatch = (bet.getChance() == tirage.getNumeroChance());
+
+        // 4. DÉTERMINATION DU RANG (Rank 1 à 9)
+        int rankPosition = 0;
+        if (matches == 5 && chanceMatch) rankPosition = 1;
+        else if (matches == 5) rankPosition = 2;
+        else if (matches == 4 && chanceMatch) rankPosition = 3;
+        else if (matches == 4) rankPosition = 4;
+        else if (matches == 3 && chanceMatch) rankPosition = 5;
+        else if (matches == 3) rankPosition = 6;
+        else if (matches == 2 && chanceMatch) rankPosition = 7;
+        else if (matches == 2) rankPosition = 8;
+        else if (matches == 0 && chanceMatch) rankPosition = 9; // Remboursement mise
+
+        // 5. RÉCUPÉRATION DU MONTANT RÉEL
+        if (rankPosition > 0) {
+            int finalRankPos = rankPosition;
+
+            // On cherche le montant exact dans la liste des rangs du tirage (car ça change à chaque fois)
+            if (tirage.getRanks() != null && !tirage.getRanks().isEmpty()) {
+                return tirage.getRanks().stream()
+                        .filter(r -> r.getRankNumber() == finalRankPos)
+                        .findFirst()
+                        .map(LotoTirageRank::getPrize)
+                        .orElseGet(() -> (finalRankPos == 9) ? 2.20 : 0.0);
+            }
+
+            // Fallback si les rangs ne sont pas encore renseignés (ex: simulation avant publication gains)
+            // On renvoie juste le remboursement mise pour le rang 9
+            return (rankPosition == 9) ? 2.20 : 0.0;
+        }
+
+        return 0.0;
+    }
+
+    /**
+     * Prépare les données historiques pour le Backtest (exécuté une seule fois au démarrage).
+     */
+    public List<ScenarioSimulation> preparerScenariosBacktest(List<LotoTirage> historiqueComplet, int depthBacktest, int limit) {
+        List<ScenarioSimulation> scenarios = new ArrayList<>();
+        int startIdx = 0;
+        int count = 0;
+
+        // On parcourt l'historique pour créer des "snapshots"
+        // On commence après 'startIdx' pour avoir assez d'historique pour les calculs
+        while (count < limit && (startIdx + depthBacktest + 50) < historiqueComplet.size()) {
+
+            // 1. Le tirage qu'on veut prédire (Cible)
+            LotoTirage cible = historiqueComplet.get(startIdx);
+
+            // 2. L'historique connu à ce moment-là (du tirage J-1 jusqu'à la profondeur voulue)
+            List<LotoTirage> historyConnu = historiqueComplet.subList(startIdx + 1, startIdx + 1 + depthBacktest);
+
+            if (historyConnu.isEmpty()) { startIdx++; continue; }
+
+            List<Integer> dernierTirage = historyConnu.get(0).getBoules();
+
+            // 3. Calcul des Invariants (Matrices & Contraintes à cet instant T)
+            Map<Integer, Map<Integer, Integer>> mapAff = construireMatriceAffinitesPonderee(historyConnu, cible.getDateTirage().getDayOfWeek());
+            int[][] matAffArr = convertirAffinitesEnMatrice(mapAff);
+            Map<Integer, Map<Integer, Integer>> matChance = construireMatriceAffinitesChancePonderee(historyConnu, cible.getDateTirage().getDayOfWeek());
+
+            double[][] matMarkov = precalculerMatriceMarkov(historyConnu);
+            int etatDernier = calculerEtatAbstrait(dernierTirage);
+
+            DynamicConstraints contraintes = analyserContraintesDynamiques(historyConnu, dernierTirage);
+            List<List<Integer>> topTrios = getTopTriosRecents(historyConnu);
+            Set<Integer> hotFinales = detecterFinalesChaudes(historyConnu);
+
+            // 4. Extraction des Stats Brutes (SANS les poids, car les poids changent à chaque test génétique)
+            Map<Integer, RawStatData> rawBoules = extraireStatsBrutes(historyConnu, 49, cible.getDateTirage().getDayOfWeek(), false, hotFinales, dernierTirage);
+            Map<Integer, RawStatData> rawChance = extraireStatsBrutes(historyConnu, 10, cible.getDateTirage().getDayOfWeek(), true, Collections.emptySet(), null);
+
+            scenarios.add(new ScenarioSimulation(
+                    cible, dernierTirage, matAffArr, matChance, matMarkov, etatDernier,
+                    rawBoules, rawChance, contraintes, topTrios
+            ));
+
+            startIdx++;
+            count++;
+        }
+        return scenarios;
+    }
+
+    /**
+     * Génère des grilles RAPIDEMENT basées sur une config (poids) et un scénario pré-calculé.
+     * Utilisé par le BacktestService pour évaluer la fitness d'une stratégie.
+     */
+    public List<List<Integer>> genererGrillesDepuisScenario(ScenarioSimulation sc, AlgoConfig config, int nbGrilles) {
+        List<List<Integer>> resultats = new ArrayList<>(nbGrilles);
+
+        // 1. Calcul des scores finaux en combinant Stats Brutes + Poids de la Config (ADN)
+        double[] scoresBoules = new double[50];
+        for (int i = 1; i <= 49; i++) {
+            scoresBoules[i] = appliquerPoids(sc.rawStatsBoules.get(i), config);
+            // Pénalité répétition dernier tirage (fixe)
+            if (sc.dernierTirageConnu.contains(i)) scoresBoules[i] -= 10.0;
+        }
+
+        // 2. Création des Buckets (Hot, Neutral, Cold)
+        Map<String, List<Integer>> buckets = creerBucketsOptimises(scoresBoules);
+
+        // 3. Génération rapide (Sans évolution génétique, juste tirage probabiliste optimisé)
+        int essais = 0;
+        int maxEssais = nbGrilles * 5; // Sécurité boucle infinie
+
+        while(resultats.size() < nbGrilles && essais < maxEssais) {
+            essais++;
+            // On utilise les matrices du scénario (pas celles d'aujourd'hui !)
+            List<Integer> boules = genererGrilleParAffinite(buckets, sc.matriceAffinites, sc.dernierTirageConnu, sc.topTriosPrecalcules, rng);
+
+            // On valide avec les contraintes du scénario
+            // Note: on trie pour la validation optimisée
+            Collections.sort(boules);
+
+            if (estGrilleCoherenteOptimisee(boules, sc.dernierTirageConnu, sc.contraintes)) {
+                // Pour le backtest, on ajoute simplement le numéro chance (simplifié)
+                // Idéalement, on utiliserait selectionnerChanceRapide avec sc.matriceChance
+                int chance = 1; // Simplification pour vitesse backtest ou logique complète :
+                // int chance = selectionnerChanceRapide(boules, scoresChanceCalc..., sc.matriceChance, rng);
+
+                List<Integer> grilleFinale = new ArrayList<>(boules);
+                grilleFinale.add(chance); // Numéro chance factice ou calculé si tu as les scores chance
+                resultats.add(grilleFinale);
+            }
+        }
+        return resultats;
+    }
+
+    /**
+     * Applique les poids de la configuration sur une stat brute
+     */
+    private double appliquerPoids(RawStatData raw, AlgoConfig cfg) {
+        if(raw == null) return 0.0;
+        double s = 10.0;
+        s += (raw.getFreqJour() * cfg.getPoidsFreqJour());
+
+        if (raw.getEcart() > 40) s -= 5.0;
+        else if (raw.getEcart() > 10) s += (raw.getEcart() * cfg.getPoidsEcart());
+
+        if (raw.isForme()) s += cfg.getPoidsForme();
+        if (raw.isTresForme()) s += 25.0;
+        if (raw.isHotFinale()) s += 8.0;
+        if (raw.isTension()) s += cfg.getPoidsTension();
+
+        return s;
+    }
+
+    /**
+     * Helper pour extraire les stats brutes (Frequency, Ecart...) sans pondération.
+     */
+    private Map<Integer, RawStatData> extraireStatsBrutes(List<LotoTirage> history, int maxNum, DayOfWeek jour,
+            boolean isChance, Set<Integer> hotFinales, List<Integer> dernierTirage) {
+        Map<Integer, RawStatData> map = new HashMap<>();
+        int totalHistory = history.size();
+        int limitRecents = 15;
+        int limitTresRecents = 10;
+
+        // Pré-calculs en une passe
+        int[] freqJour = new int[maxNum + 1];
+        int[] lastSeenIndex = new int[maxNum + 1]; Arrays.fill(lastSeenIndex, -1);
+        int[] sortiesRecentes = new int[maxNum + 1];
+        int[] sortiesTresRecentes = new int[maxNum + 1];
+        int[] totalSorties = new int[maxNum + 1];
+
+        for (int i = 0; i < totalHistory; i++) {
+            LotoTirage t = history.get(i);
+            boolean isJour = (t.getDateTirage().getDayOfWeek() == jour);
+            List<Integer> nums = isChance ? List.of(t.getNumeroChance()) : t.getBoules();
+
+            for(int n : nums) {
+                if(n > maxNum) continue;
+                totalSorties[n]++;
+                if(isJour) freqJour[n]++;
+                if(lastSeenIndex[n] == -1) lastSeenIndex[n] = i;
+                if(i < limitRecents) sortiesRecentes[n]++;
+                if(i < limitTresRecents) sortiesTresRecentes[n]++;
+            }
+        }
+
+        for (int i = 1; i <= maxNum; i++) {
+            long ecart = (lastSeenIndex[i] == -1) ? totalHistory : lastSeenIndex[i];
+            boolean isHotF = !isChance && hotFinales != null && hotFinales.contains(i % 10);
+            boolean isTen = !isChance && totalSorties[i] > 5;
+
+            // Note: on stocke l'écart brut, le calcul du score se fera avec le poids
+            RawStatData data = new RawStatData(freqJour[i], ecart, sortiesRecentes[i]>=2, sortiesTresRecentes[i]>=2, false, isHotF, isTen);
+            map.put(i, data);
+        }
+        return map;
     }
 
     /**
