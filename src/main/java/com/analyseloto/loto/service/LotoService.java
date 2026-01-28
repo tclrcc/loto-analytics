@@ -732,10 +732,12 @@ public class LotoService {
             LotoTirage t = history.get(i); boolean isJourCible = (t.getDateTirage().getDayOfWeek() == jourCible);
             List<Integer> numsToCheck = isChance ? List.of(t.getNumeroChance()) : t.getBoules();
             for (int n : numsToCheck) {
-                if (n > maxNum || n < 1) continue; totalSorties[n]++;
+                if (n > maxNum || n < 1) continue;
+                totalSorties[n]++;
                 if (isJourCible) freqJour[n]++;
                 if (lastSeenIndex[n] == -1) lastSeenIndex[n] = i;
-                if (i < 15) sortiesRecentes[n]++; if (i < 10) sortiesTresRecentes[n]++;
+                if (i < 15) sortiesRecentes[n]++;
+                if (i < 10) sortiesTresRecentes[n]++;
             }
         }
         for (int num = 1; num <= maxNum; num++) {
@@ -805,7 +807,8 @@ public class LotoService {
                 if(n > maxNum) continue; totalSorties[n]++;
                 if(isJour) freqJour[n]++;
                 if(lastSeenIndex[n] == -1) lastSeenIndex[n] = i;
-                if(i < 15) sortiesRecentes[n]++; if(i < 10) sortiesTresRecentes[n]++;
+                if(i < 15) sortiesRecentes[n]++;
+                if(i < 10) sortiesTresRecentes[n]++;
             }
         }
         for (int i = 1; i <= maxNum; i++) {
@@ -849,7 +852,11 @@ public class LotoService {
 
     private int calculerEtatAbstrait(List<Integer> boules) {
         int somme = 0; for(int b : boules) somme += b;
-        if (somme < 100) return 1; if (somme <= 125) return 2; if (somme <= 150) return 3; if (somme <= 175) return 4; return 5;
+        if (somme < 100) return 1;
+        if (somme <= 125) return 2;
+        if (somme <= 150) return 3;
+        if (somme <= 175) return 4;
+        return 5;
     }
 
     private double[][] precalculerMatriceMarkov(List<LotoTirage> history) {

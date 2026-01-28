@@ -41,6 +41,7 @@ public class FdjService {
 
     // Regex pour détecter un code loto : 1 Lettre, espace optionnel, 8 chiffres (ex: A 1234 5678 ou A12345678)
     private static final Pattern CODE_LOTO_PATTERN = Pattern.compile("^[A-Z]\\s?[0-9]{4}\\s?[0-9]{4}$|^[A-Z][0-9]{8}$");
+    private static final String JSON_ELEMENT_DRAWN_AT = "drawn_at";
 
     // User-Agents pour appel API FDJ
     private static final List<String> USER_AGENTS_CAMOUFLAGE = List.of(
@@ -96,16 +97,16 @@ public class FdjService {
             if (root.isArray() && !root.isEmpty()) {
                 // 1. Filtrage et Recherche du plus récent
                 Optional<JsonNode> meilleurTirageOpt = StreamSupport.stream(root.spliterator(), false)
-                        .filter(node -> node.has("drawn_at")) // Doit avoir une date
+                        .filter(node -> node.has(JSON_ELEMENT_DRAWN_AT)) // Doit avoir une date
                         .sorted((n1, n2) -> {
                             // Tri DESCENDANT (plus récent en premier)
-                            String d1 = n1.get("drawn_at").asText();
-                            String d2 = n2.get("drawn_at").asText();
+                            String d1 = n1.get(JSON_ELEMENT_DRAWN_AT).asText();
+                            String d2 = n2.get(JSON_ELEMENT_DRAWN_AT).asText();
                             return d2.compareTo(d1);
                         })
                         .filter(node -> {
                             // Filtre anti-futur (avec ZonedDateTime pour être précis)
-                            String dateStr = node.get("drawn_at").asText();
+                            String dateStr = node.get(JSON_ELEMENT_DRAWN_AT).asText();
                             ZonedDateTime drawnAt = ZonedDateTime.parse(dateStr);
                             // On ajoute une marge de 1h au cas où les horloges diffèrent légèrement
                             return drawnAt.isBefore(ZonedDateTime.now().plusHours(1));
@@ -120,7 +121,7 @@ public class FdjService {
                 JsonNode tirageCibleJson = meilleurTirageOpt.get();
 
                 // Parsing propre de la date pour l'affichage et le contrôle
-                String dateStrFull = tirageCibleJson.get("drawn_at").asText();
+                String dateStrFull = tirageCibleJson.get(JSON_ELEMENT_DRAWN_AT).asText();
                 ZonedDateTime zdt = ZonedDateTime.parse(dateStrFull);
                 LocalDate dateTirage = zdt.toLocalDate();
 
@@ -161,7 +162,7 @@ public class FdjService {
     private LotoTirage traiterJsonTirage(JsonNode drawNode) {
         try {
             // 1. DATE ET VÉRIFICATION (Inchangé)
-            String dateStr = drawNode.get("drawn_at").asText().substring(0, 10);
+            String dateStr = drawNode.get(JSON_ELEMENT_DRAWN_AT).asText().substring(0, 10);
             LocalDate dateTirage = LocalDate.parse(dateStr, DateTimeFormatter.ofPattern("yyyy-MM-dd"));
 
             if (tirageRepository.existsByDateTirage(dateTirage)) {

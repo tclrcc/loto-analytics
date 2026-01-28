@@ -53,18 +53,18 @@ public class BacktestService {
                 .populationSize(100) // On remet 100 individus pour la diversité
                 .executor(Executors.newFixedThreadPool(3))
                 // On laisse 1 cœur libre pour le système/BDD
-                .survivorsSelector(new TournamentSelector<>(5))
+                .survivorsSelector(new TournamentSelector<>(3))
                 .offspringSelector(new RouletteWheelSelector<>())
                 .alterers(
-                        new Mutator<>(0.15),
+                        new Mutator<>(0.25),
                         new MeanAlterer<>(0.6)
                 )
                 .build();
 
-        // 4. Exécution (30 générations)
+        // 4. Exécution (20 générations)
         Phenotype<DoubleGene, Double> bestPhenotype = engine.stream()
-                .limit(30)
-                .peek(r -> log.info("🏁 Gen {}/30 - Bilan: {} €", r.generation(), String.format("%.2f", r.bestFitness())))
+                .limit(20)
+                .peek(r -> log.info("🏁 Gen {}/20 - Bilan: {} €", r.generation(), String.format("%.2f", r.bestFitness())))
                 .collect(EvolutionResult.toBestPhenotype());
 
         LotoService.AlgoConfig gagnante = decoderGenotype(bestPhenotype.genotype(), "AUTO_ML_ULTRA");

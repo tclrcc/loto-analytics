@@ -42,6 +42,8 @@ public class LotoJob {
     @Value("${user.ia.mail}")
     private String mailUserIa;
 
+    private final static String LOG_ERREUR = "Erreur : ";
+
     /**
      * POINT D'ENTRÉE AUTOMATIQUE (CRON)
      * Cette méthode est appelée par Spring. Elle n'a pas d'argument.
@@ -230,7 +232,7 @@ public class LotoJob {
             } catch (Exception e) {
                 // Le try-catch est dans la boucle pour qu'une erreur d'un user ne bloque pas les autres
                 log.error("❌ Erreur lors de l'envoi pour l'utilisateur {}", user.getEmail(), e);
-                jobMonitorService.endJob(jobLog, JobExecutionStatus.FAILURE.getCode(), "Erreur : " + e.getMessage());
+                jobMonitorService.endJob(jobLog, JobExecutionStatus.FAILURE.getCode(), LOG_ERREUR + e.getMessage());
                 return;
             }
         }
@@ -288,7 +290,7 @@ public class LotoJob {
                     log.info("📩 Alerte budget envoyée à {} ({} €)", user.getEmail(), totalDepense);
                 } catch (Exception e) {
                     log.error("Erreur envoi mail budget pour {}", user.getEmail(), e);
-                    jobMonitorService.endJob(jobLog, JobExecutionStatus.FAILURE.getCode(), "Erreur : " + e.getMessage());
+                    jobMonitorService.endJob(jobLog, JobExecutionStatus.FAILURE.getCode(), LOG_ERREUR + e.getMessage());
                     return;
                 }
             }
@@ -322,7 +324,7 @@ public class LotoJob {
             jobMonitorService.endJob(jobLog, JobExecutionStatus.SUCCESS.getCode(), "Optimisation IA terminée.");
         } catch (Exception e) {
             log.error("❌ Echec de l'optimisation nocturne", e);
-            jobMonitorService.endJob(jobLog, JobExecutionStatus.FAILURE.getCode(), "Erreur : " + e.getMessage());
+            jobMonitorService.endJob(jobLog, JobExecutionStatus.FAILURE.getCode(), LOG_ERREUR + e.getMessage());
         } finally {
             isOptimizing.set(false);
         }

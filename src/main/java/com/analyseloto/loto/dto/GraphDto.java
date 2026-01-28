@@ -17,7 +17,9 @@ public class GraphDto implements Serializable {
 
     @Data
     @AllArgsConstructor
-    public static class Node {
+    public static class Node implements Serializable {
+        @Serial private static final long serialVersionUID = 1L;
+
         private int id;
         private String label;
         private int value; // Taille du point (Fréquence)
@@ -26,7 +28,9 @@ public class GraphDto implements Serializable {
 
     @Data
     @AllArgsConstructor
-    public static class Edge {
+    public static class Edge implements Serializable {
+        @Serial private static final long serialVersionUID = 1L;
+
         private int from;
         private int to;
         private int value; // Épaisseur du trait (Force du lien)

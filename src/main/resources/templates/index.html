@@ -289,7 +289,9 @@
                                     <span class="badge bg-light text-muted border" th:text="'#' + ${iter.count}">#1</span>
                                     <span th:if="${#strings.contains(bet.typeAlgo, 'GENETIQUE')}" class="badge bg-primary bg-opacity-10 text-primary border border-primary"><i class="bi bi-cpu-fill"></i> IA Optimal</span>
                                     <span th:if="${#strings.contains(bet.typeAlgo, 'FLEXIBLE')}" class="badge bg-warning bg-opacity-10 text-dark border border-warning"><i class="bi bi-exclamation-triangle"></i> IA Flexible</span>
-                                    <span th:if="${#strings.contains(bet.typeAlgo, 'HASARD')}" class="badge bg-secondary bg-opacity-10 text-dark border"><i class="bi bi-dice-5-fill"></i> Hasard</span>
+                                    <span th:if="${#strings.contains(bet.typeAlgo, 'SECOURS')}" class="badge bg-secondary bg-opacity-10 text-dark border">
+                                        <i class="bi bi-life-preserver"></i> IA Secours
+                                    </span>
                                 </div>
 
                                 <div class="d-flex justify-content-center gap-1 mb-3">

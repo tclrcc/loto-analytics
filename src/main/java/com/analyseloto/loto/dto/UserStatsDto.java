@@ -33,14 +33,18 @@ public class UserStatsDto implements Serializable {
     private List<UserBilan> historiqueFinancier;
 
     @Data
-    public static class StatNumero {
+    public static class StatNumero implements Serializable {
+        @Serial private static final long serialVersionUID = 1L;
+
         private int numero;
         private int count;
         public StatNumero(int n, int c) { this.numero = n; this.count = c; }
     }
 
     @Data
-    public static class DayPerformance {
+    public static class DayPerformance implements Serializable {
+        @Serial private static final long serialVersionUID = 1L;
+
         private String jourNom; // "Lundi", "Mercredi"...
         private int nbJeux;
         private double depense;
