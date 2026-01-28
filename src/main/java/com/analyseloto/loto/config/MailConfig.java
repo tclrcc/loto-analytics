@@ -34,7 +34,6 @@ public class MailConfig {
         props.put("mail.transport.protocol", "smtp");
         props.put("mail.smtp.auth", "true");
         props.put("mail.smtp.starttls.enable", "true");
-        props.put("mail.debug", "true");
 
         // 2. CORRECTIF SOCKET FACTORY (Version STARTTLS)
         // On interdit à Angus Mail d'utiliser sa propre factory (MailSSLSocketFactory) qui plante.
