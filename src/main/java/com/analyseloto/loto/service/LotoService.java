@@ -242,13 +242,23 @@ public class LotoService {
     // ==================================================================================
 
     public List<PronosticResultDto> genererMultiplesPronostics(LocalDate dateCible, int nombreGrilles) {
+        // Renvoie les pronos en cache si déjà calculés
         if (cachedDailyPronos != null && dateCible.equals(dateCachedPronos) && cachedDailyPronos.size() >= nombreGrilles) {
             return cachedDailyPronos.subList(0, nombreGrilles);
         }
+
         log.info("⚙️ [CALCUL IA] Génération génétique fraîche pour le {}", dateCible);
+
+        // Récupération des pronostics générés
         List<PronosticResultDto> newsPronos = genererPronosticAvecConfig(dateCible, Math.max(nombreGrilles, 10), null);
+
+        // Mise en cache
         this.cachedDailyPronos = newsPronos;
         this.dateCachedPronos = dateCible;
+
+        log.info("⚙️ [CALCUL IA] Fin génération pronostics");
+
+        // Renvoie les pronos
         return newsPronos.subList(0, Math.min(newsPronos.size(), nombreGrilles));
     }
 
@@ -263,7 +273,17 @@ public class LotoService {
 
         if (history.isEmpty()) return new ArrayList<>();
         List<Integer> dernierTirage = history.get(0).getBoules();
+
+        // Récupération de la meilleure config
         AlgoConfig configOptimisee = recupererMeilleureConfig();
+
+        log.info("🕵️ [AUDIT PRE-CALCUL] Utilisation de la stratégie : '{}'", configOptimisee.getNomStrategie());
+        log.info("   ⚖️ Poids appliqués -> Forme: {} | Ecart: {} | Affinité: {} | Markov: {}",
+                String.format("%.2f", configOptimisee.getPoidsForme()),
+                String.format("%.2f", configOptimisee.getPoidsEcart()),
+                String.format("%.2f", configOptimisee.getPoidsAffinite()),
+                String.format("%.2f", configOptimisee.getPoidsMarkov())
+        );
 
         Set<Integer> hotFinales = detecterFinalesChaudes(history);
         List<Integer> boostNumbers = (profilAstro != null) ? astroService.getLuckyNumbersOnly(profilAstro) : Collections.emptyList();
