@@ -20,7 +20,7 @@ public class BacktestService {
     // --- RETOUR A LA PUISSANCE MAXIMALE (Optimisée) ---
 
     // On remonte à 50 grilles pour avoir une vraie fiabilité statistique
-    private static final int NB_GRILLES_PAR_TEST = 30;
+    private static final int NB_GRILLES_PAR_TEST = 50;
 
     // On analyse sur 200 tirages (environ 1 an et demi) pour capter les cycles longs (Ecart/Tension)
     // C'est ce qui permettait à ta config précédente d'être performante.
@@ -40,7 +40,7 @@ public class BacktestService {
         List<LotoService.ScenarioSimulation> scenarios = lotoService.preparerScenariosBacktest(historiqueComplet, 350, DEPTH_BACKTEST);
 
         if (scenarios.isEmpty()) return LotoService.AlgoConfig.defaut();
-        log.info("✅ {} Scénarios complexes chargés. L'IA va creuser profond.", scenarios.size());
+        log.info("✅ {} Scénarios chargés. Utilisation de 3 Cores pour le calcul.", scenarios.size());
 
         // 2. Génome (Intervalles élargis pour retrouver tes poids extrêmes)
         Factory<Genotype<DoubleGene>> gtf = Genotype.of(
@@ -54,9 +54,8 @@ public class BacktestService {
 
         // 3. Moteur Evolutionnaire "Heavy Duty"
         Engine<DoubleGene, Double> engine = Engine.builder(gt -> evaluerFitness(gt, scenarios), gtf)
-                .populationSize(40) // On remet 50 individus pour la diversité
-                // Au lieu de prendre tous les cœurs (qui peut bloquer le serveur)
-                .executor(Executors.newFixedThreadPool(Math.max(1, Runtime.getRuntime().availableProcessors() - 1)))
+                .populationSize(50) // On remet 50 individus pour la diversité
+                .executor(Executors.newFixedThreadPool(3))
                 // On laisse 1 cœur libre pour le système/BDD
                 .survivorsSelector(new TournamentSelector<>(3))
                 .offspringSelector(new RouletteWheelSelector<>())

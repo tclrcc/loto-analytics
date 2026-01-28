@@ -19,6 +19,10 @@ public class AppStartupRunner {
     @EventListener(ApplicationReadyEvent.class)
     public void warmupCache() {
         log.info("🔥 [WARMUP] Initialisation au démarrage...");
+
+        log.info("🖥️  CPU DISPONIBLES (JVM) : {}", Runtime.getRuntime().availableProcessors());
+        log.info("💾  MÉMOIRE MAX (JVM) : {} Mo", Runtime.getRuntime().maxMemory() / (1024 * 1024));
+
         // Appelle méthode vérification config algo
         lotoService.verificationAuDemarrage();
     }
