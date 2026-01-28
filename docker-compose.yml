@@ -117,15 +117,6 @@ services:
       DOZZLE_USERNAME: tclrcc
       DOZZLE_PASSWORD: Lisandro1608
 
-  # ----------------------------------------------------
-  # CACHE REDIS (Pour accélérer l'IA et les statistiques)
-  # ----------------------------------------------------
-  redis:
-    image: redis:7-alpine
-    container_name: loto_redis
-    restart: always
-    command: redis-server --requirepass "tony_secret_redis_2026!"
-
 volumes:
   pgdata:
   caddy_data:
