@@ -70,6 +70,9 @@ public class LotoService {
         private double bilanEstime;
         private int nbTiragesTestes;
 
+        private int nbGrillesParTest;
+        private double roiEstime;
+
         public AlgoConfig(String nom, double pFreq, double pForme, double pEcart, double pTens, double pMark, double pAff, boolean gen) {
             this.nomStrategie = nom;
             this.poidsFreqJour = pFreq;
@@ -96,6 +99,9 @@ public class LotoService {
             // On met tes stats historiques pour l'affichage
             config.setBilanEstime(-11481.40);
             config.setNbTiragesTestes(350);
+            config.setNbGrillesParTest(400);
+            config.setRoiEstime(-3.7);
+
             return config;
         }
     }
@@ -222,9 +228,12 @@ public class LotoService {
             entity.setPoidsFreqJour(newConfig.getPoidsFreqJour());
             entity.setBilanEstime(newConfig.getBilanEstime());
             entity.setNbTiragesTestes(newConfig.getNbTiragesTestes());
+            entity.setNbGrillesParTest(newConfig.getNbGrillesParTest());
+            entity.setRoi(newConfig.getRoiEstime());
+
             strategyConfigRepostiroy.save(entity);
 
-            log.info("💾 [DB] Stratégie sauvegardée en {} ms.", (System.currentTimeMillis() - start));
+            log.info("💾 [DB] Stratégie sauvegardée. ROI: {}%", String.format("%.2f", newConfig.getRoiEstime()));
         }
     }
 

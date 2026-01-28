@@ -27,4 +27,10 @@ public class StrategyConfig {
     private int nbTiragesTestes; // ex: 50
 
     private String nomStrategie; // ex: "TEST_86"
+
+    @Column(name = "nb_grilles_par_test")
+    private Integer nbGrillesParTest;
+
+    @Column(name = "roi")
+    private Double roi;
 }

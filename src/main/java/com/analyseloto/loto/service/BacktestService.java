@@ -18,7 +18,7 @@ public class BacktestService {
     private final LotoService lotoService;
 
     // 50 grilles par test est un bon équilibre statistique, on garde.
-    private static final int NB_GRILLES_PAR_TEST = 50;
+    private static final int NB_GRILLES_PAR_TEST = 250;
 
     // On augmente la profondeur pour une robustesse maximale (2.5 ans)
     private static final int DEPTH_BACKTEST = 300;
@@ -61,18 +61,32 @@ public class BacktestService {
                 )
                 .build();
 
-        // 4. Exécution (50 générations)
+        // 4. Exécution (30 générations)
         Phenotype<DoubleGene, Double> bestPhenotype = engine.stream()
-                .limit(50)
-                .peek(r -> log.info("🏁 Gen {}/50 - Bilan: {} €", r.generation(), String.format("%.2f", r.bestFitness())))
+                .limit(30)
+                .peek(r -> log.info("🏁 Gen {}/30 - Bilan: {} €", r.generation(), String.format("%.2f", r.bestFitness())))
                 .collect(EvolutionResult.toBestPhenotype());
 
-        LotoService.AlgoConfig gagnante = decoderGenotype(bestPhenotype.genotype(), "AUTO_ML_DEEP");
-        gagnante.setBilanEstime(bestPhenotype.fitness());
-        gagnante.setNbTiragesTestes(scenarios.size());
+        LotoService.AlgoConfig gagnante = decoderGenotype(bestPhenotype.genotype(), "AUTO_ML_ULTRA");
 
-        long duration = System.currentTimeMillis() - start;
-        log.info("🏆 Deep Optimisation terminée en {} ms.", duration);
+        // RESULTATS BRUTS
+        double bilan = bestPhenotype.fitness();
+        int nbTirages = scenarios.size();
+
+        // CALCUL DU ROI PRÉCIS
+        double coutTotal = nbTirages * NB_GRILLES_PAR_TEST * 2.20;
+        double roi = 0.0;
+        if (coutTotal > 0) {
+            roi = (bilan / coutTotal) * 100.0;
+        }
+
+        // REMPLISSAGE DU DTO
+        gagnante.setBilanEstime(bilan);
+        gagnante.setNbTiragesTestes(nbTirages);
+        gagnante.setNbGrillesParTest(NB_GRILLES_PAR_TEST);
+        gagnante.setRoiEstime(roi);
+
+        log.info("🏆 Optimisation terminée. ROI: {}% ({} grilles/test)", String.format("%.2f", roi), NB_GRILLES_PAR_TEST);
         return gagnante;
     }
 
