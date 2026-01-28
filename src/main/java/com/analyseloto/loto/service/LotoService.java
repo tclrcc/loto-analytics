@@ -19,10 +19,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.*;
 import java.security.SecureRandom;
-import java.time.DayOfWeek;
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.time.LocalTime;
+import java.time.*;
 import java.time.format.DateTimeFormatter;
 import java.time.format.TextStyle;
 import java.time.temporal.ChronoUnit;
@@ -51,6 +48,8 @@ public class LotoService {
 
     // Constantes
     private static final String FIELD_DATE_TIRAGE = "dateTirage";
+    // Zone explicite pour éviter les bugs Docker UTC vs Paris
+    private static final ZoneId ZONE_PARIS = ZoneId.of("Europe/Paris");
 
     // ==================================================================================
     // CLASSES INTERNES (DTOs & CONFIG)
@@ -141,32 +140,36 @@ public class LotoService {
 
     @PostConstruct
     public void initConfigFromDb() {
-        log.info("🔌 Démarrage : Recherche d'une stratégie existante en base...");
+        log.info("🔌 Démarrage : Recherche stratégie en base...");
         strategyConfigRepostiroy.findTopByOrderByDateCalculDesc().ifPresentOrElse(
-                lastStrategy -> {
+                last -> {
                     this.cachedBestConfig = new AlgoConfig(
-                            lastStrategy.getNomStrategie(), lastStrategy.getPoidsFreqJour(),
-                            lastStrategy.getPoidsForme(), lastStrategy.getPoidsEcart(),
-                            lastStrategy.getPoidsTension(), lastStrategy.getPoidsMarkov(),
-                            lastStrategy.getPoidsAffinite(), false
+                            last.getNomStrategie(), last.getPoidsFreqJour(), last.getPoidsForme(),
+                            last.getPoidsEcart(), last.getPoidsTension(), last.getPoidsMarkov(),
+                            last.getPoidsAffinite(), false
                     );
-                    this.cachedBestConfig.setBilanEstime(lastStrategy.getBilanEstime());
-                    this.cachedBestConfig.setNbTiragesTestes(lastStrategy.getNbTiragesTestes());
+                    this.cachedBestConfig.setBilanEstime(last.getBilanEstime());
+                    this.lastBacktestDate = last.getDateCalcul().atZone(ZoneId.systemDefault())
+                            .withZoneSameInstant(ZONE_PARIS).toLocalDate();
 
-                    this.lastBacktestDate = lastStrategy.getDateCalcul().toLocalDate();
-                    log.info("✅ Stratégie chargée depuis la BDD (Date: {}). Prêt immédiat !", lastStrategy.getDateCalcul());
+                    log.info("✅ Stratégie chargée (Date: {}).", this.lastBacktestDate);
                 },
-                () -> log.warn("⚠️ Aucune stratégie en base. Le premier utilisateur déclenchera le calcul.")
+                () -> log.warn("⚠️ Base vide : Calcul requis.")
         );
     }
 
     public void verificationAuDemarrage() {
-        if (this.cachedBestConfig != null && LocalDate.now().equals(this.lastBacktestDate)) {
-            log.info("✋ [WARMUP] Stratégie du jour déjà présente en mémoire. Calcul inutile.");
+        LocalDate todayParis = LocalDate.now(ZONE_PARIS);
+
+        if (this.cachedBestConfig != null && todayParis.equals(this.lastBacktestDate)) {
+            log.info("✋ [WARMUP] Stratégie du {} déjà en mémoire. OK.", todayParis);
+            // On préchauffe le cache pronos
             genererMultiplesPronostics(recupererDateProchainTirage(), 5);
             return;
         }
-        log.info("⚠️ [WARMUP] Aucune stratégie valide pour ce jour. Lancement du calcul...");
+
+        log.info("⚠️ [WARMUP] Stratégie obsolète (Date config: {} vs Aujourd'hui: {}). Lancement !",
+                this.lastBacktestDate, todayParis);
         forceDailyOptimization();
     }
 
@@ -175,9 +178,9 @@ public class LotoService {
     }
 
     public void forceDailyOptimization() {
-        log.info("🌙 [CRON] Optimisation et Nettoyage des caches...");
+        log.info("🌙 [CRON] Optimisation en cours...");
 
-        // Vidage des caches manuels
+        // Invalidation immédiate pour éviter de servir des vieux trucs
         this.cachedGlobalStats = null;
         this.cachedDailyPronos = null;
 
@@ -185,15 +188,18 @@ public class LotoService {
         List<LotoTirage> history = repository.findAll(Sort.by(Sort.Direction.DESC, FIELD_DATE_TIRAGE));
 
         if (!history.isEmpty()) {
+            // Calcul (Rapide maintenant grâce au nouveau BacktestService)
             AlgoConfig newConfig = backtestService.trouverMeilleureConfig(history);
 
-            // Mise à jour immédiate en RAM
+            // Mise à jour ATOMIQUE des variables
             this.cachedBestConfig = newConfig;
-            this.lastBacktestDate = LocalDate.now();
+            this.lastBacktestDate = LocalDate.now(ZONE_PARIS);
+
+            log.info("✅ [UPDATE] Nouvelle stratégie appliquée en RAM : {}", newConfig.getNomStrategie());
 
             // Sauvegarde BDD
             StrategyConfig entity = new StrategyConfig();
-            entity.setDateCalcul(LocalDateTime.now());
+            entity.setDateCalcul(LocalDateTime.now(ZONE_PARIS));
             entity.setNomStrategie(newConfig.getNomStrategie());
             entity.setPoidsForme(newConfig.getPoidsForme());
             entity.setPoidsEcart(newConfig.getPoidsEcart());
@@ -205,7 +211,7 @@ public class LotoService {
             entity.setNbTiragesTestes(newConfig.getNbTiragesTestes());
             strategyConfigRepostiroy.save(entity);
 
-            log.info("✅ [CRON] Terminé en {} ms.", (System.currentTimeMillis() - start));
+            log.info("💾 [DB] Stratégie sauvegardée en {} ms.", (System.currentTimeMillis() - start));
         }
     }
 
