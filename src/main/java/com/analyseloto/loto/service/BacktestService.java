@@ -18,7 +18,7 @@ public class BacktestService {
     private final LotoService lotoService;
 
     // 50 grilles par test est un bon équilibre statistique, on garde.
-    private static final int NB_GRILLES_PAR_TEST = 250;
+    private static final int NB_GRILLES_PAR_TEST = 400;
 
     // On augmente la profondeur pour une robustesse maximale (2.5 ans)
     private static final int DEPTH_BACKTEST = 300;
@@ -53,7 +53,7 @@ public class BacktestService {
                 .populationSize(100) // On remet 100 individus pour la diversité
                 .executor(Executors.newFixedThreadPool(3))
                 // On laisse 1 cœur libre pour le système/BDD
-                .survivorsSelector(new TournamentSelector<>(3))
+                .survivorsSelector(new TournamentSelector<>(5))
                 .offspringSelector(new RouletteWheelSelector<>())
                 .alterers(
                         new Mutator<>(0.15),

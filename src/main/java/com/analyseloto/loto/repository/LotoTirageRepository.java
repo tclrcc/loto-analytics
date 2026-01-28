@@ -2,6 +2,7 @@ package com.analyseloto.loto.repository;
 
 import com.analyseloto.loto.entity.LotoTirage;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDate;
@@ -30,4 +31,19 @@ public interface LotoTirageRepository extends JpaRepository<LotoTirage, Long> {
      * @return
      */
     Optional<LotoTirage> findTopByOrderByDateTirageDesc();
+
+    // Crée une petite interface (Projection)
+    public interface TirageMinimal {
+        LocalDate getDateTirage();
+        int getBoule1();
+        int getBoule2();
+        int getBoule3();
+        int getBoule4();
+        int getBoule5();
+        int getNumeroChance();
+    }
+
+    // Dans le Repository :
+    @Query("SELECT t.dateTirage as dateTirage, t.boule1 as boule1, t.boule2 as boule2, t.boule3 as boule3, t.boule4 as boule4, t.boule5 as boule5, t.numeroChance as numeroChance FROM LotoTirage t ORDER BY t.dateTirage DESC")
+    List<TirageMinimal> findAllOptimized();
 }

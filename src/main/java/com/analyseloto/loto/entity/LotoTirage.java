@@ -2,15 +2,24 @@ package com.analyseloto.loto.entity;
 
 import jakarta.persistence.*;
 import lombok.Data;
+import lombok.Getter;
+import lombok.Setter;
+import lombok.ToString;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 
 @Entity
-@Data
+@Getter
+@Setter
+@ToString(exclude = {"ranks", "winningCodes"})
 @Table(name = "tirage", uniqueConstraints = {
         @UniqueConstraint(columnNames = "dateTirage")
+}, indexes = {
+        // Optimisation bonus si tu cherches souvent par boule
+        @Index(name = "idx_b1", columnList = "boule1"),
+        @Index(name = "idx_b2", columnList = "boule2")
 })
 public class LotoTirage {
     @Id

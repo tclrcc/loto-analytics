@@ -6,7 +6,9 @@ import java.time.LocalDateTime;
 
 @Entity
 @Data
-@Table(name = "strategy_history")
+@Table(name = "strategy_history", indexes = {
+        @Index(name = "idx_date_calcul", columnList = "dateCalcul")
+})
 public class StrategyConfig {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
