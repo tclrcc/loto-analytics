@@ -52,16 +52,23 @@ jobs:
           script: |
             cd /home/ubuntu/loto-analytics
             
-            # 1. On télécharge les infos de GitHub (sans toucher aux fichiers)
+            # 1. Mise à jour du code source
             git fetch origin main
             
-            # 2. On supprime les fichiers "parasites" créés à la main (comme le Caddyfile)
-            git clean -fd
+            # 2. NETTOYAGE SÉCURISÉ (Correction ici !)
+            # On supprime tout SAUF le fichier .env qui contient tes secrets
+            git clean -fd -e .env
             
-            # 3. On force l'écrasement total pour être le clone parfait de GitHub
+            # 3. Reset pour être synchro avec GitHub
             git reset --hard origin/main
             
-            # 4. On télécharge la nouvelle image et on redémarre
+            # 4. Mise à jour des conteneurs
             docker compose pull loto_app
-            docker compose up -d
+            docker compose up -d --remove-orphans
+            
+            # 5. Redémarrage du proxy pour prendre en compte d'éventuels changements Caddyfile
             docker compose restart caddy
+            
+            # 6. NETTOYAGE DISQUE (Bonus Important)
+            # Supprime les vieilles images Docker (celles d'avant le pull) pour ne pas saturer le disque du VPS
+            docker image prune -f

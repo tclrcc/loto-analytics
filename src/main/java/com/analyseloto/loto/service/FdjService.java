@@ -17,7 +17,6 @@ import org.springframework.web.util.UriComponentsBuilder;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
-import java.security.SecureRandom;
 import java.time.LocalDate;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
@@ -34,7 +33,7 @@ public class FdjService {
     // Services
     private final LotoService lotoService;
     // Utils
-    private final Random rng = new SecureRandom();
+    private final Random rng = new Random();
 
     // Constantes
     @Value("${fdj.api.url}")

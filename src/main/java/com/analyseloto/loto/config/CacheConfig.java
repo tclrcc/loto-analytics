@@ -17,37 +17,36 @@ public class CacheConfig {
     public CacheManager cacheManager() {
         CaffeineCacheManager cacheManager = new CaffeineCacheManager();
 
-        // 1. CACHE PRONOSTICS (IA & ASTRO)
-        // Lourd à calculer, mais valable jusqu'au prochain tirage.
-        // On garde 24h max ou jusqu'à éviction manuelle.
+        // 1. PRONOSTICS IA
         cacheManager.registerCustomCache("pronosticsIA",
                 Caffeine.newBuilder()
-                        .maximumSize(500) // Max 500 listes de pronos en mémoire
+                        .maximumSize(500)
                         .expireAfterWrite(24, TimeUnit.HOURS)
-                        .recordStats() // Utile pour monitorer si besoin
+                        .recordStats() // ✅ On active les stats partout
                         .build());
 
+        // 2. PRONOSTICS ASTRO
         cacheManager.registerCustomCache("pronosticsAstro",
                 Caffeine.newBuilder()
                         .maximumSize(500)
                         .expireAfterWrite(24, TimeUnit.HOURS)
+                        .recordStats() // ✅ Ajouté
                         .build());
 
-        // 2. CACHE STATISTIQUES
-        // Très lourd (analyse tout l'historique), mais ne change qu'après un tirage.
+        // 3. STATISTIQUES (Le gros morceau)
         cacheManager.registerCustomCache("statsGlobales",
                 Caffeine.newBuilder()
-                        .maximumSize(10) // On a peu de variantes (filtre par jour ou global)
+                        .maximumSize(10)
                         .expireAfterWrite(24, TimeUnit.HOURS)
+                        .recordStats() // ✅ Ajouté (Supprime le warning)
                         .build());
 
-        // 3. CACHE CONFIGURATION ALGO
-        // Petit objet, très fréquemment accédé (à chaque génération).
-        // Accès quasi instantané requis.
+        // 4. CONFIGURATION ALGO
         cacheManager.registerCustomCache("algoConfig",
                 Caffeine.newBuilder()
-                        .maximumSize(1) // Il n'y a qu'une config active
-                        .expireAfterWrite(1, TimeUnit.HOURS) // Rafraichissement auto de sécurité
+                        .maximumSize(1)
+                        .expireAfterWrite(1, TimeUnit.HOURS)
+                        .recordStats() // ✅ Ajouté
                         .build());
 
         return cacheManager;

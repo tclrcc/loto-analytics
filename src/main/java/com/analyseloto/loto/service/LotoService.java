@@ -18,7 +18,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.*;
-import java.security.SecureRandom;
 import java.time.*;
 import java.time.format.DateTimeFormatter;
 import java.time.format.TextStyle;
@@ -37,9 +36,9 @@ public class LotoService {
     private final AstroService astroService;
     private final BacktestService backtestService;
     // Utils
-    private final Random rng = new SecureRandom();
+    private final Random rng = new Random();
 
-    // --- VARIABLES DE CACHE MANUEL (Architecture Stateful) ---
+    // --- VARIABLES DU CACHE MANUEL (Architecture Stateful) ---
     private AlgoConfig cachedBestConfig = null;
     private LocalDate lastBacktestDate = null;
     private StatsReponse cachedGlobalStats = null;
@@ -291,7 +290,7 @@ public class LotoService {
         }
 
         List<GrilleCandidate> population = executerAlgorithmeGenetique(
-                1000, 15, buckets, matriceAffinitesArr, dernierTirage,
+                buckets, matriceAffinitesArr, dernierTirage,
                 topTriosDuJour, scoresBoules, scoresChance, matriceChance,
                 contraintesDuJour, configOptimisee,
                 historiqueBitMasks, rng,
@@ -304,7 +303,6 @@ public class LotoService {
     }
 
     private List<GrilleCandidate> executerAlgorithmeGenetique(
-            int taillePopulation, int generations,
             Map<String, List<Integer>> buckets,
             int[][] matriceAffinites,
             List<Integer> dernierTirage,
@@ -319,8 +317,10 @@ public class LotoService {
             double[][] matriceMarkov,
             int etatDernierTirage) {
 
-        List<GrilleCandidate> population = new ArrayList<>(taillePopulation);
         int tentatives = 0;
+        int taillePopulation = 1000;
+        int generations = 15;
+        List<GrilleCandidate> population = new ArrayList<>(taillePopulation);
         List<Integer> boulesBuffer;
 
         while (population.size() < taillePopulation && tentatives < taillePopulation * 5) {
@@ -442,8 +442,8 @@ public class LotoService {
             DynamicConstraints contraintes = analyserContraintesDynamiques(historyConnu, dernierTirage);
             List<List<Integer>> topTrios = getTopTriosRecents(historyConnu);
             Set<Integer> hotFinales = detecterFinalesChaudes(historyConnu);
-            Map<Integer, RawStatData> rawBoules = extraireStatsBrutes(historyConnu, 49, cible.getDateTirage().getDayOfWeek(), false, hotFinales, dernierTirage);
-            Map<Integer, RawStatData> rawChance = extraireStatsBrutes(historyConnu, 10, cible.getDateTirage().getDayOfWeek(), true, Collections.emptySet(), null);
+            Map<Integer, RawStatData> rawBoules = extraireStatsBrutes(historyConnu, 49, cible.getDateTirage().getDayOfWeek(), false, hotFinales);
+            Map<Integer, RawStatData> rawChance = extraireStatsBrutes(historyConnu, 10, cible.getDateTirage().getDayOfWeek(), true, Collections.emptySet());
 
             scenarios.add(new ScenarioSimulation(cible, dernierTirage, matAffArr, matChance, matMarkov, etatDernier, rawBoules, rawChance, contraintes, topTrios));
             startIdx++; count++;
@@ -681,7 +681,7 @@ public class LotoService {
         return score;
     }
 
-    private Map<Integer, RawStatData> extraireStatsBrutes(List<LotoTirage> history, int maxNum, DayOfWeek jour, boolean isChance, Set<Integer> hotFinales, List<Integer> dernierTirage) {
+    private Map<Integer, RawStatData> extraireStatsBrutes(List<LotoTirage> history, int maxNum, DayOfWeek jour, boolean isChance, Set<Integer> hotFinales) {
         Map<Integer, RawStatData> map = new HashMap<>(); int totalHistory = history.size();
         int[] freqJour = new int[maxNum + 1]; int[] lastSeenIndex = new int[maxNum + 1]; Arrays.fill(lastSeenIndex, -1);
         int[] sortiesRecentes = new int[maxNum + 1]; int[] sortiesTresRecentes = new int[maxNum + 1]; int[] totalSorties = new int[maxNum + 1];
