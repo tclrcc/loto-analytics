@@ -17,8 +17,8 @@ import java.util.concurrent.Executors;
 public class BacktestService {
     private final LotoService lotoService;
 
-    // 200 grilles par test est un bon équilibre statistique, on garde.
-    private static final int NB_GRILLES_PAR_TEST = 200;
+    // 500 grilles par test est un bon équilibre statistique, on garde.
+    private static final int NB_GRILLES_PAR_TEST = 500;
 
     // On augmente la profondeur pour une robustesse maximale (2.5 ans)
     private static final int DEPTH_BACKTEST = 300;
@@ -50,21 +50,21 @@ public class BacktestService {
 
         // 3. Moteur Evolutionnaire "Heavy Duty"
         Engine<DoubleGene, Double> engine = Engine.builder(gt -> evaluerFitness(gt, scenarios), gtf)
-                .populationSize(100) // On remet 100 individus pour la diversité
+                .populationSize(300) // On remet 300 individus pour la diversité
                 .executor(Executors.newFixedThreadPool(3))
                 // On laisse 1 cœur libre pour le système/BDD
-                .survivorsSelector(new TournamentSelector<>(3))
+                .survivorsSelector(new TournamentSelector<>(5))
                 .offspringSelector(new RouletteWheelSelector<>())
                 .alterers(
-                        new Mutator<>(0.25),
+                        new Mutator<>(0.15),
                         new MeanAlterer<>(0.6)
                 )
                 .build();
 
-        // 4. Exécution (20 générations)
+        // 4. Exécution (50 générations)
         Phenotype<DoubleGene, Double> bestPhenotype = engine.stream()
-                .limit(20)
-                .peek(r -> log.info("🏁 Gen {}/20 - Bilan: {} €", r.generation(), String.format("%.2f", r.bestFitness())))
+                .limit(50)
+                .peek(r -> log.info("🏁 Gen {}/50 - Bilan: {} €", r.generation(), String.format("%.2f", r.bestFitness())))
                 .collect(EvolutionResult.toBestPhenotype());
 
         LotoService.AlgoConfig gagnante = decoderGenotype(bestPhenotype.genotype(), "AUTO_ML_ULTRA");
@@ -114,8 +114,8 @@ public class BacktestService {
                 boolean chanceMatch = (g.get(5) == bc);
 
                 if (matches == 5) bilan += chanceMatch ? 2000000.0 : 100000.0;
-                else if (matches == 4) bilan += chanceMatch ? 1000.0 : 500.0;
-                else if (matches == 3) bilan += chanceMatch ? 50.0 : 20.0;
+                else if (matches == 4) bilan += chanceMatch ? 2000.0 : 1000.0; // Boost x2 artificiel pour l'entrainement
+                else if (matches == 3) bilan += chanceMatch ? 100.0 : 40.0;
                 else if (matches == 2) bilan += chanceMatch ? 10.0 : 5.0;
                 else if (chanceMatch) bilan += 2.20;
             }
