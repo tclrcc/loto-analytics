@@ -270,13 +270,16 @@ public class LotoService {
     // ==================================================================================
 
     public List<PronosticResultDto> genererMultiplesPronostics(LocalDate dateCible, int nombreGrilles) {
+        long startTotal = System.currentTimeMillis();
+
         // Renvoie les pronos en cache si déjà calculés
         List<PronosticResultDto> cached = cachedDailyPronosRef.get();
         if (cached != null && dateCible.equals(dateCachedPronos) && cached.size() >= nombreGrilles) {
+            log.info("⚡ [CACHE] Pronostics récupérés instantanément en {} ms.", (System.currentTimeMillis() - startTotal));
             return cached.subList(0, nombreGrilles);
         }
 
-        log.info("⚙️ [CALCUL IA] Génération génétique fraîche pour le {}", dateCible);
+        log.info("⚙️ [CALCUL IA] Démarrage génération fraîche pour le {}...", dateCible);
 
         // Récupération des pronostics générés
         List<PronosticResultDto> newsPronos = genererPronosticAvecConfig(dateCible, Math.max(nombreGrilles, 10), null);
@@ -285,7 +288,8 @@ public class LotoService {
         cachedDailyPronosRef.set(newsPronos);
         this.dateCachedPronos = dateCible;
 
-        log.info("⚙️ [CALCUL IA] Fin génération pronostics");
+        long duration = System.currentTimeMillis() - startTotal;
+        log.info("🏁 [CALCUL IA] Terminé en {} ms ({} sec). Résultat mis en cache.", duration, duration / 1000.0);
 
         // Renvoie les pronos
         return newsPronos.subList(0, Math.min(newsPronos.size(), nombreGrilles));
@@ -297,11 +301,15 @@ public class LotoService {
     }
 
     private List<PronosticResultDto> genererPronosticAvecConfig(LocalDate dateCible, int nombreGrilles, AstroProfileDto profilAstro) {
+        long t0 = System.currentTimeMillis();
+
         List<LotoTirageRepository.TirageMinimal> rawData = repository.findAllOptimized();
         List<LotoTirage> history = rawData.stream().map(this::mapToLightEntity).toList();
 
         if (history.isEmpty()) return new ArrayList<>();
         List<Integer> dernierTirage = history.get(0).getBoules();
+
+        log.debug("📚 Historique chargé ({} tirages) en {} ms.", history.size(), (System.currentTimeMillis() - t0));
 
         // Récupération de la meilleure config
         AlgoConfig configOptimisee = recupererMeilleureConfig();
@@ -313,6 +321,8 @@ public class LotoService {
                 String.format("%.2f", configOptimisee.getPoidsAffinite()),
                 String.format("%.2f", configOptimisee.getPoidsMarkov())
         );
+
+        long t1 = System.currentTimeMillis();
 
         Set<Integer> hotFinales = detecterFinalesChaudes(history);
         List<Integer> boostNumbers = (profilAstro != null) ? astroService.getLuckyNumbersOnly(profilAstro) : Collections.emptyList();
@@ -344,8 +354,10 @@ public class LotoService {
         Set<Long> historiqueBitMasks = new HashSet<>(history.size());
         for(int i=0; i<Math.min(history.size(), 300); i++) historiqueBitMasks.add(calculerBitMask(history.get(i).getBoules()));
 
+        log.info("📊 [PREP] Matrices et Scores calculés en {} ms.", (System.currentTimeMillis() - t1));
+
         List<GrilleCandidate> population = executerAlgorithmeGenetique(
-                hots, neutrals, colds, isHot, isCold, // Nouveaux params optimisés
+                hots, neutrals, colds, isHot, isCold,
                 matriceAffinitesArr, dernierTirage, topTriosDuJour, scoresBoules, scoresChance,
                 matriceChanceArr, contraintesDuJour, configOptimisee, historiqueBitMasks, matriceMarkov, etatDernierTirage
         );
@@ -361,6 +373,7 @@ public class LotoService {
             DynamicConstraints contraintes, AlgoConfig config, Set<Long> historiqueBitMasks,
             double[][] matriceMarkov, int etatDernierTirage) {
 
+        long tStart = System.currentTimeMillis();
         int taillePopulation = 1000;
         int generations = 15;
         List<GrilleCandidate> population = new ArrayList<>(taillePopulation);
@@ -368,6 +381,7 @@ public class LotoService {
         List<Integer> boulesBuffer;
         ThreadLocalRandom rng = ThreadLocalRandom.current();
 
+        // 1. POPULATION INITIALE
         while (population.size() < taillePopulation && tentatives < taillePopulation * 5) {
             tentatives++;
             boulesBuffer = genererGrilleOptimisee(hots, neutrals, colds, isHot, isCold, matriceAffinites, dernierTirage, topTrios);
@@ -380,29 +394,50 @@ public class LotoService {
             }
         }
 
-        // Evolution
+        log.info("🌱 [GENETIQUE] Population initiale ({} individus) créée en {} ms ({} essais).",
+                population.size(), (System.currentTimeMillis() - tStart), tentatives);
+
+        // 2. EVOLUTION
         for (int gen = 1; gen <= generations; gen++) {
+            // Tri pour l'élitisme
             population.sort((g1, g2) -> Double.compare(g2.fitness, g1.fitness));
+
             List<GrilleCandidate> nextGen = new ArrayList<>(taillePopulation);
             int nbElites = (int) (taillePopulation * 0.15);
+
+            // A. Elitisme
             for (int i = 0; i < nbElites && i < population.size(); i++) nextGen.add(population.get(i));
 
+            // B. Croisement & Mutation
             while (nextGen.size() < taillePopulation) {
                 GrilleCandidate maman = population.get(rng.nextInt(taillePopulation / 3));
                 GrilleCandidate papa = population.get(rng.nextInt(taillePopulation / 3));
                 List<Integer> enfant = croiser(maman.boules, papa.boules);
+
                 if (rng.nextDouble() < 0.30) mutate(enfant);
                 Collections.sort(enfant);
 
-                if (estGrilleCoherenteOptimisee(enfant, dernierTirage, contraintes)) { // Check historique retiré ici pour perf
+                if (estGrilleCoherenteOptimisee(enfant, dernierTirage, contraintes)) {
                     int chance = rng.nextBoolean() ? maman.chance : papa.chance;
                     double fitness = calculerScoreFitnessOptimise(enfant, chance, scoresBoules, scoresChance, matriceAffinites, config, matriceMarkov, etatDernierTirage);
                     nextGen.add(new GrilleCandidate(enfant, chance, fitness));
                 }
             }
+
+            // Remplacement de la population
             population = nextGen;
+
+            // IMPORTANT : On trie la nouvelle population pour trouver le meilleur score
+            population.sort((g1, g2) -> Double.compare(g2.fitness, g1.fitness));
+
+            // ✅ LE LOG EST ICI (Une fois par génération)
+            if (gen == 1 || gen == generations || gen % 5 == 0) {
+                log.info("🧬 [GENETIQUE] Génération {}/{} terminée. Meilleur Score: {}",
+                        gen, generations, String.format("%.2f", population.get(0).fitness));
+            }
         }
-        population.sort((g1, g2) -> Double.compare(g2.fitness, g1.fitness));
+
+        // Le tri final est déjà fait par la boucle, on peut retourner directement
         return population;
     }
 
@@ -942,9 +977,11 @@ public class LotoService {
             }
         }
 
+        log.info("🔍 [FILTRE] {} grilles retenues après filtre diversité.", resultats.size());
+
         // 3. PLAN B (Complétion sécurisée)
         if (resultats.size() < nombreGrilles) {
-            log.warn("⚠️ Pas assez de diversité. Activation du PLAN B.");
+            log.warn("⚠️ [PLAN B] Pas assez de diversité ({} manquantes). Complétion activée.", (nombreGrilles - resultats.size()));
 
             for (GrilleCandidate cand : population) {
                 if (resultats.size() >= nombreGrilles) break;
