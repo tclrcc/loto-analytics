@@ -375,20 +375,23 @@ public class LotoService {
 
         long tStart = System.currentTimeMillis();
         int taillePopulation = 1000;
-        int generations = 15;
+
+        // On ne fait PAS de générations ce soir. On prend ce qu'il y a de meilleur tout de suite.
         List<GrilleCandidate> population = new ArrayList<>(taillePopulation);
         int tentatives = 0;
         List<Integer> boulesBuffer;
         ThreadLocalRandom rng = ThreadLocalRandom.current();
 
-        // --- 1. POPULATION INITIALE (Ça, ça marche) ---
-        log.info("🏁 [GENETIQUE] Démarrage création population initiale...");
+        log.info("🏁 [URGENCE] Mode 'Tir Rapide' activé. Génération population seule...");
 
-        while (population.size() < taillePopulation && tentatives < taillePopulation * 20) {
+        // --- 1. CRÉATION POPULATION (Ça, ça marche super bien) ---
+        while (population.size() < taillePopulation && tentatives < taillePopulation * 50) {
             tentatives++;
+            // Cette méthode utilise déjà ta stratégie Forme 47 / Affinité 18
             boulesBuffer = genererGrilleOptimisee(hots, neutrals, colds, isHot, isCold, matriceAffinites, dernierTirage, topTrios);
             Collections.sort(boulesBuffer);
 
+            // Validation standard
             if (estGrilleCoherenteOptimisee(boulesBuffer, dernierTirage, contraintes) && !historiqueBitMasks.contains(calculerBitMask(boulesBuffer))) {
                 int chance = selectionnerChanceRapide(boulesBuffer, scoresChance, matriceChance);
                 double fitness = calculerScoreFitnessOptimise(boulesBuffer, chance, scoresBoules, scoresChance, matriceAffinites, config, matriceMarkov, etatDernierTirage);
@@ -396,70 +399,23 @@ public class LotoService {
             }
         }
 
-        // Sécurité si population vide
-        if (population.isEmpty()) return new ArrayList<>();
-
-        log.info("🌱 [GENETIQUE] Population initiale ({} individus) créée en {} ms. Démarrage évolution...",
-                population.size(), (System.currentTimeMillis() - tStart));
-
-        // --- 2. EVOLUTION AVEC TIMEOUT STRICT ---
-        // Si ça prend plus de 2 secondes, on arrête tout et on rend ce qu'on a.
-        long timeLimit = System.currentTimeMillis() + 2000;
-
-        for (int gen = 1; gen <= generations; gen++) {
-            // 🛑 SAFETY CHECK : Si on dépasse le temps, on sort IMMÉDIATEMENT
-            if (System.currentTimeMillis() > timeLimit) {
-                log.warn("⚠️ [TIMEOUT URGENT] L'évolution prend trop de temps. Arrêt à la Gen {}. On renvoie la population actuelle !", gen);
-                break; // On sort de la boucle for, et on renvoie 'population'
-            }
-
-            // Tri pour l'élitisme
-            population.sort((g1, g2) -> Double.compare(g2.fitness, g1.fitness));
-
-            List<GrilleCandidate> nextGen = new ArrayList<>(taillePopulation);
-            int nbElites = (int) (taillePopulation * 0.15);
-            for (int i = 0; i < nbElites && i < population.size(); i++) nextGen.add(population.get(i));
-
-            int echecsConsecutifs = 0;
-
-            while (nextGen.size() < taillePopulation) {
-                // 🛑 SAFETY CHECK INTERNE
-                if (System.currentTimeMillis() > timeLimit) break;
-
-                List<Integer> enfant;
-                boolean force = false;
-
-                if (echecsConsecutifs > 20) { // Seuil abaissé à 20 pour aller plus vite
-                    enfant = genererGrilleOptimisee(hots, neutrals, colds, isHot, isCold, matriceAffinites, dernierTirage, topTrios);
-                    force = true;
-                } else {
-                    GrilleCandidate maman = population.get(rng.nextInt(taillePopulation / 3));
-                    GrilleCandidate papa = population.get(rng.nextInt(taillePopulation / 3));
-                    enfant = croiser(maman.boules, papa.boules);
-                    if (rng.nextDouble() < 0.30) mutate(enfant);
-                }
-
-                Collections.sort(enfant);
-
-                if (force || estGrilleCoherenteOptimisee(enfant, dernierTirage, contraintes)) {
-                    int chance = rng.nextBoolean() ? population.get(0).chance : population.get(1).chance;
-                    double fitness = calculerScoreFitnessOptimise(enfant, chance, scoresBoules, scoresChance, matriceAffinites, config, matriceMarkov, etatDernierTirage);
-                    nextGen.add(new GrilleCandidate(enfant, chance, fitness));
-                    echecsConsecutifs = 0;
-                } else {
-                    echecsConsecutifs++;
-                }
-            }
-
-            // Si on a quitté le while à cause du timeout, on garde l'ancienne population si la nouvelle n'est pas pleine
-            if (nextGen.size() == taillePopulation) {
-                population = nextGen;
-            }
+        if (population.isEmpty()) {
+            // ULTIME SECOURS : Si vraiment on ne trouve rien, on force une grille
+            log.warn("⚠️ Population vide ! Génération forcée d'une grille de secours.");
+            boulesBuffer = genererGrilleOptimisee(hots, neutrals, colds, isHot, isCold, matriceAffinites, dernierTirage, topTrios);
+            Collections.sort(boulesBuffer);
+            population.add(new GrilleCandidate(boulesBuffer, 1, 100.0));
         }
 
-        // Tri final et retour
+        // --- 2. PAS D'ÉVOLUTION (On bypass la boucle bloquante) ---
+        // On trie juste pour te donner les meilleures grilles parmi les 1000 trouvées
         population.sort((g1, g2) -> Double.compare(g2.fitness, g1.fitness));
-        log.info("🏁 [CALCUL IA] Terminé. Meilleur score final : {}", String.format("%.2f", population.get(0).fitness));
+
+        log.info("✅ [URGENCE] Terminé en {} ms. {} grilles générées. Meilleur score : {}",
+                (System.currentTimeMillis() - tStart),
+                population.size(),
+                String.format("%.2f", population.get(0).fitness));
+
         return population;
     }
 
