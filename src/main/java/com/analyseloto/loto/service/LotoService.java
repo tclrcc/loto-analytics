@@ -382,6 +382,7 @@ public class LotoService {
         ThreadLocalRandom rng = ThreadLocalRandom.current();
 
         // 1. POPULATION INITIALE
+        // On augmente la tolérance (x20) pour être sûr de démarrer
         while (population.size() < taillePopulation && tentatives < taillePopulation * 20) {
             tentatives++;
             boulesBuffer = genererGrilleOptimisee(hots, neutrals, colds, isHot, isCold, matriceAffinites, dernierTirage, topTrios);
@@ -395,8 +396,8 @@ public class LotoService {
         }
 
         if (population.isEmpty()) {
-            log.error("❌ Impossible de générer une population viable. Vérifiez les contraintes !");
-            return new ArrayList<>(); // Ou fallback
+            log.error("❌ ECHEC CRITIQUE : Impossible de générer la population initiale.");
+            return new ArrayList<>();
         }
 
         log.info("🌱 [GENETIQUE] Population initiale ({} individus) créée en {} ms ({} essais).",
@@ -410,39 +411,51 @@ public class LotoService {
             List<GrilleCandidate> nextGen = new ArrayList<>(taillePopulation);
             int nbElites = (int) (taillePopulation * 0.15);
 
-            // A. Elitisme
+            // A. Elitisme (On garde les meilleurs)
             for (int i = 0; i < nbElites && i < population.size(); i++) nextGen.add(population.get(i));
 
-            // B. Croisement & Mutation
-            while (nextGen.size() < taillePopulation) {
-                GrilleCandidate maman = population.get(rng.nextInt(taillePopulation / 3));
-                GrilleCandidate papa = population.get(rng.nextInt(taillePopulation / 3));
-                List<Integer> enfant = croiser(maman.boules, papa.boules);
+            // B. Reproduction (Avec sécurité anti-blocage)
+            int echecsConsecutifs = 0;
 
-                if (rng.nextDouble() < 0.30) mutate(enfant);
+            while (nextGen.size() < taillePopulation) {
+                List<Integer> enfant;
+
+                // SÉCURITÉ : Si on échoue 50 fois à croiser, on injecte du sang neuf (aléatoire)
+                if (echecsConsecutifs > 50) {
+                    enfant = genererGrilleOptimisee(hots, neutrals, colds, isHot, isCold, matriceAffinites, dernierTirage, topTrios);
+                } else {
+                    GrilleCandidate maman = population.get(rng.nextInt(taillePopulation / 3));
+                    GrilleCandidate papa = population.get(rng.nextInt(taillePopulation / 3));
+                    enfant = croiser(maman.boules, papa.boules);
+                    if (rng.nextDouble() < 0.30) mutate(enfant);
+                }
+
                 Collections.sort(enfant);
 
+                // Validation
                 if (estGrilleCoherenteOptimisee(enfant, dernierTirage, contraintes)) {
-                    int chance = rng.nextBoolean() ? maman.chance : papa.chance;
+                    int chance = rng.nextBoolean() ? population.get(0).chance : population.get(1).chance; // Héritage simplifié chance
                     double fitness = calculerScoreFitnessOptimise(enfant, chance, scoresBoules, scoresChance, matriceAffinites, config, matriceMarkov, etatDernierTirage);
                     nextGen.add(new GrilleCandidate(enfant, chance, fitness));
+                    echecsConsecutifs = 0; // Reset du compteur en cas de succès
+                } else {
+                    echecsConsecutifs++; // On compte les échecs
                 }
             }
 
-            // Remplacement de la population
+            // Remplacement
             population = nextGen;
 
-            // IMPORTANT : On trie la nouvelle population pour trouver le meilleur score
-            population.sort((g1, g2) -> Double.compare(g2.fitness, g1.fitness));
-
-            // ✅ LE LOG EST ICI (Une fois par génération)
+            // Log de suivi
             if (gen == 1 || gen == generations || gen % 5 == 0) {
+                population.sort((g1, g2) -> Double.compare(g2.fitness, g1.fitness));
                 log.info("🧬 [GENETIQUE] Génération {}/{} terminée. Meilleur Score: {}",
                         gen, generations, String.format("%.2f", population.get(0).fitness));
             }
         }
 
-        // Le tri final est déjà fait par la boucle, on peut retourner directement
+        // Tri final
+        population.sort((g1, g2) -> Double.compare(g2.fitness, g1.fitness));
         return population;
     }
 
