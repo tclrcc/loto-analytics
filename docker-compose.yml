@@ -1,27 +1,43 @@
 services:
   # ----------------------------------------------------
-  # 1. BASE DE DONNÉES (Inchangé)
+  # 1. BASE DE DONNÉES (Optimisée pour la charge)
   # ----------------------------------------------------
   loto_db:
-    image: postgres:15
+    image: postgres:15-alpine # Version Alpine plus légère
     container_name: loto_db
     environment:
       POSTGRES_DB: lotodb
       POSTGRES_USER: loto
       POSTGRES_PASSWORD: ${DB_PASSWORD}
       TZ: Europe/Paris
+    # Tuning Performance DB pour un VPS moyen
+    command: >
+      postgres 
+      -c shared_buffers=256MB 
+      -c effective_cache_size=768MB 
+      -c maintenance_work_mem=64MB 
+      -c checkpoint_completion_target=0.7 
+      -c wal_buffers=16MB 
+      -c default_statistics_target=100 
+      -c random_page_cost=1.1 
+      -c effective_io_concurrency=200
     volumes:
       - pgdata:/var/lib/postgresql/data
     restart: always
+    networks:
+      - loto-network
     deploy:
       resources:
         limits:
-          memory: 512M
-    ports:
-      - "5433:5432"
+          memory: 1G # Augmenté pour encaisser les requêtes historiques
+    logging: &logging_config # Configuration partagée des logs
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   # ----------------------------------------------------
-  # SAUVEGARDE AUTOMATIQUE (Toutes les nuits à 3h00)
+  # SAUVEGARDE AUTOMATIQUE
   # ----------------------------------------------------
   db_backup:
     image: prodrigestivill/postgres-backup-local
@@ -39,9 +55,12 @@ services:
       TZ: Europe/Paris
     volumes:
       - ./backups:/backups
+    networks:
+      - loto-network
+    logging: *logging_config
 
   # ----------------------------------------------------
-  # 2. APPLICATION SPRING BOOT (Avec Healthcheck)
+  # 2. APPLICATION SPRING BOOT (Tuning JVM & Healthcheck)
   # ----------------------------------------------------
   loto_app:
     image: tclrcc/loto-app:latest
@@ -51,7 +70,11 @@ services:
     environment:
       TZ: Europe/Paris
       SPRING_PROFILES_ACTIVE: prod
-      JAVA_OPTS: -XX:+UseG1GC -Xms512m -Xmx3500m
+      # OPTIMISATION MAJEURE :
+      # -XX:MaxRAMPercentage=75.0 : Utilise 75% de la RAM allouée au conteneur (plus souple que Xmx)
+      # -XX:+UseG1GC : Garbage Collector parfait pour les applis > 4Go
+      # -XX:+UseStringDeduplication : Réduit la RAM car bcp de chaînes identiques dans tes stats
+      JAVA_OPTS: "-XX:MaxRAMPercentage=75.0 -XX:InitialRAMPercentage=50.0 -XX:+UseG1GC -XX:+UseStringDeduplication"
       SPRING_DATASOURCE_URL: jdbc:postgresql://loto_db:5432/lotodb
       SPRING_DATASOURCE_USERNAME: loto
       SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
@@ -63,21 +86,44 @@ services:
       APP_LOTO_RECIPIENT: tonycoloricchio01@gmail.com
       AI_PASSWORD: admin
     restart: always
-    # Plus besoin de "ports: - 8081:8080", l'appli est isolée derrière Caddy.
-    # Healthcheck (Docker redémarre l'app si elle plante)
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
       interval: 30s
-      timeout: 5s
+      timeout: 10s
       retries: 3
+      start_period: 60s # Laisse 1 minute au démarrage (calculs initiaux) avant de tuer l'app
     deploy:
       resources:
         limits:
-          memory: 4096M
+          memory: 4G # Java prendra 75% de ça (soit 3Go) automatiquement
+    networks:
+      - loto-network
+    logging: *logging_config
 
   # ----------------------------------------------------
-  # SURVEILLANCE SERVEUR (Uptime Kuma)
+  # MONITORING AVANCÉ (Nouveau !)
   # ----------------------------------------------------
+  netdata:
+    image: netdata/netdata
+    container_name: netdata
+    restart: always
+    hostname: loto-monitor
+    cap_add:
+      - SYS_PTRACE
+    security_opt:
+      - apparmor:unconfined
+    volumes:
+      - netdatalib:/var/lib/netdata
+      - netdatacache:/var/cache/netdata
+      - /etc/passwd:/host/etc/passwd:ro
+      - /etc/group:/host/etc/group:ro
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    ports:
+      - "19999:19999" # Dashboard temps réel impressionnant
+    logging: *logging_config
+
   uptime-kuma:
     image: louislam/uptime-kuma:1
     container_name: uptime-kuma
@@ -86,9 +132,12 @@ services:
       - "3001:3001"
     volumes:
       - uptime-kuma-data:/app/data
+    networks:
+      - loto-network
+    logging: *logging_config
 
   # ----------------------------------------------------
-  # REVERSE PROXY (Caddy pour le HTTPS auto)
+  # REVERSE PROXY
   # ----------------------------------------------------
   caddy:
     image: caddy:2-alpine
@@ -97,15 +146,19 @@ services:
     ports:
       - "80:80"
       - "443:443"
+      - "443:443/udp" # Support HTTP/3 (QUIC) pour la vitesse mobile
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile
       - caddy_data:/data
       - caddy_config:/config
     depends_on:
       - loto_app
+    networks:
+      - loto-network
+    logging: *logging_config
 
   # ----------------------------------------------------
-  # OBSERVABILITE DES LOGS (Dozzle)
+  # LOGS
   # ----------------------------------------------------
   dozzle:
     image: amir20/dozzle:latest
@@ -116,9 +169,19 @@ services:
     environment:
       DOZZLE_USERNAME: tclrcc
       DOZZLE_PASSWORD: Lisandro1608
+    networks:
+      - loto-network
+    logging: *logging_config
+
+# Réseau interne pour isoler la DB du web
+networks:
+  loto-network:
+    driver: bridge
 
 volumes:
   pgdata:
   caddy_data:
   caddy_config:
   uptime-kuma-data:
+  netdatalib:
+  netdatacache:
