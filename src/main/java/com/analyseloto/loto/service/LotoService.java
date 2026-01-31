@@ -414,16 +414,20 @@ public class LotoService {
             // A. Elitisme (On garde les meilleurs)
             for (int i = 0; i < nbElites && i < population.size(); i++) nextGen.add(population.get(i));
 
-            // B. Reproduction (Avec sécurité anti-blocage)
+            // B. Reproduction (Avec sécurité anti-blocage TOTALE)
             int echecsConsecutifs = 0;
 
             while (nextGen.size() < taillePopulation) {
                 List<Integer> enfant;
+                boolean forcePassage = false; // Drapeau pour forcer l'ajout
 
-                // SÉCURITÉ : Si on échoue 50 fois à croiser, on injecte du sang neuf (aléatoire)
+                // SÉCURITÉ : Si on échoue 50 fois, on passe en mode "Sauvetage"
                 if (echecsConsecutifs > 50) {
+                    // On génère une grille statistique pure
                     enfant = genererGrilleOptimisee(hots, neutrals, colds, isHot, isCold, matriceAffinites, dernierTirage, topTrios);
+                    forcePassage = true; // ON FORCE L'ACCEPTATION (On saute le validateur strict)
                 } else {
+                    // Mode normal : Génétique
                     GrilleCandidate maman = population.get(rng.nextInt(taillePopulation / 3));
                     GrilleCandidate papa = population.get(rng.nextInt(taillePopulation / 3));
                     enfant = croiser(maman.boules, papa.boules);
@@ -432,14 +436,14 @@ public class LotoService {
 
                 Collections.sort(enfant);
 
-                // Validation
-                if (estGrilleCoherenteOptimisee(enfant, dernierTirage, contraintes)) {
-                    int chance = rng.nextBoolean() ? population.get(0).chance : population.get(1).chance; // Héritage simplifié chance
+                // Validation : On vérifie la cohérence SAUF si on est en mode "Force Passage"
+                if (forcePassage || estGrilleCoherenteOptimisee(enfant, dernierTirage, contraintes)) {
+                    int chance = rng.nextBoolean() ? population.get(0).chance : population.get(1).chance;
                     double fitness = calculerScoreFitnessOptimise(enfant, chance, scoresBoules, scoresChance, matriceAffinites, config, matriceMarkov, etatDernierTirage);
                     nextGen.add(new GrilleCandidate(enfant, chance, fitness));
-                    echecsConsecutifs = 0; // Reset du compteur en cas de succès
+                    echecsConsecutifs = 0; // Reset du compteur
                 } else {
-                    echecsConsecutifs++; // On compte les échecs
+                    echecsConsecutifs++; // On compte l'échec et on réessaie
                 }
             }
 
