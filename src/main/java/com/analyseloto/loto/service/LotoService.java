@@ -382,7 +382,7 @@ public class LotoService {
         ThreadLocalRandom rng = ThreadLocalRandom.current();
 
         // 1. POPULATION INITIALE
-        while (population.size() < taillePopulation && tentatives < taillePopulation * 5) {
+        while (population.size() < taillePopulation && tentatives < taillePopulation * 20) {
             tentatives++;
             boulesBuffer = genererGrilleOptimisee(hots, neutrals, colds, isHot, isCold, matriceAffinites, dernierTirage, topTrios);
             Collections.sort(boulesBuffer);
@@ -392,6 +392,11 @@ public class LotoService {
                 double fitness = calculerScoreFitnessOptimise(boulesBuffer, chance, scoresBoules, scoresChance, matriceAffinites, config, matriceMarkov, etatDernierTirage);
                 population.add(new GrilleCandidate(boulesBuffer, chance, fitness));
             }
+        }
+
+        if (population.isEmpty()) {
+            log.error("❌ Impossible de générer une population viable. Vérifiez les contraintes !");
+            return new ArrayList<>(); // Ou fallback
         }
 
         log.info("🌱 [GENETIQUE] Population initiale ({} individus) créée en {} ms ({} essais).",
