@@ -157,9 +157,14 @@ public class LotoService {
     // 1. INITIALISATION & CONFIG (Manual Cache)
     // ==================================================================================
 
+    /**
+     * Initialisation de la configuration
+     */
     @PostConstruct
     public void initConfigFromDb() {
         log.info("🔌 Démarrage : Recherche stratégie en base...");
+
+        // Récupération de la configuration la plus récente
         strategyConfigRepostiroy.findTopByOrderByDateCalculDesc().ifPresentOrElse(
                 last -> {
                     this.cachedBestConfig = new AlgoConfig(
@@ -176,14 +181,23 @@ public class LotoService {
         );
     }
 
+    /**
+     * Vérifications faites au démarrage
+     */
     public void verificationAuDemarrage() {
         LocalDate todayParis = LocalDate.now(ZONE_PARIS);
+
+        // Si la config est déjà en cache, on génère les pronostics
         if (this.cachedBestConfig != null && todayParis.equals(this.lastBacktestDate)) {
             log.info("✋ [WARMUP] Stratégie du {} déjà en mémoire. OK.", todayParis);
+
             genererMultiplesPronostics(recupererDateProchainTirage(), 5);
             return;
         }
+
         log.info("⚠️ [WARMUP] Stratégie obsolète. Lancement optimisation !");
+
+        // Lancement méthode optimisation
         forceDailyOptimization();
     }
 
@@ -191,14 +205,19 @@ public class LotoService {
         return Objects.requireNonNullElseGet(this.cachedBestConfig, AlgoConfig::defaut);
     }
 
+    /**
+     * Méthode d'optimisation de l'appli (Cache)
+     */
     public void forceDailyOptimization() {
         log.info("🌙 [CRON] Optimisation en cours...");
+
+        // Initialisation variables
         this.cachedGlobalStats = null;
         cachedDailyPronosRef.set(null);
-
         List<LotoTirageRepository.TirageMinimal> rawData = repository.findAllOptimized();
         List<LotoTirage> historyLight = rawData.stream().map(this::mapToLightEntity).toList();
 
+        // Calcul de la meilleure config et mise en cache
         if (!historyLight.isEmpty()) {
             AlgoConfig newConfig = backtestService.trouverMeilleureConfig(historyLight);
             this.cachedBestConfig = newConfig;
@@ -206,6 +225,7 @@ public class LotoService {
 
             log.info("✅ [UPDATE] Nouvelle stratégie appliquée en RAM : {}", newConfig.getNomStrategie());
 
+            // Construction objet BDD
             StrategyConfig entity = new StrategyConfig();
             entity.setDateCalcul(LocalDateTime.now(ZONE_PARIS));
             entity.setNomStrategie(newConfig.getNomStrategie());
@@ -220,6 +240,14 @@ public class LotoService {
             entity.setNbGrillesParTest(newConfig.getNbGrillesParTest());
             entity.setRoi(newConfig.getRoiEstime());
             strategyConfigRepostiroy.save(entity);
+
+            // Après strategyConfigRepostiroy.save(entity);
+
+            log.info("🔥 [WARMUP] Préchauffage des pronostics pour l'expérience utilisateur...");
+            // On force le calcul des pronostics pour le prochain tirage et on remplit le cache
+            LocalDate prochainTirage = recupererDateProchainTirage();
+            // Génère et met en cache 10 grilles
+            genererMultiplesPronostics(prochainTirage, 10);
 
             log.info("💾 [DB] Stratégie sauvegardée. ROI: {}%", String.format("%.2f", newConfig.getRoiEstime()));
         }
@@ -743,12 +771,39 @@ public class LotoService {
         group.setRatio(Math.round(ratio * 100.0) / 100.0);
     }
 
+    /**
+     * Renvoie la date du prochain tirage (si aujourd'hui != jour de tirage ou si heure > 20h15)
+     * @return date prochain tirage
+     */
     public LocalDate recupererDateProchainTirage() {
-        LocalDate date = LocalDate.now();
-        boolean estJourTirage = (date.getDayOfWeek().getValue() == 1 || date.getDayOfWeek().getValue() == 3 || date.getDayOfWeek().getValue() == 6);
-        if (estJourTirage && LocalTime.now().isAfter(LocalTime.of(20, 15))) date = date.plusDays(1);
-        while (date.getDayOfWeek().getValue() != 1 && date.getDayOfWeek().getValue() != 3 && date.getDayOfWeek().getValue() != 6) date = date.plusDays(1);
-        return date;
+        // 1. On fixe le fuseau horaire de Paris (Important pour Docker/Cloud).
+        ZoneId zoneParis = ZoneId.of("Europe/Paris");
+        ZonedDateTime maintenant = ZonedDateTime.now(zoneParis);
+
+        LocalDate dateCandidate = maintenant.toLocalDate();
+        LocalTime heureActuelle = maintenant.toLocalTime();
+
+        // Les jours de tirage (Lundi, Mercredi, Samedi)
+        Set<DayOfWeek> joursTirage = Set.of(
+                DayOfWeek.MONDAY,
+                DayOfWeek.WEDNESDAY,
+                DayOfWeek.SATURDAY
+        );
+
+        // 2. Vérification du "Cut-off" (Heure limite)
+        // Si on est un jour de tirage MAIS qu'il est passé 20h15, ce tirage est mort.
+        // On avance à demain pour commencer la recherche du suivant.
+        boolean estJourTirage = joursTirage.contains(dateCandidate.getDayOfWeek());
+        if (estJourTirage && heureActuelle.isAfter(LocalTime.of(20, 15))) {
+            dateCandidate = dateCandidate.plusDays(1);
+        }
+
+        // 3. Recherche du prochain jour valide
+        while (!joursTirage.contains(dateCandidate.getDayOfWeek())) {
+            dateCandidate = dateCandidate.plusDays(1);
+        }
+
+        return dateCandidate;
     }
 
     // --- Private Calculation Helpers ---
