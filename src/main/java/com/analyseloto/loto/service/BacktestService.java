@@ -17,8 +17,8 @@ import java.util.concurrent.Executors;
 public class BacktestService {
     private final LotoService lotoService;
 
-    // 50 grilles par test est un bon équilibre statistique, on garde.
-    private static final int NB_GRILLES_PAR_TEST = 400;
+    // 200 grilles par test est un bon équilibre statistique, on garde.
+    private static final int NB_GRILLES_PAR_TEST = 200;
 
     // On augmente la profondeur pour une robustesse maximale (2.5 ans)
     private static final int DEPTH_BACKTEST = 300;

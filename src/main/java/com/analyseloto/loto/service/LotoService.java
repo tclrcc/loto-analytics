@@ -23,6 +23,8 @@ import java.time.format.DateTimeFormatter;
 import java.time.format.TextStyle;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
+import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -35,15 +37,13 @@ public class LotoService {
     // Services
     private final AstroService astroService;
     private final BacktestService backtestService;
-    // Utils
-    private final Random rng = new Random();
 
     // --- VARIABLES DU CACHE MANUEL (Architecture Stateful) ---
-    private AlgoConfig cachedBestConfig = null;
-    private LocalDate lastBacktestDate = null;
-    private StatsReponse cachedGlobalStats = null;
-    private List<PronosticResultDto> cachedDailyPronos = null;
-    private LocalDate dateCachedPronos = null;
+    private volatile AlgoConfig cachedBestConfig = null;
+    private volatile LocalDate lastBacktestDate = null;
+    private volatile StatsReponse cachedGlobalStats = null;
+    private final AtomicReference<List<PronosticResultDto>> cachedDailyPronosRef = new AtomicReference<>();
+    private volatile LocalDate dateCachedPronos = null;
 
     // Constantes
     private static final String FIELD_DATE_TIRAGE = "dateTirage";
@@ -194,7 +194,7 @@ public class LotoService {
     public void forceDailyOptimization() {
         log.info("🌙 [CRON] Optimisation en cours...");
         this.cachedGlobalStats = null;
-        this.cachedDailyPronos = null;
+        cachedDailyPronosRef.set(null);
 
         List<LotoTirageRepository.TirageMinimal> rawData = repository.findAllOptimized();
         List<LotoTirage> historyLight = rawData.stream().map(this::mapToLightEntity).toList();
@@ -243,8 +243,9 @@ public class LotoService {
 
     public List<PronosticResultDto> genererMultiplesPronostics(LocalDate dateCible, int nombreGrilles) {
         // Renvoie les pronos en cache si déjà calculés
-        if (cachedDailyPronos != null && dateCible.equals(dateCachedPronos) && cachedDailyPronos.size() >= nombreGrilles) {
-            return cachedDailyPronos.subList(0, nombreGrilles);
+        List<PronosticResultDto> cached = cachedDailyPronosRef.get();
+        if (cached != null && dateCible.equals(dateCachedPronos) && cached.size() >= nombreGrilles) {
+            return cached.subList(0, nombreGrilles);
         }
 
         log.info("⚙️ [CALCUL IA] Génération génétique fraîche pour le {}", dateCible);
@@ -253,7 +254,7 @@ public class LotoService {
         List<PronosticResultDto> newsPronos = genererPronosticAvecConfig(dateCible, Math.max(nombreGrilles, 10), null);
 
         // Mise en cache
-        this.cachedDailyPronos = newsPronos;
+        cachedDailyPronosRef.set(newsPronos);
         this.dateCachedPronos = dateCible;
 
         log.info("⚙️ [CALCUL IA] Fin génération pronostics");
@@ -318,7 +319,7 @@ public class LotoService {
         List<GrilleCandidate> population = executerAlgorithmeGenetique(
                 hots, neutrals, colds, isHot, isCold, // Nouveaux params optimisés
                 matriceAffinitesArr, dernierTirage, topTriosDuJour, scoresBoules, scoresChance,
-                matriceChanceArr, contraintesDuJour, configOptimisee, historiqueBitMasks, rng, matriceMarkov, etatDernierTirage
+                matriceChanceArr, contraintesDuJour, configOptimisee, historiqueBitMasks, matriceMarkov, etatDernierTirage
         );
 
         return finaliserResultats(population, nombreGrilles, dateCible, history);
@@ -330,21 +331,22 @@ public class LotoService {
             int[][] matriceAffinites, List<Integer> dernierTirage, List<List<Integer>> topTrios,
             double[] scoresBoules, double[] scoresChance, int[][] matriceChance,
             DynamicConstraints contraintes, AlgoConfig config, Set<Long> historiqueBitMasks,
-            Random rng, double[][] matriceMarkov, int etatDernierTirage) {
+            double[][] matriceMarkov, int etatDernierTirage) {
 
         int taillePopulation = 1000;
         int generations = 15;
         List<GrilleCandidate> population = new ArrayList<>(taillePopulation);
         int tentatives = 0;
         List<Integer> boulesBuffer;
+        ThreadLocalRandom rng = ThreadLocalRandom.current();
 
         while (population.size() < taillePopulation && tentatives < taillePopulation * 5) {
             tentatives++;
-            boulesBuffer = genererGrilleOptimisee(hots, neutrals, colds, isHot, isCold, matriceAffinites, dernierTirage, topTrios, rng);
+            boulesBuffer = genererGrilleOptimisee(hots, neutrals, colds, isHot, isCold, matriceAffinites, dernierTirage, topTrios);
             Collections.sort(boulesBuffer);
 
             if (estGrilleCoherenteOptimisee(boulesBuffer, dernierTirage, contraintes) && !historiqueBitMasks.contains(calculerBitMask(boulesBuffer))) {
-                int chance = selectionnerChanceRapide(boulesBuffer, scoresChance, matriceChance, rng);
+                int chance = selectionnerChanceRapide(boulesBuffer, scoresChance, matriceChance);
                 double fitness = calculerScoreFitnessOptimise(boulesBuffer, chance, scoresBoules, scoresChance, matriceAffinites, config, matriceMarkov, etatDernierTirage);
                 population.add(new GrilleCandidate(boulesBuffer, chance, fitness));
             }
@@ -360,8 +362,8 @@ public class LotoService {
             while (nextGen.size() < taillePopulation) {
                 GrilleCandidate maman = population.get(rng.nextInt(taillePopulation / 3));
                 GrilleCandidate papa = population.get(rng.nextInt(taillePopulation / 3));
-                List<Integer> enfant = croiser(maman.boules, papa.boules, rng);
-                if (rng.nextDouble() < 0.30) mutate(enfant, rng);
+                List<Integer> enfant = croiser(maman.boules, papa.boules);
+                if (rng.nextDouble() < 0.30) mutate(enfant);
                 Collections.sort(enfant);
 
                 if (estGrilleCoherenteOptimisee(enfant, dernierTirage, contraintes)) { // Check historique retiré ici pour perf
@@ -438,7 +440,7 @@ public class LotoService {
         int essais = 0; int maxEssais = nbGrilles * 5;
         while(resultats.size() < nbGrilles && essais < maxEssais) {
             essais++;
-            List<Integer> boules = genererGrilleOptimisee(hots, neutrals, colds, isHot, isCold, sc.matriceAffinites, sc.dernierTirageConnu, sc.topTriosPrecalcules, rng);
+            List<Integer> boules = genererGrilleOptimisee(hots, neutrals, colds, isHot, isCold, sc.matriceAffinites, sc.dernierTirageConnu, sc.topTriosPrecalcules);
             Collections.sort(boules);
             if (estGrilleCoherenteOptimisee(boules, sc.dernierTirageConnu, sc.contraintes)) {
                 List<Integer> grilleFinale = new ArrayList<>(boules); grilleFinale.add(1);
@@ -449,8 +451,11 @@ public class LotoService {
     }
 
     // --- LE CŒUR DE L'OPTIMISATION : Zéro Allocation ---
-    private List<Integer> genererGrilleOptimisee(List<Integer> hots, List<Integer> neutrals, List<Integer> colds, boolean[] isHot, boolean[] isCold, int[][] matrice, List<Integer> dernierTirage, List<List<Integer>> trios, Random rng) {
+    private List<Integer> genererGrilleOptimisee(List<Integer> hots, List<Integer> neutrals, List<Integer> colds, boolean[] isHot,
+            boolean[] isCold, int[][] matrice, List<Integer> dernierTirage, List<List<Integer>> trios) {
         List<Integer> selection = new ArrayList<>(5);
+        // INITIALISATION THREAD-SAFE
+        ThreadLocalRandom rng = ThreadLocalRandom.current();
 
         // 1. Trio (optionnel)
         if (trios != null && !trios.isEmpty() && rng.nextBoolean()) {
@@ -481,7 +486,7 @@ public class LotoService {
             if (targetPool.isEmpty()) targetPool = hots;
 
             // Sélection par affinité sans new ArrayList()
-            Integer elu = selectionnerParAffiniteFast(targetPool, selection, matrice, rng);
+            Integer elu = selectionnerParAffiniteFast(targetPool, selection, matrice);
             if (elu == -1) {
                 int n = 1 + rng.nextInt(49); while(selection.contains(n)) n = 1 + rng.nextInt(49); selection.add(n);
             } else {
@@ -492,9 +497,10 @@ public class LotoService {
     }
 
     // Sélectionne un candidat SANS copier la liste d'origine
-    private Integer selectionnerParAffiniteFast(List<Integer> candidats, List<Integer> selectionActuelle, int[][] matriceAffinites, Random rng) {
+    private Integer selectionnerParAffiniteFast(List<Integer> candidats, List<Integer> selectionActuelle, int[][] matriceAffinites) {
         int meilleurCandidat = -1;
         double meilleurScore = -Double.MAX_VALUE;
+        ThreadLocalRandom rng = ThreadLocalRandom.current();
 
         // On itère directement sur la liste source
         for (Integer candidat : candidats) {
@@ -512,8 +518,11 @@ public class LotoService {
         return meilleurCandidat;
     }
 
-    private int selectionnerChanceRapide(List<Integer> boules, double[] scoresChanceArr, int[][] matriceChance, Random rng) {
-        int meilleurChance = 1; double meilleurScore = -Double.MAX_VALUE;
+    private int selectionnerChanceRapide(List<Integer> boules, double[] scoresChanceArr, int[][] matriceChance) {
+        int meilleurChance = 1;
+        double meilleurScore = -Double.MAX_VALUE;
+        ThreadLocalRandom rng = ThreadLocalRandom.current();
+
         for (int c = 1; c <= 10; c++) {
             double score = scoresChanceArr[c];
             double affiniteScore = 0;
@@ -543,9 +552,10 @@ public class LotoService {
     // ==================================================================================
 
     public StatsReponse getStats(String jourFiltre) {
+        StatsReponse localCache = this.cachedGlobalStats;
         // Cache Global Manuel
-        if (jourFiltre == null && this.cachedGlobalStats != null) {
-            return this.cachedGlobalStats;
+        if (jourFiltre == null && localCache != null) {
+            return localCache;
         }
 
         log.info("⚙️ [DB] Calcul lourd des statistiques pour : {}", jourFiltre);
@@ -667,7 +677,7 @@ public class LotoService {
             }
             // Invalidation cache manuel
             this.cachedGlobalStats = null;
-            this.cachedDailyPronos = null;
+            cachedDailyPronosRef.set(null);
         }
     }
 
@@ -678,7 +688,7 @@ public class LotoService {
         t.setDateTirage(dto.getDateTirage()); t.setBoule1(dto.getBoule1()); t.setBoule2(dto.getBoule2()); t.setBoule3(dto.getBoule3()); t.setBoule4(dto.getBoule4()); t.setBoule5(dto.getBoule5()); t.setNumeroChance(dto.getNumeroChance());
         repository.save(t);
         this.cachedGlobalStats = null;
-        this.cachedDailyPronos = null;
+        this.cachedDailyPronosRef.set(null);
         return t;
     }
 
@@ -841,29 +851,61 @@ public class LotoService {
     }
 
     private List<PronosticResultDto> finaliserResultats(List<GrilleCandidate> population, int nombreGrilles, LocalDate dateCible, List<LotoTirage> history) {
-        List<PronosticResultDto> resultats = new ArrayList<>(); List<List<Integer>> grillesRetenues = new ArrayList<>();
+        List<PronosticResultDto> resultats = new ArrayList<>();
+        // OPTIMISATION : HashSet pour des recherches ultra-rapides O(1)
+        Set<List<Integer>> grillesRetenues = new HashSet<>();
         long couvertureGlobale = 0L;
+
+        // 1. Tri par score
+        population.sort((g1, g2) -> Double.compare(g2.fitness, g1.fitness));
+
+        // 2. Sélection Principale (Diversité)
         for (GrilleCandidate cand : population) {
             if (resultats.size() >= nombreGrilles) break;
+
             long masqueCandidat = calculerBitMask(cand.boules);
             long nouveauxNumerosMask = masqueCandidat & ~couvertureGlobale;
             int apportDiversite = Long.bitCount(nouveauxNumerosMask);
-            if (resultats.isEmpty() || apportDiversite >= 2) {
-                couvertureGlobale |= masqueCandidat; grillesRetenues.add(cand.boules);
-                SimulationResultDto simu = simulerGrilleDetaillee(cand.boules, dateCible, history);
-                double maxDuo = simu.getPairs().stream().mapToDouble(MatchGroup::getRatio).max().orElse(0.0);
-                String typeAlgo = (cand.fitness < 50) ? "IA_FLEXIBLE" : "IA_OPTIMAL (MARKOV)";
-                resultats.add(new PronosticResultDto(cand.boules, cand.chance, Math.round(cand.fitness * 100.0) / 100.0, maxDuo, 0.0, !simu.getQuintuplets().isEmpty(), typeAlgo));
-            }
-        }
-        if (resultats.size() < nombreGrilles) {
-            for (GrilleCandidate cand : population) {
-                if (resultats.size() >= nombreGrilles) break;
-                if (!grillesRetenues.contains(cand.boules)) {
-                    grillesRetenues.add(cand.boules);
+
+            if (resultats.isEmpty() || apportDiversite >= 1) {
+                // Vérifie doublon strict (au cas où)
+                if (grillesRetenues.add(cand.boules)) { // .add renvoie true si pas présent
+                    couvertureGlobale |= masqueCandidat;
+
                     SimulationResultDto simu = simulerGrilleDetaillee(cand.boules, dateCible, history);
                     double maxDuo = simu.getPairs().stream().mapToDouble(MatchGroup::getRatio).max().orElse(0.0);
-                    resultats.add(new PronosticResultDto(cand.boules, cand.chance, Math.round(cand.fitness * 100.0) / 100.0, maxDuo, 0.0, !simu.getQuintuplets().isEmpty(), "IA_SECOURS"));
+                    String typeAlgo = (cand.fitness < 50) ? "IA_FLEXIBLE" : "IA_OPTIMAL";
+
+                    resultats.add(new PronosticResultDto(
+                            cand.boules, cand.chance,
+                            Math.round(cand.fitness * 100.0) / 100.0,
+                            maxDuo, 0.0,
+                            !simu.getQuintuplets().isEmpty(),
+                            typeAlgo
+                    ));
+                }
+            }
+        }
+
+        // 3. PLAN B (Complétion sécurisée)
+        if (resultats.size() < nombreGrilles) {
+            log.warn("⚠️ Pas assez de diversité. Activation du PLAN B.");
+
+            for (GrilleCandidate cand : population) {
+                if (resultats.size() >= nombreGrilles) break;
+
+                // Utilisation du Set pour vérifier instantanément si on l'a déjà prise
+                if (grillesRetenues.add(cand.boules)) {
+                    SimulationResultDto simu = simulerGrilleDetaillee(cand.boules, dateCible, history);
+                    double maxDuo = simu.getPairs().stream().mapToDouble(MatchGroup::getRatio).max().orElse(0.0);
+
+                    resultats.add(new PronosticResultDto(
+                            cand.boules, cand.chance,
+                            Math.round(cand.fitness * 100.0) / 100.0,
+                            maxDuo, 0.0,
+                            !simu.getQuintuplets().isEmpty(),
+                            "IA_SECOURS (PLAN B)"
+                    ));
                 }
             }
         }
@@ -892,17 +934,29 @@ public class LotoService {
         return matrix;
     }
 
-    private List<Integer> croiser(List<Integer> p1, List<Integer> p2, Random r) {
+    private List<Integer> croiser(List<Integer> p1, List<Integer> p2) {
+        ThreadLocalRandom r = ThreadLocalRandom.current();
         Set<Integer> s = new HashSet<>(8);
+
         for(int i=0; i<3; i++) s.add(p1.get(i));
+
         for(int n : p2) if(s.size() < 5) s.add(n);
+
         while(s.size() < 5) s.add(r.nextInt(49)+1);
+
         return new ArrayList<>(s);
     }
 
-    private void mutate(List<Integer> b, Random r) {
-        int idx = r.nextInt(5); int val = r.nextInt(49)+1;
-        while(b.contains(val)) val = r.nextInt(49)+1; b.set(idx, val);
+    private void mutate(List<Integer> b) {
+        // Initialisation valeurs
+        ThreadLocalRandom r = ThreadLocalRandom.current();
+        int idx = r.nextInt(5);
+        int val = r.nextInt(49)+1;
+
+        while (b.contains(val)) {
+            val = r.nextInt(49)+1;
+            b.set(idx, val);
+        }
     }
 
     private Map<String, List<Integer>> creerBucketsOptimises(double[] scores) {
