@@ -381,10 +381,9 @@ public class LotoService {
         List<Integer> boulesBuffer;
         ThreadLocalRandom rng = ThreadLocalRandom.current();
 
-        // --- 1. POPULATION INITIALE ---
+        // --- 1. POPULATION INITIALE (Ça, ça marche) ---
         log.info("🏁 [GENETIQUE] Démarrage création population initiale...");
 
-        // On augmente la tolérance (x20) pour être sûr de démarrer
         while (population.size() < taillePopulation && tentatives < taillePopulation * 20) {
             tentatives++;
             boulesBuffer = genererGrilleOptimisee(hots, neutrals, colds, isHot, isCold, matriceAffinites, dernierTirage, topTrios);
@@ -397,53 +396,42 @@ public class LotoService {
             }
         }
 
-        if (population.isEmpty()) {
-            log.error("❌ ECHEC CRITIQUE : Impossible de générer la population initiale.");
-            return new ArrayList<>();
-        }
+        // Sécurité si population vide
+        if (population.isEmpty()) return new ArrayList<>();
 
-        log.info("🌱 [GENETIQUE] Population initiale ({} individus) créée en {} ms ({} essais).",
-                population.size(), (System.currentTimeMillis() - tStart), tentatives);
+        log.info("🌱 [GENETIQUE] Population initiale ({} individus) créée en {} ms. Démarrage évolution...",
+                population.size(), (System.currentTimeMillis() - tStart));
 
-        // --- 2. EVOLUTION ---
+        // --- 2. EVOLUTION AVEC TIMEOUT STRICT ---
+        // Si ça prend plus de 2 secondes, on arrête tout et on rend ce qu'on a.
+        long timeLimit = System.currentTimeMillis() + 2000;
+
         for (int gen = 1; gen <= generations; gen++) {
-            long startGen = System.currentTimeMillis();
+            // 🛑 SAFETY CHECK : Si on dépasse le temps, on sort IMMÉDIATEMENT
+            if (System.currentTimeMillis() > timeLimit) {
+                log.warn("⚠️ [TIMEOUT URGENT] L'évolution prend trop de temps. Arrêt à la Gen {}. On renvoie la population actuelle !", gen);
+                break; // On sort de la boucle for, et on renvoie 'population'
+            }
 
             // Tri pour l'élitisme
             population.sort((g1, g2) -> Double.compare(g2.fitness, g1.fitness));
 
             List<GrilleCandidate> nextGen = new ArrayList<>(taillePopulation);
             int nbElites = (int) (taillePopulation * 0.15);
-
-            // A. Elitisme
             for (int i = 0; i < nbElites && i < population.size(); i++) nextGen.add(population.get(i));
 
-            // B. Reproduction (Avec SAFETY BREAK)
             int echecsConsecutifs = 0;
-            int totalForcees = 0; // Compteur pour les logs
 
             while (nextGen.size() < taillePopulation) {
-                // SAFETY TIMEOUT : Si la génération dure plus de 2 minutes, on coupe !
-                if (System.currentTimeMillis() - startGen > 120000) {
-                    log.warn("⚠️ [TIMEOUT] Génération {} trop longue (>3s). Remplissage d'urgence activé !", gen);
-                    while(nextGen.size() < taillePopulation) {
-                        List<Integer> emergency = genererGrilleOptimisee(hots, neutrals, colds, isHot, isCold, matriceAffinites, dernierTirage, topTrios);
-                        Collections.sort(emergency);
-                        int chance = rng.nextInt(10) + 1;
-                        double fitness = calculerScoreFitnessOptimise(emergency, chance, scoresBoules, scoresChance, matriceAffinites, config, matriceMarkov, etatDernierTirage);
-                        nextGen.add(new GrilleCandidate(emergency, chance, fitness));
-                    }
-                    break; // Sortie de la boucle while
-                }
+                // 🛑 SAFETY CHECK INTERNE
+                if (System.currentTimeMillis() > timeLimit) break;
 
                 List<Integer> enfant;
-                boolean forceAcceptation = false;
+                boolean force = false;
 
-                // Si on échoue 50 fois de suite, on active le plan de sauvetage
-                if (echecsConsecutifs > 50) {
+                if (echecsConsecutifs > 20) { // Seuil abaissé à 20 pour aller plus vite
                     enfant = genererGrilleOptimisee(hots, neutrals, colds, isHot, isCold, matriceAffinites, dernierTirage, topTrios);
-                    forceAcceptation = true;
-                    totalForcees++;
+                    force = true;
                 } else {
                     GrilleCandidate maman = population.get(rng.nextInt(taillePopulation / 3));
                     GrilleCandidate papa = population.get(rng.nextInt(taillePopulation / 3));
@@ -453,8 +441,7 @@ public class LotoService {
 
                 Collections.sort(enfant);
 
-                // Validation : Si forceAcceptation est TRUE, on bypass estGrilleCoherenteOptimisee
-                if (forceAcceptation || estGrilleCoherenteOptimisee(enfant, dernierTirage, contraintes)) {
+                if (force || estGrilleCoherenteOptimisee(enfant, dernierTirage, contraintes)) {
                     int chance = rng.nextBoolean() ? population.get(0).chance : population.get(1).chance;
                     double fitness = calculerScoreFitnessOptimise(enfant, chance, scoresBoules, scoresChance, matriceAffinites, config, matriceMarkov, etatDernierTirage);
                     nextGen.add(new GrilleCandidate(enfant, chance, fitness));
@@ -464,21 +451,15 @@ public class LotoService {
                 }
             }
 
-            population = nextGen;
-
-            // LOGS INTELLIGENTS
-            long dureeGen = System.currentTimeMillis() - startGen;
-
-            // On loggue la 1ère, la dernière, et si ça a pris du temps ou si on a beaucoup forcé
-            if (gen == 1 || gen == generations || dureeGen > 1000 || totalForcees > 100) {
-                population.sort((g1, g2) -> Double.compare(g2.fitness, g1.fitness));
-                String details = (totalForcees > 0) ? " (dont " + totalForcees + " 🚑 sauvetages)" : "";
-                log.info("🧬 [GENETIQUE] Gen {}/{} en {} ms{}. Best: {}",
-                        gen, generations, dureeGen, details, String.format("%.2f", population.get(0).fitness));
+            // Si on a quitté le while à cause du timeout, on garde l'ancienne population si la nouvelle n'est pas pleine
+            if (nextGen.size() == taillePopulation) {
+                population = nextGen;
             }
         }
 
+        // Tri final et retour
         population.sort((g1, g2) -> Double.compare(g2.fitness, g1.fitness));
+        log.info("🏁 [CALCUL IA] Terminé. Meilleur score final : {}", String.format("%.2f", population.get(0).fitness));
         return population;
     }
 
