@@ -11,23 +11,38 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD}
       TZ: Europe/Paris
     # Tuning Performance DB pour un VPS moyen
-    command: >
-      postgres
-      -c max_connections=100
-      -c shared_buffers=3GB           # 25% de la RAM totale (Données chaudes)
-      -c effective_cache_size=9GB     # 75% de la RAM (Cache OS estimé)
-      -c maintenance_work_mem=1GB     # Pour accélérer les indexations/imports
-      -c checkpoint_completion_target=0.9
-      -c wal_buffers=16MB
-      -c default_statistics_target=500 # Statistique plus fine pour l'optimiseur de requêtes
-      -c random_page_cost=1.1
-      -c effective_io_concurrency=300 # SSD Rapide
-      -c work_mem=32MB                # Augmenté pour les tris complexes en RAM
-      -c min_wal_size=2GB
-      -c max_wal_size=8GB
-      -c max_worker_processes=6       # Utilise tes 6 coeurs
-      -c max_parallel_workers_per_gather=3
-      -c max_parallel_workers=6
+    command:
+      - "postgres"
+      - "-c"
+      - "max_connections=100"
+      - "-c"
+      - "shared_buffers=3GB"
+      - "-c"
+      - "effective_cache_size=9GB"
+      - "-c"
+      - "maintenance_work_mem=1GB"
+      - "-c"
+      - "checkpoint_completion_target=0.9"
+      - "-c"
+      - "wal_buffers=16MB"
+      - "-c"
+      - "default_statistics_target=500"
+      - "-c"
+      - "random_page_cost=1.1"
+      - "-c"
+      - "effective_io_concurrency=300"
+      - "-c"
+      - "work_mem=32MB"
+      - "-c"
+      - "min_wal_size=2GB"
+      - "-c"
+      - "max_wal_size=8GB"
+      - "-c"
+      - "max_worker_processes=6"
+      - "-c"
+      - "max_parallel_workers_per_gather=3"
+      - "-c"
+      - "max_parallel_workers=6"
     volumes:
       - pgdata:/var/lib/postgresql/data
     restart: always
