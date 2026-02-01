@@ -16,6 +16,8 @@ import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
 
 import java.io.*;
 import java.time.*;
@@ -160,7 +162,7 @@ public class LotoService {
     /**
      * Initialisation de la configuration
      */
-    @PostConstruct
+    @EventListener(ApplicationReadyEvent.class)
     public void initConfigFromDb() {
         log.info("🔌 Démarrage : Recherche stratégie en base...");
 
