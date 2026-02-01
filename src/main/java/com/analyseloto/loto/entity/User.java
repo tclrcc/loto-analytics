@@ -1,6 +1,7 @@
 package com.analyseloto.loto.entity;
 
 import com.analyseloto.loto.enums.RoleUser;
+import com.fasterxml.jackson.annotation.JsonFormat;
 import jakarta.persistence.*;
 import lombok.Data;
 
@@ -26,6 +27,7 @@ public class User {
 
     // Infos Personnelles pour l'Astro
     private String firstName;
+    @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd")
     private LocalDate birthDate;
     private String birthTime; // Format "HH:mm"
     private String birthCity;

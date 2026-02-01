@@ -43,7 +43,10 @@
             <p class="text-muted mb-0">Pilotez les résultats et surveillez l'activité du système.</p>
         </div>
         <div class="col-md-6 text-md-end mt-3 mt-md-0 d-flex justify-content-md-end align-items-center gap-2">
-
+            <div class="d-inline-flex align-items-center bg-white border rounded p-2 me-2 shadow-sm">
+                <small class="text-muted me-2 text-uppercase fw-bold" style="font-size: 0.65rem;">Dernier Tirage en base</small>
+                <span class="fw-bold text-primary" th:text="${#temporals.format(lastDrawDate, 'dd/MM/yyyy')}">--/--/----</span>
+            </div>
             <span class="badge bg-white text-success border border-success shadow-sm p-2">
                 <i class="bi bi-activity me-1"></i> Système Opérationnel
             </span>
@@ -72,16 +75,22 @@
                 </div>
                 <div class="card-body">
                     <form id="formManuel">
-                        <div class="mb-2"><input type="date" class="form-control form-control-sm" id="mDate" required></div>
-                        <div class="input-group input-group-sm mb-2">
-                            <input type="number" class="form-control text-center fw-bold" id="mB1" placeholder="1">
-                            <input type="number" class="form-control text-center fw-bold" id="mB2" placeholder="2">
-                            <input type="number" class="form-control text-center fw-bold" id="mB3" placeholder="3">
-                            <input type="number" class="form-control text-center fw-bold" id="mB4" placeholder="4">
-                            <input type="number" class="form-control text-center fw-bold" id="mB5" placeholder="5">
-                            <input type="number" class="form-control text-center fw-bold border-danger text-danger" id="mChance" placeholder="C">
+                        <div class="mb-3">
+                            <label class="form-label small text-muted fw-bold">Date du tirage</label>
+                            <input type="date" class="form-control" id="mDate" required>
                         </div>
-                        <button type="submit" class="btn btn-success btn-sm w-100 fw-bold"><i class="bi bi-check-lg me-2"></i>Valider</button>
+
+                        <label class="form-label small text-muted fw-bold">Combinaison Gagnante</label>
+                        <div class="d-flex justify-content-between gap-1 mb-3">
+                            <input type="number" class="form-control text-center fw-bold rounded-circle shadow-sm p-0 loto-input" id="mB1" style="width: 40px; height: 40px;" placeholder="N1">
+                            <input type="number" class="form-control text-center fw-bold rounded-circle shadow-sm p-0 loto-input" id="mB2" style="width: 40px; height: 40px;" placeholder="N2">
+                            <input type="number" class="form-control text-center fw-bold rounded-circle shadow-sm p-0 loto-input" id="mB3" style="width: 40px; height: 40px;" placeholder="N3">
+                            <input type="number" class="form-control text-center fw-bold rounded-circle shadow-sm p-0 loto-input" id="mB4" style="width: 40px; height: 40px;" placeholder="N4">
+                            <input type="number" class="form-control text-center fw-bold rounded-circle shadow-sm p-0 loto-input" id="mB5" style="width: 40px; height: 40px;" placeholder="N5">
+                            <div style="width: 2px; background: #ddd; margin: 0 5px;"></div>
+                            <input type="number" class="form-control text-center fw-bold rounded-circle shadow-sm p-0 border-danger text-danger loto-input" id="mChance" style="width: 40px; height: 40px;" placeholder="C">
+                        </div>
+                        <button type="submit" class="btn btn-success w-100 fw-bold shadow-sm"><i class="bi bi-check-lg me-2"></i>Valider l'ajout</button>
                     </form>
                 </div>
             </div>
@@ -454,6 +463,22 @@
                 loader.classList.add('d-none');
             });
     });
+
+    // Auto-refresh des logs toutes les 10 secondes
+    setInterval(function() {
+        fetch('/api/admin/logs/recent') // Créer un endpoint simple qui renvoie les 10 derniers logs en JSON
+            .then(r => r.json())
+            .then(data => {
+                const tbody = document.getElementById('jobsTableBody');
+                // Logique simple : on vide et on remplit (pour faire plus propre, on pourrait comparer)
+                tbody.innerHTML = '';
+                data.forEach(log => {
+                    // ... (Réutilise ton code de génération de ligne JS existant ici)
+                    // Copie le code du bloc 'btnLoadAllHistory' qui génère le HTML <tr>
+                });
+            })
+            .catch(e => console.log("Auto-refresh logs failed (silently)"));
+    }, 10000);
 </script>
 
 </body>
