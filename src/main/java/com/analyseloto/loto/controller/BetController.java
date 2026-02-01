@@ -221,6 +221,48 @@ public class BetController {
     }
 
     /**
+     * Ajout de grilles multiples via la saisie manuelle (Modale)
+     */
+    @PostMapping("/add-bulk-manual")
+    @ResponseBody // Important pour répondre au fetch JS
+    public ResponseEntity<?> addBulkManual(@RequestBody BulkBetRequest request, Principal principal) {
+        try {
+            User user = userRepository.findByEmail(principal.getName())
+                    .orElseThrow(() -> new RuntimeException("User not found"));
+
+            int count = 0;
+            for (List<Integer> numbers : request.getGrilles()) {
+                // Validation basique (5 boules + 1 chance)
+                if (numbers.size() != 6) continue;
+
+                UserBet bet = new UserBet();
+                bet.setUser(user);
+                bet.setDateJeu(request.getDateJeu());
+                bet.setMise(2.20); // Coût par grille
+                bet.setType(BetType.GRILLE);
+
+                bet.setB1(numbers.get(0));
+                bet.setB2(numbers.get(1));
+                bet.setB3(numbers.get(2));
+                bet.setB4(numbers.get(3));
+                bet.setB5(numbers.get(4));
+                bet.setChance(numbers.get(5));
+
+                betRepository.save(bet);
+                count++;
+            }
+
+            log.info("Saisie MANUELLE multiple : {} grilles ajoutées pour {}", count, principal.getName());
+
+            return ResponseEntity.ok("✅ " + count + " grilles enregistrées avec succès !");
+
+        } catch (Exception e) {
+            log.error("Erreur add-bulk-manual", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Erreur : " + e.getMessage());
+        }
+    }
+
+    /**
      * Action d'export des grilles en PDF
      * @param principal
      * @return

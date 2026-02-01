@@ -493,70 +493,51 @@
         </div>
     </div>
     <div class="modal fade" id="modalAddBet" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered">
-            <form th:action="@{/bets/add}" method="post" class="modal-content border-0 shadow-lg overflow-hidden" id="formAddBetManuel">
+        <div class="modal-dialog modal-dialog-centered modal-lg"> <div class="modal-content border-0 shadow-lg overflow-hidden">
 
-                <div class="modal-header border-0 text-white p-4" style="background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%);">
+            <div class="modal-header border-0 text-white p-4" style="background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%);">
+                <div>
+                    <h5 class="modal-title fw-bold"><i class="bi bi-grid-3x3-gap-fill me-2"></i>Saisie Multiple</h5>
+                    <p class="mb-0 small text-white-50">Ajoutez vos grilles en série</p>
+                </div>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+
+            <div class="modal-body p-4 bg-light">
+
+                <div class="d-flex justify-content-between align-items-center mb-4 sticky-top bg-light pt-2 pb-2" style="z-index: 10;">
                     <div>
-                        <h5 class="modal-title fw-bold"><i class="bi bi-ticket-perforated-fill me-2"></i>Nouvelle Grille</h5>
-                        <p class="mb-0 small text-white-50">Saisissez vos numéros porte-bonheur</p>
-                    </div>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-
-                <div class="modal-body p-4 bg-light">
-
-                    <div class="mb-4">
-                        <label class="form-label text-uppercase text-muted fw-bold small" style="letter-spacing: 1px;">Date du tirage</label>
-                        <div class="input-group shadow-sm rounded-3 overflow-hidden bg-white">
+                        <label class="small text-muted fw-bold text-uppercase mb-1">Date du tirage</label>
+                        <div class="input-group shadow-sm rounded-3 overflow-hidden bg-white w-auto">
                             <span class="input-group-text bg-white border-0 ps-3"><i class="bi bi-calendar-event text-primary"></i></span>
-                            <input type="date" name="dateJeu" class="form-control border-0 fw-bold ps-2" required th:value="${#dates.format(#dates.createNow(), 'yyyy-MM-dd')}">
+                            <input type="date" id="bulkDateJeu" class="form-control border-0 fw-bold ps-2" required th:value="${#dates.format(#dates.createNow(), 'yyyy-MM-dd')}">
                         </div>
                     </div>
 
-                    <div class="mb-4">
-                        <label class="form-label text-uppercase text-muted fw-bold small d-flex justify-content-between">
-                            <span>Combinaison</span>
-                            <span class="text-primary" style="font-size: 0.7rem;">1-49</span>
-                        </label>
-
-                        <div class="d-flex justify-content-between align-items-center gap-2 mb-3">
-                            <input type="number" name="b1" class="form-control loto-ball-input animate-ball" placeholder="--" required min="1" max="49">
-                            <input type="number" name="b2" class="form-control loto-ball-input animate-ball" placeholder="--" required min="1" max="49">
-                            <input type="number" name="b3" class="form-control loto-ball-input animate-ball" placeholder="--" required min="1" max="49">
-                            <input type="number" name="b4" class="form-control loto-ball-input animate-ball" placeholder="--" required min="1" max="49">
-                            <input type="number" name="b5" class="form-control loto-ball-input animate-ball" placeholder="--" required min="1" max="49">
-
-                            <div style="width: 1px; height: 30px; background: #cbd5e1;"></div>
-
-                            <div class="position-relative">
-                                <input type="number" name="chance" class="form-control loto-ball-input chance-ball animate-ball" placeholder="C" required min="1" max="10">
-                                <span class="position-absolute top-0 start-100 translate-middle p-1 bg-danger border border-light rounded-circle" style="width: 10px; height: 10px;"></span>
-                            </div>
-                        </div>
-                        <div class="text-end text-muted small fst-italic mt-1" id="ball-feedback">Saisissez les numéros</div>
-                    </div>
-
-                    <div class="bg-white p-3 rounded-3 shadow-sm border d-flex align-items-center justify-content-between">
-                        <div>
-                            <label class="d-block text-uppercase text-muted fw-bold small mb-0">Mise</label>
-                            <small class="text-muted">Coût de la grille</small>
-                        </div>
-                        <div class="input-group w-auto">
-                            <input type="number" step="0.01" name="mise" class="form-control border-0 bg-light text-end fw-bold fs-5 text-dark" value="2.20" style="width: 80px;" required>
-                            <span class="input-group-text border-0 bg-light fw-bold">€</span>
+                    <div class="text-end bg-white px-3 py-2 rounded-3 shadow-sm border">
+                        <span class="text-muted small text-uppercase fw-bold d-block" style="font-size: 0.65rem;">Total Estimé</span>
+                        <div class="fs-4 fw-bold text-primary lh-1">
+                            <span id="manualTotalDisplay">0.00</span> €
                         </div>
                     </div>
-
                 </div>
 
-                <div class="modal-footer border-0 bg-light p-4 pt-0">
-                    <button type="button" class="btn btn-link text-muted text-decoration-none" data-bs-dismiss="modal">Annuler</button>
-                    <button type="submit" class="btn btn-primary fw-bold px-4 shadow-sm rounded-pill hover-scale">
-                        <i class="bi bi-check-lg me-2"></i>Valider la Grille
-                    </button>
+                <div id="manualGridsContainer" class="d-flex flex-column gap-3">
                 </div>
-            </form>
+
+                <button type="button" id="btnAddRow" class="btn btn-outline-primary border-2 border-dashed w-100 mt-4 py-3 fw-bold rounded-3 text-uppercase hover-scale" style="border-style: dashed;">
+                    <i class="bi bi-plus-circle-fill me-2"></i>Ajouter une grille
+                </button>
+
+            </div>
+
+            <div class="modal-footer border-0 bg-white p-3">
+                <button type="button" class="btn btn-link text-muted text-decoration-none" data-bs-dismiss="modal">Annuler</button>
+                <button type="button" id="btnSubmitBulkManual" class="btn btn-success fw-bold px-5 shadow-sm rounded-pill hover-scale" disabled>
+                    <i class="bi bi-check-lg me-2"></i>Valider Tout
+                </button>
+            </div>
+        </div>
         </div>
     </div>
 
@@ -739,6 +720,234 @@
     function setBetId(id) {
         document.getElementById('gainBetId').value = id;
     }
+</script>
+
+<script>
+    document.addEventListener("DOMContentLoaded", function() {
+        // --- VARIABLES ---
+        const container = document.getElementById('manualGridsContainer');
+        const totalDisplay = document.getElementById('manualTotalDisplay');
+        const btnAdd = document.getElementById('btnAddRow');
+        const btnSubmit = document.getElementById('btnSubmitBulkManual');
+
+        // Si la modale n'existe pas sur cette page, on arrête
+        if(!container) return;
+
+        let rowCounter = 0;
+
+        // --- TEMPLATE HTML D'UNE LIGNE ---
+        const rowTemplate = (index) => `
+        <div class="grid-row bg-white p-2 rounded-4 shadow-sm border d-flex align-items-center justify-content-between animate-up" id="row-${index}">
+            <div class="d-flex align-items-center gap-1 flex-grow-1 justify-content-center">
+                <span class="badge bg-light text-muted border me-2 rounded-pill">#${index + 1}</span>
+
+                <input type="number" class="form-control loto-ball-input manual-ball" placeholder="-" min="1" max="49">
+                <input type="number" class="form-control loto-ball-input manual-ball" placeholder="-" min="1" max="49">
+                <input type="number" class="form-control loto-ball-input manual-ball" placeholder="-" min="1" max="49">
+                <input type="number" class="form-control loto-ball-input manual-ball" placeholder="-" min="1" max="49">
+                <input type="number" class="form-control loto-ball-input manual-ball" placeholder="-" min="1" max="49">
+
+                <div style="width: 1px; height: 25px; background: #cbd5e1; margin: 0 5px;"></div>
+
+                <div class="position-relative">
+                    <input type="number" class="form-control loto-ball-input chance-ball manual-chance" placeholder="C" min="1" max="10">
+                </div>
+            </div>
+
+            <button type="button" class="btn btn-light text-danger btn-sm ms-2 rounded-circle shadow-sm hover-scale" onclick="removeGridRow('row-${index}')" title="Supprimer">
+                <i class="bi bi-trash-fill"></i>
+            </button>
+        </div>
+    `;
+
+        // --- FONCTIONS LOGIQUES ---
+
+        // 1. Ajouter une ligne
+        window.addGridRow = function() {
+            const div = document.createElement('div');
+            div.innerHTML = rowTemplate(rowCounter);
+            const newRow = div.firstElementChild;
+
+            container.appendChild(newRow);
+
+            // Active l'auto-focus sur les nouveaux inputs
+            attachInputEvents(newRow);
+
+            rowCounter++;
+            updateTotal();
+
+            // Scroll doux vers le bas
+            newRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+            // Focus sur la première boule de la nouvelle ligne
+            setTimeout(() => {
+                const firstInput = newRow.querySelector('input');
+                if(firstInput) firstInput.focus();
+            }, 100);
+        };
+
+        // 2. Supprimer une ligne
+        window.removeGridRow = function(id) {
+            const row = document.getElementById(id);
+            if(row) {
+                // Animation de sortie (slide vers la droite + fade out)
+                row.style.transition = 'all 0.3s ease';
+                row.style.transform = 'translateX(50px)';
+                row.style.opacity = '0';
+
+                setTimeout(() => {
+                    row.remove();
+                    updateTotal();
+                    // Renuméroter visuellement les lignes (#1, #2...)
+                    document.querySelectorAll('.grid-row').forEach((r, i) => {
+                        r.querySelector('.badge').textContent = '#' + (i + 1);
+                    });
+                }, 300);
+            }
+        };
+
+        // 3. Calculer le total
+        function updateTotal() {
+            const count = container.querySelectorAll('.grid-row').length;
+            const total = count * 2.20;
+            totalDisplay.innerText = total.toFixed(2);
+
+            // Désactiver le bouton valider si 0 grille
+            if (btnSubmit) btnSubmit.disabled = (count === 0);
+        }
+
+        // 4. Logique des Inputs (Auto-Focus & Validation)
+        function attachInputEvents(rowElement) {
+            const inputs = rowElement.querySelectorAll('input');
+
+            inputs.forEach((input, idx) => {
+                // Quand on tape
+                input.addEventListener('input', function() {
+                    // Nettoyage (que des chiffres)
+                    this.value = this.value.replace(/[^0-9]/g, '');
+
+                    // Vérification Max (49 ou 10)
+                    const isChance = this.classList.contains('chance-ball');
+                    const max = isChance ? 10 : 49;
+                    if(this.value !== "" && parseInt(this.value) > max) this.value = max;
+
+                    // Saut au suivant si 2 chiffres tapés
+                    if (this.value.length >= 2) {
+                        this.value = this.value.slice(0, 2); // Max 2 chars
+                        if (idx < inputs.length - 1) {
+                            inputs[idx + 1].focus();
+                        }
+                    }
+                });
+
+                // Navigation Clavier (Backspace, Flèches)
+                input.addEventListener('keydown', function(e) {
+                    // Retour arrière : si vide, on va au précédent
+                    if (e.key === 'Backspace' && this.value.length === 0 && idx > 0) {
+                        inputs[idx - 1].focus();
+                    }
+                    // Flèches
+                    if (e.key === 'ArrowRight' && idx < inputs.length - 1) inputs[idx + 1].focus();
+                    if (e.key === 'ArrowLeft' && idx > 0) inputs[idx - 1].focus();
+                });
+
+                // Sélectionner tout le texte au clic
+                input.addEventListener('focus', function() { this.select(); });
+            });
+        }
+
+        // --- INITIALISATION ---
+
+        // Au chargement, on ajoute une ligne vide par défaut pour inviter à la saisie
+        addGridRow();
+
+        // Clic sur le bouton "+"
+        if(btnAdd) btnAdd.addEventListener('click', addGridRow);
+
+        // --- SOUMISSION FINALE ---
+        if(btnSubmit) {
+            btnSubmit.addEventListener('click', function() {
+                const rows = container.querySelectorAll('.grid-row');
+                const dataGrids = [];
+                let hasError = false;
+
+                // Parcours de chaque ligne
+                rows.forEach(row => {
+                    const inputs = row.querySelectorAll('input');
+                    const numbers = [];
+
+                    inputs.forEach(inp => {
+                        const val = parseInt(inp.value);
+                        if(isNaN(val)) {
+                            inp.classList.add('bg-danger', 'bg-opacity-10', 'border-danger');
+                            hasError = true;
+                        } else {
+                            inp.classList.remove('bg-danger', 'bg-opacity-10', 'border-danger');
+                            numbers.push(val);
+                        }
+                    });
+
+                    // Validation Doublons (sur les 5 boules)
+                    if(numbers.length >= 5) {
+                        const boules = numbers.slice(0, 5);
+                        const unique = new Set(boules);
+                        if(unique.size !== boules.length) {
+                            alert("Attention : Une ligne contient des doublons !");
+                            hasError = true;
+                            return;
+                        }
+                    }
+
+                    if(numbers.length === 6) {
+                        dataGrids.push(numbers);
+                    } else {
+                        hasError = true; // Ligne incomplète
+                    }
+                });
+
+                if(hasError) {
+                    alert("Veuillez remplir correctement toutes les cases (ou supprimer les lignes vides).");
+                    return;
+                }
+
+                // Envoi AJAX
+                const originalText = btnSubmit.innerHTML;
+                btnSubmit.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Envoi...';
+                btnSubmit.disabled = true;
+
+                const payload = {
+                    dateJeu: document.getElementById('bulkDateJeu').value,
+                    grilles: dataGrids
+                };
+
+                fetch('/bets/add-bulk-manual', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                })
+                    .then(async response => {
+                        const text = await response.text();
+                        if(response.ok) {
+                            // Fermer modale
+                            const modalEl = document.getElementById('modalAddBet');
+                            const modal = bootstrap.Modal.getInstance(modalEl);
+                            modal.hide();
+
+                            // Succès
+                            alert(text);
+                            window.location.reload();
+                        } else {
+                            throw new Error(text);
+                        }
+                    })
+                    .catch(err => {
+                        alert("Erreur : " + err.message);
+                        btnSubmit.innerHTML = originalText;
+                        btnSubmit.disabled = false;
+                    });
+            });
+        }
+    });
 </script>
 
 <script th:inline="javascript">
