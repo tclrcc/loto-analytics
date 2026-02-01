@@ -67,33 +67,33 @@ public class FdjService {
             RestTemplate restTemplate = new RestTemplate();
             HttpHeaders headers = new HttpHeaders();
 
-            // 🎯 1. CAMOUFLAGE AVANCÉ : Simulation d'un vrai navigateur moderne
+            // 1. CAMOUFLAGE
             String fauxNavigateur = USER_AGENTS_CAMOUFLAGE.get(rng.nextInt(USER_AGENTS_CAMOUFLAGE.size()));
             headers.set("User-Agent", fauxNavigateur);
+            // Headers essentiels
             headers.set("Referer", "https://www.fdj.fr/jeux-de-tirage/loto/resultats");
             headers.set("Origin", "https://www.fdj.fr");
             headers.set("Connection", "keep-alive");
-
-            // Headers de sécurité (Crucial pour passer les pare-feux FDJ)
             headers.set("Sec-Fetch-Dest", "document");
             headers.set("Sec-Fetch-Mode", "navigate");
             headers.set("Sec-Fetch-Site", "same-origin");
             headers.set("Upgrade-Insecure-Requests", "1");
-
             headers.set("Accept-Language", "fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7");
             headers.set("Accept", "application/json");
 
-            // On demande les 4 derniers tirages pour avoir une marge de manœuvre
+            // ⚡ 2. ANTI-CACHE (C'est ici que ça change tout) ⚡
+            // On ajoute un paramètre inutile "_" avec l'heure actuelle en ms.
+            // La FDJ est obligée de répondre avec des données fraîches.
             String urlComplete = UriComponentsBuilder.fromUriString(fdjApiUrl)
                     .queryParam("include", "results,ranks")
-                    .queryParam("range", "0-3")
+                    .queryParam("range", "0-5") // On demande 5 tirages pour être large
+                    .queryParam("_", System.currentTimeMillis())
                     .toUriString();
 
             ResponseEntity<String> response = restTemplate.exchange(
                     urlComplete, HttpMethod.GET, new HttpEntity<>(headers), String.class
             );
 
-            // Vérification réponse HTTP
             if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null) {
                 log.warn("⚠️ API FDJ erreur : {}", response.getStatusCode());
                 return Optional.empty();
@@ -103,62 +103,61 @@ public class FdjService {
             JsonNode root = mapper.readTree(response.getBody());
 
             if (root.isArray() && !root.isEmpty()) {
-                // 2. Filtrage et Recherche du plus récent
+
+                // 🕵️ 3. DIAGNOSTIC : On loggue ce que la FDJ nous donne vraiment
+                List<String> datesRecues = StreamSupport.stream(root.spliterator(), false)
+                        .filter(n -> n.has(JSON_ELEMENT_DRAWN_AT))
+                        .map(n -> n.get(JSON_ELEMENT_DRAWN_AT).asText().substring(0, 10))
+                        .toList();
+                log.info("📋 La FDJ renvoie ces dates : {}", datesRecues);
+
+                // 4. Filtrage et Recherche du plus récent
                 Optional<JsonNode> meilleurTirageOpt = StreamSupport.stream(root.spliterator(), false)
                         .filter(node -> node.has(JSON_ELEMENT_DRAWN_AT))
                         .sorted((n1, n2) -> {
-                            // Tri DESCENDANT (plus récent en premier)
                             String d1 = n1.get(JSON_ELEMENT_DRAWN_AT).asText();
                             String d2 = n2.get(JSON_ELEMENT_DRAWN_AT).asText();
-                            return d2.compareTo(d1);
+                            return d2.compareTo(d1); // Plus récent en premier
                         })
                         .filter(node -> {
-                            // Filtre anti-futur (évite les bugs de timezone ou de tirages "annoncés")
                             String dateStr = node.get(JSON_ELEMENT_DRAWN_AT).asText();
                             ZonedDateTime drawnAt = ZonedDateTime.parse(dateStr);
-                            return drawnAt.isBefore(ZonedDateTime.now().plusHours(1));
+                            // On accepte les tirages jusqu'à 2h dans le futur (pour gérer les fuseaux horaires larges)
+                            return drawnAt.isBefore(ZonedDateTime.now().plusHours(2));
                         })
                         .findFirst();
 
                 if (meilleurTirageOpt.isEmpty()) {
-                    log.warn("⚠️ Aucun tirage valide trouvé dans le flux JSON.");
+                    log.warn("⚠️ Aucun tirage valide trouvé.");
                     return Optional.empty();
                 }
 
                 JsonNode tirageCibleJson = meilleurTirageOpt.get();
-
-                // Parsing de la date
                 String dateStrFull = tirageCibleJson.get(JSON_ELEMENT_DRAWN_AT).asText();
                 ZonedDateTime zdt = ZonedDateTime.parse(dateStrFull);
                 LocalDate dateTirage = zdt.toLocalDate();
 
-                log.info("🔎 Tirage trouvé sur l'API FDJ : {}", dateTirage);
+                log.info("🔎 Meilleur candidat retenu : {}", dateTirage);
 
-                // 3. LOGIQUE INTELLIGENTE (UPSERT)
-                // On vérifie si on l'a déjà en base, PEU IMPORTE la date d'aujourd'hui.
-                // Cela permet de rattraper les tirages manqués.
+                // 5. VÉRIFICATION EN BASE
                 boolean existeDeja = tirageRepository.existsByDateTirage(dateTirage);
 
                 if (existeDeja) {
-                    log.info("📅 Le tirage du {} est déjà présent en base. Synchronisation inutile.", dateTirage);
+                    log.info("📅 Le tirage du {} est déjà présent en base.", dateTirage);
                     return Optional.empty();
                 }
 
-                // Si on arrive ici, c'est qu'on ne l'a pas !
                 log.info("✨ NOUVEAU TIRAGE DÉTECTÉ ({}) ! Démarrage de l'import...", dateTirage);
-
-                // 4. Conversion et Sauvegarde
                 LotoTirage tirage = traiterJsonTirage(tirageCibleJson);
                 return Optional.ofNullable(tirage);
 
             } else {
-                log.warn("⚠️ Le JSON renvoyé par la FDJ est vide ou mal formé.");
+                log.warn("⚠️ JSON vide.");
             }
 
         } catch (Exception e) {
-            log.error("❌ Erreur critique lors de l'appel FDJ", e);
+            log.error("❌ Erreur critique FDJ", e);
         }
-
         return Optional.empty();
     }
 

@@ -463,22 +463,6 @@
                 loader.classList.add('d-none');
             });
     });
-
-    // Auto-refresh des logs toutes les 10 secondes
-    setInterval(function() {
-        fetch('/api/admin/logs/recent') // Créer un endpoint simple qui renvoie les 10 derniers logs en JSON
-            .then(r => r.json())
-            .then(data => {
-                const tbody = document.getElementById('jobsTableBody');
-                // Logique simple : on vide et on remplit (pour faire plus propre, on pourrait comparer)
-                tbody.innerHTML = '';
-                data.forEach(log => {
-                    // ... (Réutilise ton code de génération de ligne JS existant ici)
-                    // Copie le code du bloc 'btnLoadAllHistory' qui génère le HTML <tr>
-                });
-            })
-            .catch(e => console.log("Auto-refresh logs failed (silently)"));
-    }, 10000);
 </script>
 
 </body>
