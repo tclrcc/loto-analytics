@@ -492,17 +492,70 @@
             </div>
         </div>
     </div>
-    <div class="modal fade" id="modalAddBet" tabindex="-1">
-        <div class="modal-dialog">
-            <form th:action="@{/bets/add}" method="post" class="modal-content">
-                <div class="modal-header"><h5 class="modal-title">📝 Enregistrer une grille</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
-                <div class="modal-body">
-                    <div class="mb-3"><label class="form-label small">Date du lotoTirage</label><input type="date" name="dateJeu" class="form-control" required th:value="${#dates.format(#dates.createNow(), 'yyyy-MM-dd')}"></div>
-                    <label class="form-label small">Numéros joués</label>
-                    <div class="input-group mb-3"><input type="number" name="b1" class="form-control" placeholder="1" required><input type="number" name="b2" class="form-control" placeholder="2" required><input type="number" name="b3" class="form-control" placeholder="3" required><input type="number" name="b4" class="form-control" placeholder="4" required><input type="number" name="b5" class="form-control" placeholder="5" required><input type="number" name="chance" class="form-control border-danger text-danger fw-bold" placeholder="C" required></div>
-                    <div class="mb-3"><label class="form-label small">Coût de la grille (€)</label><input type="number" step="0.01" name="mise" class="form-control" value="2.20" required></div>
+    <div class="modal fade" id="modalAddBet" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <form th:action="@{/bets/add}" method="post" class="modal-content border-0 shadow-lg overflow-hidden" id="formAddBetManuel">
+
+                <div class="modal-header border-0 text-white p-4" style="background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%);">
+                    <div>
+                        <h5 class="modal-title fw-bold"><i class="bi bi-ticket-perforated-fill me-2"></i>Nouvelle Grille</h5>
+                        <p class="mb-0 small text-white-50">Saisissez vos numéros porte-bonheur</p>
+                    </div>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
-                <div class="modal-footer"><button type="submit" class="btn btn-primary">Enregistrer</button></div>
+
+                <div class="modal-body p-4 bg-light">
+
+                    <div class="mb-4">
+                        <label class="form-label text-uppercase text-muted fw-bold small" style="letter-spacing: 1px;">Date du tirage</label>
+                        <div class="input-group shadow-sm rounded-3 overflow-hidden bg-white">
+                            <span class="input-group-text bg-white border-0 ps-3"><i class="bi bi-calendar-event text-primary"></i></span>
+                            <input type="date" name="dateJeu" class="form-control border-0 fw-bold ps-2" required th:value="${#dates.format(#dates.createNow(), 'yyyy-MM-dd')}">
+                        </div>
+                    </div>
+
+                    <div class="mb-4">
+                        <label class="form-label text-uppercase text-muted fw-bold small d-flex justify-content-between">
+                            <span>Combinaison</span>
+                            <span class="text-primary" style="font-size: 0.7rem;">1-49</span>
+                        </label>
+
+                        <div class="d-flex justify-content-between align-items-center gap-2 mb-3">
+                            <input type="number" name="b1" class="form-control loto-ball-input animate-ball" placeholder="--" required min="1" max="49">
+                            <input type="number" name="b2" class="form-control loto-ball-input animate-ball" placeholder="--" required min="1" max="49">
+                            <input type="number" name="b3" class="form-control loto-ball-input animate-ball" placeholder="--" required min="1" max="49">
+                            <input type="number" name="b4" class="form-control loto-ball-input animate-ball" placeholder="--" required min="1" max="49">
+                            <input type="number" name="b5" class="form-control loto-ball-input animate-ball" placeholder="--" required min="1" max="49">
+
+                            <div style="width: 1px; height: 30px; background: #cbd5e1;"></div>
+
+                            <div class="position-relative">
+                                <input type="number" name="chance" class="form-control loto-ball-input chance-ball animate-ball" placeholder="C" required min="1" max="10">
+                                <span class="position-absolute top-0 start-100 translate-middle p-1 bg-danger border border-light rounded-circle" style="width: 10px; height: 10px;"></span>
+                            </div>
+                        </div>
+                        <div class="text-end text-muted small fst-italic mt-1" id="ball-feedback">Saisissez les numéros</div>
+                    </div>
+
+                    <div class="bg-white p-3 rounded-3 shadow-sm border d-flex align-items-center justify-content-between">
+                        <div>
+                            <label class="d-block text-uppercase text-muted fw-bold small mb-0">Mise</label>
+                            <small class="text-muted">Coût de la grille</small>
+                        </div>
+                        <div class="input-group w-auto">
+                            <input type="number" step="0.01" name="mise" class="form-control border-0 bg-light text-end fw-bold fs-5 text-dark" value="2.20" style="width: 80px;" required>
+                            <span class="input-group-text border-0 bg-light fw-bold">€</span>
+                        </div>
+                    </div>
+
+                </div>
+
+                <div class="modal-footer border-0 bg-light p-4 pt-0">
+                    <button type="button" class="btn btn-link text-muted text-decoration-none" data-bs-dismiss="modal">Annuler</button>
+                    <button type="submit" class="btn btn-primary fw-bold px-4 shadow-sm rounded-pill hover-scale">
+                        <i class="bi bi-check-lg me-2"></i>Valider la Grille
+                    </button>
+                </div>
             </form>
         </div>
     </div>
@@ -639,6 +692,47 @@
 <script src="https://cdn.jsdelivr.net/npm/driver.js@1.0.1/dist/driver.js.iife.js"></script>
 
 <script th:src="@{/js/app.js}"></script>
+
+<script>
+    // Validation du formulaire manuel
+    document.getElementById('formAddBetManuel').addEventListener('submit', function(e) {
+        const inputs = Array.from(this.querySelectorAll('.boule-input'));
+        const values = inputs.map(i => parseInt(i.value));
+        const chance = parseInt(this.querySelector('input[name="chance"]').value);
+
+        // 1. Vérifier les plages (Sécurité double)
+        const invalidBoule = values.find(v => v < 1 || v > 49);
+        if (invalidBoule) {
+            e.preventDefault();
+            alert("Les boules doivent être comprises entre 1 et 49.");
+            return;
+        }
+
+        if (chance < 1 || chance > 10) {
+            e.preventDefault();
+            alert("Le numéro chance doit être compris entre 1 et 10.");
+            return;
+        }
+
+        // 2. Vérifier les doublons
+        // On crée un Set (collection unique) et on compare la taille
+        const uniqueValues = new Set(values);
+        if (uniqueValues.size !== values.length) {
+            e.preventDefault();
+            alert("Impossible de valider : Vous avez joué plusieurs fois le même numéro !");
+        }
+    });
+
+    // Bonus : Empêcher de taper plus de 2 chiffres
+    document.querySelectorAll('.boule-input, input[name="chance"]').forEach(input => {
+        input.addEventListener('input', function() {
+            if (this.value.length > 2) this.value = this.value.slice(0, 2);
+            // Si on tape > 49, on remet à vide ou 49 (optionnel)
+            if (this.name !== 'chance' && parseInt(this.value) > 49) this.value = 49;
+            if (this.name === 'chance' && parseInt(this.value) > 10) this.value = 10;
+        });
+    });
+</script>
 
 <script>
     // Fonction utilitaire pour la modale de gain
@@ -978,6 +1072,98 @@
 
             if (!isNaN(finalValue)) {
                 animateValue(counter, 0, finalValue, 1500); // Durée 1.5s
+            }
+        });
+    });
+</script>
+
+<script>
+    document.addEventListener("DOMContentLoaded", function() {
+        const form = document.getElementById('formAddBetManuel');
+        if(!form) return;
+
+        const inputs = form.querySelectorAll('.loto-ball-input');
+        const feedback = document.getElementById('ball-feedback');
+
+        inputs.forEach((input, index) => {
+            // 1. Auto-Focus Next : Quand on tape 2 chiffres
+            input.addEventListener('input', function() {
+                // Nettoyage : que des chiffres
+                this.value = this.value.replace(/[^0-9]/g, '');
+
+                // Limite 49 (ou 10 pour chance)
+                const max = this.classList.contains('chance-ball') ? 10 : 49;
+                if(parseInt(this.value) > max) this.value = max;
+
+                // Saut au suivant si 2 caractères
+                if (this.value.length >= 2) {
+                    // On coupe si l'utilisateur a collé un truc trop long
+                    this.value = this.value.slice(0, 2);
+
+                    // Focus le suivant
+                    if (index < inputs.length - 1) {
+                        inputs[index + 1].focus();
+                    }
+                }
+
+                // Mise à jour feedback texte
+                updateFeedback();
+            });
+
+            // 2. Navigation Clavier (Flèches et Backspace)
+            input.addEventListener('keydown', function(e) {
+                // Backspace : Si vide, on remonte au précédent
+                if (e.key === 'Backspace' && this.value.length === 0 && index > 0) {
+                    inputs[index - 1].focus();
+                }
+                // Flèche Droite
+                if (e.key === 'ArrowRight' && index < inputs.length - 1) {
+                    inputs[index + 1].focus();
+                }
+                // Flèche Gauche
+                if (e.key === 'ArrowLeft' && index > 0) {
+                    inputs[index - 1].focus();
+                }
+            });
+
+            // 3. Selection automatique au focus
+            input.addEventListener('focus', function() {
+                this.select();
+            });
+        });
+
+        function updateFeedback() {
+            const filled = Array.from(inputs).filter(i => i.value.length > 0).length;
+            if(filled === 6) {
+                feedback.innerHTML = '<span class="text-success fw-bold"><i class="bi bi-check-all"></i> Grille complète !</span>';
+            } else {
+                feedback.textContent = `Numéros saisis : ${filled} / 6`;
+            }
+        }
+
+        // Validation finale (Anti-Doublons)
+        form.addEventListener('submit', function(e) {
+            const values = [];
+            let hasError = false;
+
+            // On ne vérifie que les 5 premières (boules normales)
+            for(let i=0; i<5; i++) {
+                const val = parseInt(inputs[i].value);
+                if(values.includes(val)) {
+                    inputs[i].classList.add('is-invalid', 'bg-danger', 'bg-opacity-10');
+                    hasError = true;
+                } else {
+                    inputs[i].classList.remove('is-invalid', 'bg-danger', 'bg-opacity-10');
+                    values.push(val);
+                }
+            }
+
+            if(hasError) {
+                e.preventDefault();
+                feedback.innerHTML = '<span class="text-danger fw-bold"><i class="bi bi-exclamation-triangle"></i> Doublons détectés !</span>';
+                // Secousse visuelle
+                form.classList.add('shake-animation'); // (Tu peux ajouter une keyframe shake si tu veux)
+                setTimeout(() => form.classList.remove('shake-animation'), 500);
             }
         });
     });

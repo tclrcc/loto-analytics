@@ -519,3 +519,73 @@ div.dataTables_length label {
     font-size: 0.85rem;
     display: inline-block;
 }
+
+/* --- DESIGN MODALE AJOUT GRILLE --- */
+
+/* Retire les flèches haut/bas des inputs number */
+.loto-ball-input::-webkit-outer-spin-button,
+.loto-ball-input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+.loto-ball-input {
+    -moz-appearance: textfield; /* Firefox */
+}
+
+/* Style de base de la boule */
+.loto-ball-input {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    text-align: center;
+    font-weight: 800;
+    font-size: 1.2rem;
+    border: 2px solid #e2e8f0;
+    background: white;
+    color: #1e293b;
+    padding: 0;
+    transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1); /* Effet rebond */
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+}
+
+/* Focus : La boule grandit et devient bleue */
+.loto-ball-input:focus {
+    border-color: #4F46E5;
+    box-shadow: 0 0 0 4px rgba(79, 70, 229, 0.15);
+    transform: translateY(-5px) scale(1.1);
+    z-index: 10;
+}
+
+/* La boule chance (Rouge) */
+.loto-ball-input.chance-ball {
+    border-color: #FECaca;
+    color: #DC2626;
+    background-color: #FEF2F2;
+}
+
+.loto-ball-input.chance-ball:focus {
+    border-color: #DC2626;
+    box-shadow: 0 0 0 4px rgba(220, 38, 38, 0.15);
+    background-color: white;
+}
+
+/* Animation d'entrée */
+.animate-ball {
+    opacity: 0;
+    animation: popIn 0.4s forwards;
+}
+.animate-ball:nth-child(1) { animation-delay: 0.1s; }
+.animate-ball:nth-child(2) { animation-delay: 0.15s; }
+.animate-ball:nth-child(3) { animation-delay: 0.2s; }
+.animate-ball:nth-child(4) { animation-delay: 0.25s; }
+.animate-ball:nth-child(5) { animation-delay: 0.3s; }
+.chance-ball { animation-delay: 0.4s; }
+
+@keyframes popIn {
+    from { opacity: 0; transform: scale(0.5); }
+    to { opacity: 1; transform: scale(1); }
+}
+
+/* Effet Hover sur le bouton valider */
+.hover-scale { transition: transform 0.2s; }
+.hover-scale:hover { transform: scale(1.05); }
