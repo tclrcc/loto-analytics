@@ -418,59 +418,104 @@ public class LotoService {
         return resultats;
     }
 
+    // ------------------------------------------------------------------------
+    // OPTIMISATION "ZERO ALLOCATION" : Utilisation de tableaux primitifs int[]
+    // ------------------------------------------------------------------------
+
     private List<Integer> genererGrilleOptimisee(List<Integer> hots, List<Integer> neutrals, List<Integer> colds, boolean[] isHot,
             boolean[] isCold, int[][] matrice, List<Integer> dernierTirage, List<List<Integer>> trios) {
-        List<Integer> selection = new ArrayList<>(5);
+        // 1. Buffer Primitif (évite de créer une ArrayList et des objets Integer inutilement)
+        int[] buffer = new int[5];
+        int size = 0;
         ThreadLocalRandom rng = ThreadLocalRandom.current();
 
+        // 2. Gestion Trio (Optimisée)
         if (trios != null && !trios.isEmpty() && rng.nextBoolean()) {
             for (int tryTrio = 0; tryTrio < 3; tryTrio++) {
                 List<Integer> trioChoisi = trios.get(rng.nextInt(trios.size()));
-                long communs = 0; for(int n:trioChoisi) if(dernierTirage.contains(n)) communs++;
-                if (communs < 2) { selection.addAll(trioChoisi); break; }
+
+                // Vérification rapide dernier tirage
+                int communs = 0;
+                if (dernierTirage != null) {
+                    for (Integer n : trioChoisi) {
+                        if (dernierTirage.contains(n)) communs++;
+                    }
+                }
+
+                // Si valide, on copie dans le buffer primitif
+                if (communs < 2) {
+                    for (Integer n : trioChoisi) buffer[size++] = n;
+                    break;
+                }
             }
         }
 
-        if (selection.isEmpty()) {
+        // 3. Base de départ si vide
+        if (size == 0) {
             if (!hots.isEmpty()) {
                 int h = hots.get(rng.nextInt(hots.size()));
-                if(!dernierTirage.contains(h)) selection.add(h);
-                else selection.add(1 + rng.nextInt(49));
+                if (dernierTirage == null || !dernierTirage.contains(h)) {
+                    buffer[size++] = h;
+                } else {
+                    buffer[size++] = 1 + rng.nextInt(49);
+                }
             } else {
-                selection.add(1 + rng.nextInt(49));
+                buffer[size++] = 1 + rng.nextInt(49);
             }
         }
 
-        while (selection.size() < 5) {
-            int nbHot = 0; int nbCold = 0;
-            for (Integer n : selection) { if (isHot[n]) nbHot++; else if (isCold[n]) nbCold++; }
+        // 4. Remplissage Rapide
+        while (size < 5) {
+            // Comptage Hot/Cold directement sur le tableau primitif (Très rapide)
+            int nbHot = 0;
+            int nbCold = 0;
+            for (int i = 0; i < size; i++) {
+                int n = buffer[i];
+                if (isHot[n]) nbHot++;
+                else if (isCold[n]) nbCold++;
+            }
+
             List<Integer> targetPool = (nbHot < 2) ? hots : (nbCold < 1 ? colds : neutrals);
             if (targetPool.isEmpty()) targetPool = hots;
 
-            Integer elu = selectionnerParAffiniteFast(targetPool, selection, matrice);
+            // Appel de la version primitive du sélecteur
+            int elu = selectionnerParAffiniteFastPrimitive(targetPool, buffer, size, matrice);
+
             if (elu == -1) {
-                int n = 1 + rng.nextInt(49); while(selection.contains(n)) n = 1 + rng.nextInt(49); selection.add(n);
+                // Fallback aléatoire avec check primitif
+                int n;
+                do {
+                    n = 1 + rng.nextInt(49);
+                } while (containsPrimitive(buffer, size, n));
+                buffer[size++] = n;
             } else {
-                selection.add(elu);
+                buffer[size++] = elu;
             }
         }
+
+        // 5. Conversion finale (La seule allocation d'objet de toute la méthode)
+        List<Integer> selection = new ArrayList<>(5);
+        for (int i = 0; i < 5; i++) selection.add(buffer[i]);
         return selection;
     }
 
-    // OPTIMISATION HOT PATH : Suppression du RNG imbriqué
-    private Integer selectionnerParAffiniteFast(List<Integer> candidats, List<Integer> selectionActuelle, int[][] matriceAffinites) {
+    /**
+     * Version optimisée de selectionnerParAffinite qui lit un int[] au lieu d'une List
+     */
+    private int selectionnerParAffiniteFastPrimitive(List<Integer> candidats, int[] selectionActuelle, int currentSize, int[][] matriceAffinites) {
         int meilleurCandidat = -1;
         double meilleurScore = -Double.MAX_VALUE;
-        // On retire le RNG d'ici pour gagner du temps CPU critique
-        // Le "chaos" est apporté par l'ordre de sélection initial et les buckets
 
-        for (Integer candidat : candidats) {
-            if (selectionActuelle.contains(candidat)) continue;
+        // Boucle indexée sur la liste pour éviter l'itérateur (micro-opt)
+        // Unboxing automatique
+        for (int candidat : candidats) {
+            if (containsPrimitive(selectionActuelle, currentSize, candidat))
+                continue;
 
             double scoreLien = 1.0;
-            for (Integer dejaPris : selectionActuelle) {
-                int affinite = matriceAffinites[dejaPris][candidat];
-                scoreLien += affinite; // Plus simple, plus rapide
+            // Lecture tableau primitif (Accès mémoire direct)
+            for (int j = 0; j < currentSize; j++) {
+                scoreLien += matriceAffinites[selectionActuelle[j]][candidat];
             }
 
             if (scoreLien > meilleurScore) {
@@ -479,6 +524,16 @@ public class LotoService {
             }
         }
         return meilleurCandidat;
+    }
+
+    /**
+     * Vérifie si une valeur existe dans le tableau primitif (remplace List.contains)
+     */
+    private boolean containsPrimitive(int[] arr, int size, int val) {
+        for (int i = 0; i < size; i++) {
+            if (arr[i] == val) return true;
+        }
+        return false;
     }
 
     private int selectionnerChanceRapide(List<Integer> boules, double[] scoresChanceArr, int[][] matriceChance) {
