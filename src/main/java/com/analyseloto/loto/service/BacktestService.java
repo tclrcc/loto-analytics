@@ -36,7 +36,7 @@ public class BacktestService {
     public BacktestService(@Lazy LotoService lotoService) {
         this.lotoService = lotoService;
         // Optimisation du générateur aléatoire pour le multithreading
-        System.setProperty("io.jenetics.util.defaultRandomGenerator", "ThreadLocalRandom");
+        System.setProperty("io.jenetics.util.defaultRandomGenerator", "L64X128StarStarRandom");
     }
 
     /**
