@@ -27,14 +27,13 @@ public class BacktestService {
     private final LotoService lotoService;
 
     // --- CONSTANTES OPTIMISÉES VPS-2 (6 vCores / 12Go RAM) ---
-    // Équilibrage pour un temps de calcul ~45-50 minutes
-    private static final int NB_GRILLES_PAR_TEST = 300;
-    private static final int DEPTH_BACKTEST = 500;
-    private static final int POPULATION_SIZE = 2500;
-    private static final int MAX_GENERATIONS = 150;
+    private static final int NB_GRILLES_PAR_TEST = 200;
+    private static final int DEPTH_BACKTEST = 450;
+    private static final int POPULATION_SIZE = 1000;
+    private static final int MAX_GENERATIONS = 70;
 
     // NOUVEAU : Taille du batch d'entrainement (Plus grand = Plus stable)
-    private static final int TRAINING_BATCH_SIZE = 350;
+    private static final int TRAINING_BATCH_SIZE = 120;
 
     public BacktestService(@Lazy LotoService lotoService) {
         this.lotoService = lotoService;
@@ -62,12 +61,12 @@ public class BacktestService {
 
         // 2. Génome (Plages de recherche affinées pour convergence rapide)
         Factory<Genotype<DoubleGene>> gtf = Genotype.of(
-                DoubleChromosome.of(0.0, 30.0),   // FreqJour
-                DoubleChromosome.of(0.0, 100.0),   // Forme
-                DoubleChromosome.of(0.0, 30.0),    // Ecart
-                DoubleChromosome.of(0.0, 80.0),   // Tension
-                DoubleChromosome.of(0.0, 80.0),   // Markov
-                DoubleChromosome.of(0.0, 80.0)    // Affinité
+                DoubleChromosome.of(0.0, 20.0),   // FreqJour
+                DoubleChromosome.of(0.0, 80.0),   // Forme
+                DoubleChromosome.of(0.0, 20.0),   // Ecart
+                DoubleChromosome.of(0.0, 60.0),   // Tension
+                DoubleChromosome.of(0.0, 60.0),   // Markov
+                DoubleChromosome.of(0.0, 60.0)    // Affinité
         );
 
         // Gestionnaire de Threads Dédié
@@ -81,8 +80,8 @@ public class BacktestService {
                     .survivorsSelector(new TournamentSelector<>(5))
                     .offspringSelector(new RouletteWheelSelector<>())
                     .alterers(
-                            new GaussianMutator<>(0.4), // Exploration
-                            new SwapMutator<>(0.2),     // Diversité (Petite dose)
+                            new GaussianMutator<>(0.45), // Exploration
+                            new SwapMutator<>(0.15),     // Diversité (Petite dose)
                             new MeanAlterer<>(0.4)      // Convergence
                     )
                     .build();
@@ -148,7 +147,7 @@ public class BacktestService {
             // OPTIMISATION 2 : Réduire la précision pendant l'entraînement
             // 200 grilles suffisent pour voir si une stratégie est prometteuse.
             // On ne génère les 500 grilles (NB_GRILLES_PAR_TEST) que pour le bilan final.
-            int grillesAProduire = modeEntrainement ? 250 : NB_GRILLES_PAR_TEST;
+            int grillesAProduire = modeEntrainement ? 200 : NB_GRILLES_PAR_TEST;
 
             // Appel optimisé
             List<List<Integer>> grilles = lotoService.genererGrillesDepuisScenario(scenar, config, grillesAProduire);
@@ -172,15 +171,14 @@ public class BacktestService {
                 boolean chanceMatch = (g.get(5) == bc);
 
                 if (modeEntrainement) {
-                    // MODE "SMART BOOST" 🧠
-                    // Objectif : Apprendre à gagner souvent (Rangs 3 et 4) plutôt que de rêver au Jackpot
-                    if (matches == 5) bilan += chanceMatch ? 50_000.0 : 10_000.0; // Jackpot réduit pour éviter le sur-fit
-                    else if (matches == 4) bilan += chanceMatch ? 4000.0 : 2000.0; // TRES VALORISÉ
-                    else if (matches == 3) bilan += chanceMatch ? 200.0 : 100.0;   // VALORISÉ (Régularité)
-                    else if (matches == 2) bilan += chanceMatch ? 20.0 : 10.0;     // Remboursement
+                    // MODE BOOST "Régularité" (Favorise les petits gains fréquents)
+                    if (matches == 5) bilan += chanceMatch ? 50_000.0 : 10_000.0;
+                    else if (matches == 4) bilan += chanceMatch ? 4000.0 : 2000.0;
+                    else if (matches == 3) bilan += chanceMatch ? 200.0 : 100.0;
+                    else if (matches == 2) bilan += chanceMatch ? 20.0 : 10.0;
                     else if (chanceMatch) bilan += 4.0;
                 } else {
-                    // MODE RÉEL (Gains FDJ)
+                    // MODE RÉEL
                     if (matches == 5) bilan += chanceMatch ? 2000000.0 : 100000.0;
                     else if (matches == 4) bilan += chanceMatch ? 1000.0 : 500.0;
                     else if (matches == 3) bilan += chanceMatch ? 50.0 : 20.0;
@@ -192,7 +190,7 @@ public class BacktestService {
 
         double resultat = bilan - depense;
         // Pénalité "Anti-Suicide" : Si la stratégie perd trop d'argent, on la tue
-        if (modeEntrainement && resultat < -depense * 0.4) {
+        if (modeEntrainement && resultat < -depense * 0.5) {
             return resultat * 1.5;
         }
         return resultat;
