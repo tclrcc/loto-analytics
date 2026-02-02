@@ -16,20 +16,27 @@ import java.util.concurrent.Executors;
 @Service
 @Slf4j
 public class BacktestService {
+    // --- BLOC DE SÉCURITÉ ---
+    // On force l'utilisation du générateur standard "Random" (java.util.Random)
+    // dès le chargement de la classe pour éviter le crash "No implementation found".
+    static {
+        System.setProperty("io.jenetics.util.defaultRandomGenerator", "Random");
+    }
+
     // Services
     private final LotoService lotoService;
 
     // --- CONSTANTES OPTIMISÉES VPS-2 (6 vCores / 12Go RAM) ---
     // Équilibrage pour un temps de calcul ~45-50 minutes
 
-    // On teste 300 grilles par scénario (Suffisant pour la loi des grands nombres)
-    private static final int NB_GRILLES_PAR_TEST = 300;
+    // On teste 500 grilles par scénario (Suffisant pour la loi des grands nombres)
+    private static final int NB_GRILLES_PAR_TEST = 500;
     // On garde une profondeur historique solide
     private static final int DEPTH_BACKTEST = 450;
     // 60 générations suffisent généralement pour converger
-    private static final int MAX_GENERATIONS = 60;
+    private static final int MAX_GENERATIONS = 80;
     // Population plus large pour explorer plus de pistes, mais raisonnable
-    private static final int POPULATION_SIZE = 600;
+    private static final int POPULATION_SIZE = 1000;
 
     public BacktestService(@Lazy LotoService lotoService) {
         this.lotoService = lotoService;
@@ -57,12 +64,12 @@ public class BacktestService {
 
         // 2. Génome (Plages de recherche affinées pour convergence rapide)
         Factory<Genotype<DoubleGene>> gtf = Genotype.of(
-                DoubleChromosome.of(0.0, 10.0),   // FreqJour
-                DoubleChromosome.of(5.0, 60.0),   // Forme
-                DoubleChromosome.of(0.1, 8.0),    // Ecart
-                DoubleChromosome.of(5.0, 40.0),   // Tension
-                DoubleChromosome.of(0.0, 40.0),   // Markov
-                DoubleChromosome.of(1.0, 30.0)    // Affinité
+                DoubleChromosome.of(0.0, 15.0),   // FreqJour
+                DoubleChromosome.of(5.0, 80.0),   // Forme
+                DoubleChromosome.of(0.1, 10.0),    // Ecart
+                DoubleChromosome.of(5.0, 50.0),   // Tension
+                DoubleChromosome.of(0.0, 50.0),   // Markov
+                DoubleChromosome.of(1.0, 40.0)    // Affinité
         );
 
         // Gestionnaire de Threads Dédié
