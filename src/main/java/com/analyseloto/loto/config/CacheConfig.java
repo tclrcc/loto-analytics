@@ -21,7 +21,7 @@ public class CacheConfig {
         cacheManager.registerCustomCache("pronosticsIA",
                 Caffeine.newBuilder()
                         .maximumSize(500)
-                        .refreshAfterWrite(24, TimeUnit.HOURS)
+                        .expireAfterWrite(24, TimeUnit.HOURS)
                         .recordStats() // ✅ On active les stats partout
                         .build());
 
@@ -29,7 +29,7 @@ public class CacheConfig {
         cacheManager.registerCustomCache("pronosticsAstro",
                 Caffeine.newBuilder()
                         .maximumSize(500)
-                        .refreshAfterWrite(24, TimeUnit.HOURS)
+                        .expireAfterWrite(24, TimeUnit.HOURS)
                         .recordStats() // ✅ Ajouté
                         .build());
 
@@ -37,7 +37,7 @@ public class CacheConfig {
         cacheManager.registerCustomCache("statsGlobales",
                 Caffeine.newBuilder()
                         .maximumSize(10)
-                        .refreshAfterWrite(24, TimeUnit.HOURS)
+                        .expireAfterWrite(24, TimeUnit.HOURS)
                         .recordStats() // ✅ Ajouté (Supprime le warning)
                         .build());
 
@@ -45,7 +45,7 @@ public class CacheConfig {
         cacheManager.registerCustomCache("algoConfig",
                 Caffeine.newBuilder()
                         .maximumSize(1)
-                        .refreshAfterWrite(1, TimeUnit.HOURS)
+                        .expireAfterWrite(1, TimeUnit.HOURS)
                         .recordStats() // ✅ Ajouté
                         .build());
 
