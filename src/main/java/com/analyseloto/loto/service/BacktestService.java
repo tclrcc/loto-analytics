@@ -9,6 +9,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -42,14 +43,18 @@ public class BacktestService {
     /**
      * Recherche de la meilleure configuration de l'algorithme
      */
-    public LotoService.AlgoConfig trouverMeilleureConfig(List<LotoTirage> historiqueComplet) {
-        log.info("🧬 Démarrage de la Méta-Optimisation IA (Deep Learning)...");
+    // DANS BacktestService.java
+
+    public List<LotoService.AlgoConfig> trouverMeilleuresConfigs(List<LotoTirage> historiqueComplet) {
+        log.info("🧬 Démarrage de la Méta-Optimisation IA (Deep Learning / Ensemble)...");
         long start = System.currentTimeMillis();
 
         // 1. Préparation des scénarios
         List<LotoService.ScenarioSimulation> scenarios = lotoService.preparerScenariosBacktest(historiqueComplet, 500, DEPTH_BACKTEST);
 
-        if (scenarios.isEmpty()) return LotoService.AlgoConfig.defaut();
+        if (scenarios.isEmpty()) {
+            return List.of(LotoService.AlgoConfig.defaut());
+        }
 
         // DÉTECTION AUTOMATIQUE DES CŒURS (VPS Scalable)
         int availableProcessors = Runtime.getRuntime().availableProcessors();
@@ -80,51 +85,70 @@ public class BacktestService {
                     .survivorsSelector(new TournamentSelector<>(5))
                     .offspringSelector(new RouletteWheelSelector<>())
                     .alterers(
-                            new GaussianMutator<>(0.15), // Exploration
-                            new SwapMutator<>(0.15),     // Diversité (Petite dose)
-                            new MeanAlterer<>(0.6)      // Convergence
+                            new GaussianMutator<>(0.15), // Exploration (Réduit pour stabilité)
+                            new SwapMutator<>(0.15),     // Diversité
+                            new MeanAlterer<>(0.6)       // Convergence (Consensus)
                     )
                     .build();
 
-            // 4. Exécution
-            Phenotype<DoubleGene, Double> bestPhenotype = engine.stream()
+            // 4. Exécution et récupération de TOUTE la population finale
+            EvolutionResult<DoubleGene, Double> result = engine.stream()
                     .limit(MAX_GENERATIONS)
                     .peek(r -> {
-                        // Log toutes les 10 générations pour ne pas spammer
+                        // Log toutes les 5 générations
                         if (r.generation() % 5 == 0 || r.generation() == 1) {
-                            log.info("🏁 Gen {}/{} - Bilan: {} € (Meilleur Fitness)",
+                            log.info("🏁 Gen {}/{} - Bilan Top 1: {} (Fitness)",
                                     r.generation(), MAX_GENERATIONS, String.format("%.2f", r.bestFitness()));
                         }
                     })
-                    .collect(EvolutionResult.toBestPhenotype());
+                    .collect(EvolutionResult.toBestEvolutionResult()); // On garde tout le résultat, pas juste le meilleur
 
-            // Décoder la meilleure configuration
-            LotoService.AlgoConfig gagnante = decoderGenotype(bestPhenotype.genotype(), "AUTO_ML_VPS_V2");
+            // 5. Extraction et Filtrage "Ensemble Elite"
+            log.info("📊 Extraction des stratégies 'Elite' pour le consensus...");
 
-            log.info("📊 Calcul du Bilan Financier RÉEL (sans les boosts IA)...");
+            List<Phenotype<DoubleGene, Double>> sortedPopulation = result.population().stream()
+                    .sorted((p1, p2) -> Double.compare(p2.fitness(), p1.fitness())) // Tri décroissant (Meilleur en premier)
+                    .toList();
 
-            // On recalcule le bilan sans les multiplicateurs artificiels
-            double bilanReel = evaluerFitness(bestPhenotype.genotype(), scenarios, false);
+            List<LotoService.AlgoConfig> topConfigs = new ArrayList<>();
+            int count = 0;
 
-            int nbTirages = scenarios.size();
-            double coutTotal = nbTirages * NB_GRILLES_PAR_TEST * 2.20;
-            double roiReel = 0.0;
-            if (coutTotal > 0) {
-                roiReel = (bilanReel / coutTotal) * 100.0;
+            for (Phenotype<DoubleGene, Double> phenotype : sortedPopulation) {
+                // On s'arrête si on a nos 20 experts
+                if (topConfigs.size() >= 20) break;
+
+                LotoService.AlgoConfig candidat = decoderGenotype(phenotype.genotype(), "ELITE_" + (++count));
+
+                // FILTRE DE DIVERSITÉ : On évite les doublons quasi-identiques
+                // Si une config existante est trop proche de la candidate, on ignore la candidate.
+                boolean isTooSimilar = topConfigs.stream().anyMatch(existing ->
+                        Math.abs(existing.getPoidsForme() - candidat.getPoidsForme()) < 0.5 &&
+                                Math.abs(existing.getPoidsEcart() - candidat.getPoidsEcart()) < 0.5 &&
+                                Math.abs(existing.getPoidsAffinite() - candidat.getPoidsAffinite()) < 0.5
+                );
+
+                if (!isTooSimilar) {
+                    // Calcul rapide des stats réelles pour information (sur le Top 1 seulement pour pas ralentir)
+                    if (topConfigs.isEmpty()) {
+                        double bilanReel = evaluerFitness(phenotype.genotype(), scenarios, false);
+                        int nbTirages = scenarios.size();
+                        double coutTotal = nbTirages * NB_GRILLES_PAR_TEST * 2.20;
+                        double roiReel = (coutTotal > 0) ? (bilanReel / coutTotal) * 100.0 : 0.0;
+
+                        candidat.setBilanEstime(bilanReel);
+                        candidat.setRoiEstime(roiReel);
+                        log.info("🥇 Leader du groupe : ROI Réel estimé à {}%", String.format("%.2f", roiReel));
+                    }
+
+                    topConfigs.add(candidat);
+                }
             }
 
-            gagnante.setBilanEstime(bilanReel);
-            gagnante.setNbTiragesTestes(nbTirages);
-            gagnante.setNbGrillesParTest(NB_GRILLES_PAR_TEST);
-            gagnante.setRoiEstime(roiReel);
-
             long duration = (System.currentTimeMillis() - start) / 1000;
-            log.info("🏆 Terminé en {}s. ROI RÉEL: {}% (Bilan: {} €)", duration, String.format("%.2f", roiReel), String.format("%.2f", bilanReel));
+            log.info("🏆 Terminé en {}s. {} Stratégies uniques retenues pour le vote.", duration, topConfigs.size());
 
-            return gagnante;
-
+            return topConfigs;
         } finally {
-            // Toujours fermer l'executor pour libérer les ressources système
             executor.shutdown();
         }
     }

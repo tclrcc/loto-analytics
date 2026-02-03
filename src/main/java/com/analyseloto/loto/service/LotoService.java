@@ -44,7 +44,7 @@ public class LotoService {
     private final BitMaskService bitMaskService;
 
     // --- VARIABLES DU CACHE MANUEL (Architecture Stateful) ---
-    private volatile AlgoConfig cachedBestConfig = null;
+    private volatile List<AlgoConfig> cachedEliteConfigs = new ArrayList<>();
     private volatile LocalDate lastBacktestDate = null;
     private volatile StatsReponse cachedGlobalStats = null;
     private final AtomicReference<List<PronosticResultDto>> cachedDailyPronosRef = new AtomicReference<>();
@@ -111,6 +111,7 @@ public class LotoService {
     }
 
     @AllArgsConstructor
+    @Data
     private static class GrilleCandidate implements Serializable {
         @Serial private static final long serialVersionUID = 1L;
         List<Integer> boules;
@@ -151,72 +152,126 @@ public class LotoService {
     // 1. INITIALISATION & CONFIG
     // ==================================================================================
 
+    // DANS LotoService.java
+
     @EventListener(ApplicationReadyEvent.class)
     public void initConfigFromDb() {
         log.info("🔌 Démarrage : Recherche stratégie en base...");
+
+        // Note : Attention à la typo dans votre repository "Repostiroy" ;)
         strategyConfigRepostiroy.findTopByOrderByDateCalculDesc().ifPresentOrElse(
                 last -> {
-                    this.cachedBestConfig = new AlgoConfig(
-                            last.getNomStrategie(), last.getPoidsFreqJour(), last.getPoidsForme(),
-                            last.getPoidsEcart(), last.getPoidsTension(), last.getPoidsMarkov(),
-                            last.getPoidsAffinite(), false
+                    // 1. Reconstruction du Leader depuis la BDD
+                    AlgoConfig leader = new AlgoConfig(
+                            last.getNomStrategie(),
+                            last.getPoidsFreqJour(),
+                            last.getPoidsForme(),
+                            last.getPoidsEcart(),
+                            last.getPoidsTension(),
+                            last.getPoidsMarkov(),
+                            last.getPoidsAffinite(),
+                            false
                     );
-                    this.cachedBestConfig.setBilanEstime(last.getBilanEstime());
-                    this.lastBacktestDate = last.getDateCalcul().atZone(ZoneId.systemDefault())
-                            .withZoneSameInstant(ZONE_PARIS).toLocalDate();
-                    log.info("✅ Stratégie chargée (Date: {}).", this.lastBacktestDate);
+
+                    // 2. Récupération des stats historiques
+                    leader.setBilanEstime(last.getBilanEstime());
+                    leader.setNbTiragesTestes(last.getNbTiragesTestes());
+                    leader.setNbGrillesParTest(last.getNbGrillesParTest());
+                    leader.setRoiEstime(last.getRoi()); // Attention au nom du getter dans l'entité
+
+                    // 3. Mise à jour de la date de référence
+                    if (last.getDateCalcul() != null) {
+                        this.lastBacktestDate = last.getDateCalcul()
+                                .atZone(ZoneId.systemDefault())
+                                .withZoneSameInstant(ZONE_PARIS)
+                                .toLocalDate();
+                    } else {
+                        this.lastBacktestDate = LocalDate.now(ZONE_PARIS);
+                    }
+
+                    // 4. ADAPTATION LISTE : On met le Leader seul dans la liste des experts
+                    // Le système tournera avec 1 seul expert jusqu'au prochain calcul nocturne.
+                    this.cachedEliteConfigs = new ArrayList<>(List.of(leader));
+
+                    log.info("✅ Stratégie Leader chargée (Date: {}). Mode 'Solo' activé en attendant le recalcule complet.", this.lastBacktestDate);
                 },
-                () -> log.warn("⚠️ Base vide : Calcul requis.")
+                () -> log.warn("⚠️ Base vide : Calcul requis au démarrage.")
         );
     }
 
     public void verificationAuDemarrage() {
         LocalDate todayParis = LocalDate.now(ZONE_PARIS);
-        if (this.cachedBestConfig != null && todayParis.equals(this.lastBacktestDate)) {
-            log.info("✋ [WARMUP] Stratégie du {} déjà en mémoire. OK.", todayParis);
+
+        // On vérifie si la liste des experts est présente et à jour
+        if (this.cachedEliteConfigs != null && !this.cachedEliteConfigs.isEmpty() && todayParis.equals(this.lastBacktestDate)) {
+            log.info("✋ [WARMUP] Stratégies Ensemble ({} experts) du {} déjà en mémoire. OK.", this.cachedEliteConfigs.size(), todayParis);
+            // On lance un petit calcul pour être sûr que tout est chaud
             genererMultiplesPronostics(recupererDateProchainTirage(), 5);
             return;
         }
-        log.info("⚠️ [WARMUP] Stratégie obsolète. Lancement optimisation !");
+
+        log.info("⚠️ [WARMUP] Stratégies obsolètes ou absentes. Lancement optimisation complète !");
         forceDailyOptimization();
     }
 
     public AlgoConfig recupererMeilleureConfig() {
-        return Objects.requireNonNullElseGet(this.cachedBestConfig, AlgoConfig::defaut);
+        // Si on a une équipe, le chef est à l'index 0 (car la liste est triée par fitness)
+        if (this.cachedEliteConfigs != null && !this.cachedEliteConfigs.isEmpty()) {
+            return this.cachedEliteConfigs.get(0);
+        }
+        // Sinon, retour de la config par défaut
+        return AlgoConfig.defaut();
     }
 
     public void forceDailyOptimization() {
         log.info("🌙 [CRON] Optimisation en cours...");
+
+        // Reset des caches
         this.cachedGlobalStats = null;
         cachedDailyPronosRef.set(null);
+
         List<LotoTirageRepository.TirageMinimal> rawData = repository.findAllOptimized();
         List<LotoTirage> historyLight = rawData.stream().map(this::mapToLightEntity).toList();
 
         if (!historyLight.isEmpty()) {
-            AlgoConfig newConfig = backtestService.trouverMeilleureConfig(historyLight);
-            this.cachedBestConfig = newConfig;
+            List<AlgoConfig> newConfigs = backtestService.trouverMeilleuresConfigs(historyLight);
+
+            // 2. Mise en cache de l'équipe complète (pour le consensus)
+            this.cachedEliteConfigs = newConfigs;
             this.lastBacktestDate = LocalDate.now(ZONE_PARIS);
 
-            log.info("✅ [UPDATE] Nouvelle stratégie appliquée en RAM : {}", newConfig.getNomStrategie());
+            if (newConfigs.isEmpty()) {
+                log.warn("⚠️ Aucune stratégie trouvée. Utilisation défaut.");
+                return;
+            }
 
+            // 3. On prend le "Capitaine" (le meilleur) pour l'historique DB
+            AlgoConfig leader = newConfigs.get(0);
+
+            log.info("✅ [UPDATE] {} Stratégies chargées en RAM. Leader : {}", newConfigs.size(), leader.getNomStrategie());
+
+            // 4. Sauvegarde du Leader en BDD (Pour suivi ROI)
             StrategyConfig entity = new StrategyConfig();
             entity.setDateCalcul(LocalDateTime.now(ZONE_PARIS));
-            entity.setNomStrategie(newConfig.getNomStrategie());
-            entity.setPoidsForme(newConfig.getPoidsForme());
-            entity.setPoidsEcart(newConfig.getPoidsEcart());
-            entity.setPoidsAffinite(newConfig.getPoidsAffinite());
-            entity.setPoidsMarkov(newConfig.getPoidsMarkov());
-            entity.setPoidsTension(newConfig.getPoidsTension());
-            entity.setPoidsFreqJour(newConfig.getPoidsFreqJour());
-            entity.setBilanEstime(newConfig.getBilanEstime());
-            entity.setNbTiragesTestes(newConfig.getNbTiragesTestes());
-            entity.setNbGrillesParTest(newConfig.getNbGrillesParTest());
-            entity.setRoi(newConfig.getRoiEstime());
+            entity.setNomStrategie(leader.getNomStrategie() + " (Leader Ensemble)"); // Petit suffixe pour info
+            entity.setPoidsForme(leader.getPoidsForme());
+            entity.setPoidsEcart(leader.getPoidsEcart());
+            entity.setPoidsAffinite(leader.getPoidsAffinite());
+            entity.setPoidsMarkov(leader.getPoidsMarkov());
+            entity.setPoidsTension(leader.getPoidsTension());
+            entity.setPoidsFreqJour(leader.getPoidsFreqJour());
+            entity.setBilanEstime(leader.getBilanEstime());
+            entity.setNbTiragesTestes(leader.getNbTiragesTestes());
+            entity.setNbGrillesParTest(leader.getNbGrillesParTest());
+            entity.setRoi(leader.getRoiEstime());
+
             strategyConfigRepostiroy.save(entity);
 
-            log.info("🔥 [WARMUP] Préchauffage des pronostics...");
+            // 5. Préchauffage (Génération immédiate des pronostics du lendemain)
+            log.info("🔥 [WARMUP] Préchauffage des pronostics Consensus...");
             genererMultiplesPronostics(recupererDateProchainTirage(), 10);
-            log.info("💾 [DB] Stratégie sauvegardée. ROI: {}%", String.format("%.2f", newConfig.getRoiEstime()));
+
+            log.info("💾 [DB] Stratégie Leader sauvegardée. ROI Estimé: {}%", String.format("%.2f", leader.getRoiEstime()));
         }
     }
 
@@ -238,20 +293,212 @@ public class LotoService {
 
     public List<PronosticResultDto> genererMultiplesPronostics(LocalDate dateCible, int nombreGrilles) {
         long startTotal = System.currentTimeMillis();
+
+        // 1. GESTION DU CACHE (Inchangé)
         List<PronosticResultDto> cached = cachedDailyPronosRef.get();
         if (cached != null && dateCible.equals(dateCachedPronos) && cached.size() >= nombreGrilles) {
-            log.info("⚡ [CACHE] Pronostics récupérés instantanément en {} ms.", (System.currentTimeMillis() - startTotal));
+            log.info("⚡ [CACHE] Pronostics (Consensus) récupérés instantanément en {} ms.", (System.currentTimeMillis() - startTotal));
             return cached.subList(0, nombreGrilles);
         }
 
-        log.info("⚙️ [CALCUL IA] Démarrage génération fraîche pour le {}...", dateCible);
-        List<PronosticResultDto> newsPronos = genererPronosticAvecConfig(dateCible, Math.max(nombreGrilles, 10), null);
-        cachedDailyPronosRef.set(newsPronos);
+        log.info("⚙️ [CONSENSUS IA] Démarrage du Conseil des Sages pour le {}...", dateCible);
+
+        // 2. PRÉPARATION DES DONNÉES COMMUNES (Une seule fois pour tout le monde !)
+        // On charge l'historique une fois
+        List<LotoTirageRepository.TirageMinimal> rawData = repository.findAllOptimized();
+        List<LotoTirage> history = rawData.stream().map(this::mapToLightEntity).toList();
+        if (history.isEmpty()) return new ArrayList<>();
+
+        List<Integer> dernierTirage = history.get(0).getBoules();
+        int etatDernierTirage = calculerEtatAbstrait(dernierTirage);
+
+        // CALCULS PARALLÈLES DES MATRICES INVARIANTES (Lourds mais faits 1 seule fois)
+        // Ces données ne dépendent pas de la config, donc on les partage entre tous les experts.
+        CompletableFuture<Set<Integer>> hotFinalesFuture = CompletableFuture.supplyAsync(() -> detecterFinalesChaudes(history));
+        CompletableFuture<List<List<Integer>>> triosFuture = CompletableFuture.supplyAsync(() -> getTopTriosRecents(history));
+        CompletableFuture<int[][]> affFuture = CompletableFuture.supplyAsync(() -> construireMatriceAffinitesDirecte(history, dateCible.getDayOfWeek()));
+        CompletableFuture<int[][]> chanceFuture = CompletableFuture.supplyAsync(() -> construireMatriceChanceDirecte(history, dateCible.getDayOfWeek()));
+        CompletableFuture<double[][]> markovFuture = CompletableFuture.supplyAsync(() -> precalculerMatriceMarkov(history));
+        CompletableFuture<DynamicConstraints> contraintesFuture = CompletableFuture.supplyAsync(() -> analyserContraintesDynamiques(history));
+
+        // On attend que tout soit prêt
+        CompletableFuture.allOf(hotFinalesFuture, triosFuture, affFuture, chanceFuture, markovFuture, contraintesFuture).join();
+
+        // Récupération des résultats invariants
+        Set<Integer> hotFinales = hotFinalesFuture.join();
+        List<List<Integer>> topTriosDuJour = triosFuture.join();
+        int[][] matriceAffinitesArr = affFuture.join();
+        int[][] matriceChanceArr = chanceFuture.join();
+        double[][] matriceMarkov = markovFuture.join();
+        DynamicConstraints contraintesDuJour = contraintesFuture.join();
+        Set<Long> historiqueBitMasks = new HashSet<>(history.size());
+
+        for(int i=0; i<Math.min(history.size(), 300); i++) {
+            historiqueBitMasks.add(bitMaskService.calculerBitMask(history.get(i).getBoules()));
+        }
+
+        List<AlgoConfig> eliteConfigs;
+        // Si on a déjà calculé les configs aujourd'hui, on utilise la RAM (Instant)
+        if (this.cachedEliteConfigs != null && !this.cachedEliteConfigs.isEmpty() && LocalDate.now(ZONE_PARIS).equals(this.lastBacktestDate)) {
+            eliteConfigs = this.cachedEliteConfigs;
+            log.info("⚡ [CACHE] Utilisation des {} experts en mémoire RAM.", eliteConfigs.size());
+        } else {
+            // Sinon (premier lancement ou reboot), on calcule (Lourd)
+            log.info("⚠️ [CACHE MISS] Calcul des stratégies nécessaire...");
+            eliteConfigs = backtestService.trouverMeilleuresConfigs(history);
+            this.cachedEliteConfigs = eliteConfigs; // On met à jour le cache
+            this.lastBacktestDate = LocalDate.now(ZONE_PARIS);
+        }
+
+        // Structures pour le vote (Thread-Safe, car remplies en parallèle)
+        Map<Set<Integer>, Integer> votesGrilles = new java.util.concurrent.ConcurrentHashMap<>();
+        Map<Set<Integer>, Double> scoresCumules = new java.util.concurrent.ConcurrentHashMap<>();
+
+        log.info("🗳️ [VOTE] Lancement de la génération parallèle avec {} experts...", eliteConfigs.size());
+
+        // 4. GÉNÉRATION PARALLÈLE (Chaque expert propose ses grilles)
+        eliteConfigs.parallelStream().forEach(config -> {
+            // a. Calcul des scores spécifiques à CETTE config (Chaque expert a sa vision des poids)
+            // Note: boostNumbers est vide ici car c'est de l'IA pure, pas de l'Astro
+            double[] scoresBoules = calculerScoresOptimise(history, 49, dateCible.getDayOfWeek(), false, Collections.emptyList(), hotFinales, config, dernierTirage);
+            double[] scoresChance = calculerScoresOptimise(history, 10, dateCible.getDayOfWeek(), true, Collections.emptyList(), Collections.emptySet(), config, null);
+
+            // b. Buckets & Primitives
+            Map<String, List<Integer>> buckets = creerBucketsOptimises(scoresBoules);
+            int[] hots = buckets.getOrDefault(Constantes.BUCKET_HOT, Collections.emptyList()).stream().mapToInt(i->i).toArray();
+            int[] neutrals = buckets.getOrDefault(Constantes.BUCKET_NEUTRAL, Collections.emptyList()).stream().mapToInt(i->i).toArray();
+            int[] colds = buckets.getOrDefault(Constantes.BUCKET_COLD, Collections.emptyList()).stream().mapToInt(i->i).toArray();
+            boolean[] isHot = new boolean[51]; boolean[] isCold = new boolean[51];
+            for(int n : buckets.get(Constantes.BUCKET_HOT)) isHot[n] = true;
+            for(int n : buckets.get(Constantes.BUCKET_COLD)) isCold[n] = true;
+
+            // c. L'expert génère ses grilles (On génère ~30 grilles par expert)
+            List<GrilleCandidate> proposals = executerAlgorithmeGenetique(
+                    hots, neutrals, colds, isHot, isCold,
+                    matriceAffinitesArr, dernierTirage, topTriosDuJour, scoresBoules, scoresChance,
+                    matriceChanceArr, contraintesDuJour, config, historiqueBitMasks, matriceMarkov, etatDernierTirage
+            );
+
+            // d. Enregistrement des votes (Top 30 de cet expert)
+            int limitVote = Math.min(proposals.size(), 30);
+            for(int i=0; i<limitVote; i++) {
+                GrilleCandidate cand = proposals.get(i);
+                Set<Integer> key = new HashSet<>(cand.getBoules()); // Set pour unicité
+
+                votesGrilles.merge(key, 1, Integer::sum);
+                scoresCumules.merge(key, cand.getFitness(), Double::sum);
+            }
+        });
+
+        // 5. DÉPOUILLEMENT DU SCRUTIN (Consensus)
+        List<PronosticResultDto> resultatsConsensus = new ArrayList<>();
+
+        // SEUIL DE CONSENSUS : Une grille doit être trouvée par au moins 15% des experts
+        // Avec 20 experts, il faut au moins 3 votes.
+        int seuilVote = Math.max(2, eliteConfigs.size() / 6);
+
+        for (Map.Entry<Set<Integer>, Integer> entry : votesGrilles.entrySet()) {
+            int nbVotes = entry.getValue();
+            if (nbVotes >= seuilVote) {
+                Set<Integer> boulesSet = entry.getKey();
+                List<Integer> boulesList = new ArrayList<>(boulesSet);
+                Collections.sort(boulesList);
+
+                // Score Consensus = Moyenne des fitness * Bonus de confiance (Unanimité)
+                double scoreMoyen = scoresCumules.get(boulesSet) / nbVotes;
+                double confiance = 1.0 + (nbVotes * 0.15); // +15% par vote supplémentaire
+                double finalScore = scoreMoyen * confiance;
+
+                // On recalcule le meilleur numéro chance pour cette combinaison spécifique
+                // (On utilise la moyenne des matrices chances)
+                int chanceConsensus = selectionnerChancePourConsensus(boulesList, matriceChanceArr);
+
+                // Simulation rapide pour les infos d'affichage
+                SimulationResultDto simu = simulerGrilleDetaillee(boulesList, dateCible, history);
+                double maxDuo = simu.getPairs().stream().mapToDouble(MatchGroup::getRatio).max().orElse(0.0);
+
+                resultatsConsensus.add(new PronosticResultDto(
+                        boulesList, chanceConsensus,
+                        Math.round(finalScore * 100.0) / 100.0,
+                        maxDuo, 0.0, // Ecart max pas calculé ici pour perf
+                        !simu.getQuintuplets().isEmpty(),
+                        "CONSENSUS (Votes: " + nbVotes + "/" + eliteConfigs.size() + ")"
+                ));
+            }
+        }
+
+        // 6. TRI ET SÉLECTION FINALE
+        // On trie par score consensus décroissant
+        resultatsConsensus.sort((p1, p2) -> Double.compare(p2.getScoreFitness(), p1.getScoreFitness()));
+
+        // 6. GESTION DU FALLBACK (Plan de Secours)
+        if (resultatsConsensus.isEmpty()) {
+            log.warn("⚠️ [FALLBACK] Aucun consensus strict (Seuil: {}). Bascule sur les meilleurs scores individuels.", seuilVote);
+
+            // On abaisse le seuil à 1 (on accepte tout le monde)
+            // Mais on va trier drastiquement par score pur
+            for (Map.Entry<Set<Integer>, Integer> entry : votesGrilles.entrySet()) {
+                Set<Integer> boulesSet = entry.getKey();
+
+                // On récupère le score brut cumulé.
+                // Note : Si 1 seul vote, scoreCumulé = scoreFitness de l'unique expert.
+                double rawScore = scoresCumules.get(boulesSet);
+
+                List<Integer> boulesList = new ArrayList<>(boulesSet);
+                Collections.sort(boulesList);
+
+                // On recalcule le numéro chance
+                int chanceConsensus = selectionnerChancePourConsensus(boulesList, matriceChanceArr);
+
+                // Simulation rapide
+                SimulationResultDto simu = simulerGrilleDetaillee(boulesList, dateCible, history);
+                double maxDuo = simu.getPairs().stream().mapToDouble(MatchGroup::getRatio).max().orElse(0.0);
+
+                resultatsConsensus.add(new PronosticResultDto(
+                        boulesList, chanceConsensus,
+                        Math.round(rawScore * 100.0) / 100.0,
+                        maxDuo, 0.0,
+                        !simu.getQuintuplets().isEmpty(),
+                        "TOP_INDIVIDUEL (Score: " + String.format("%.1f", rawScore) + ")"
+                ));
+            }
+        }
+
+        // 7. TRI ET SÉLECTION FINALE (Commun aux deux modes)
+        // On trie par score décroissant pour garder la crème de la crème
+        // Si on est en mode Consensus : les bonus de confiance feront remonter les grilles votées.
+        // Si on est en mode Fallback : le score brut fera remonter les meilleures grilles individuelles.
+        resultatsConsensus.sort((p1, p2) -> Double.compare(p2.getScoreFitness(), p1.getScoreFitness()));
+
+        // Sécurité ultime : Si vraiment vide (0 expert n'a généré 0 grille ??? Impossible mais bon)
+        if (resultatsConsensus.isEmpty()) {
+            log.error("🚨 [CRITIQUE] Panne sèche des experts. Génération d'urgence.");
+            // Appel d'urgence à la méthode simple non-optimisée ou retour vide
+            return new ArrayList<>();
+        }
+
+        cachedDailyPronosRef.set(resultatsConsensus);
+        this.dateCachedPronos = dateCible;
+
+        cachedDailyPronosRef.set(resultatsConsensus);
         this.dateCachedPronos = dateCible;
 
         long duration = System.currentTimeMillis() - startTotal;
-        log.info("🏁 [CALCUL IA] Terminé en {} ms. Résultat mis en cache.", duration);
-        return newsPronos.subList(0, Math.min(newsPronos.size(), nombreGrilles));
+        log.info("🏁 [CONSENSUS IA] Terminé en {} ms. {} grilles 'Solidaires' retenues.", duration, resultatsConsensus.size());
+
+        return resultatsConsensus.subList(0, Math.min(resultatsConsensus.size(), nombreGrilles));
+    }
+
+    // Helper pour le numéro chance en mode consensus
+    private int selectionnerChancePourConsensus(List<Integer> boules, int[][] matriceChance) {
+        int bestC = 1;
+        int maxScore = -1;
+        for(int c=1; c<=10; c++) {
+            int score = 0;
+            for(int b : boules) score += matriceChance[b][c];
+            if(score > maxScore) { maxScore = score; bestC = c; }
+        }
+        return bestC;
     }
 
     @Cacheable(value = "pronosticsAstro", key = "#dateCible.toString() + '_' + #nombreGrilles + '_' + #profil.signe")
