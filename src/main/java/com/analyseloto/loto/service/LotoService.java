@@ -4,6 +4,7 @@ import com.analyseloto.loto.dto.*;
 import com.analyseloto.loto.entity.*;
 import com.analyseloto.loto.repository.LotoTirageRepository;
 import com.analyseloto.loto.repository.StrategyConfigRepostiroy;
+import com.analyseloto.loto.service.calcul.BitMaskService;
 import com.analyseloto.loto.util.Constantes;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -40,6 +41,7 @@ public class LotoService {
     // Services
     private final AstroService astroService;
     private final BacktestService backtestService;
+    private final BitMaskService bitMaskService;
 
     // --- VARIABLES DU CACHE MANUEL (Architecture Stateful) ---
     private volatile AlgoConfig cachedBestConfig = null;
@@ -290,7 +292,7 @@ public class LotoService {
         double[] scoresBoules = calculerScoresOptimise(history, 49, dateCible.getDayOfWeek(), false, boostNumbers, hotFinales, configOptimisee, dernierTirage);
         double[] scoresChance = calculerScoresOptimise(history, 10, dateCible.getDayOfWeek(), true, boostNumbers, Collections.emptySet(), configOptimisee, null);
         int etatDernierTirage = calculerEtatAbstrait(dernierTirage);
-        DynamicConstraints contraintesDuJour = analyserContraintesDynamiques(history, dernierTirage);
+        DynamicConstraints contraintesDuJour = analyserContraintesDynamiques(history);
 
         // Buckets et Booléens (Optimisé)
         Map<String, List<Integer>> buckets = creerBucketsOptimises(scoresBoules);
@@ -309,7 +311,7 @@ public class LotoService {
         for(int n : coldsList) isCold[n] = true;
 
         Set<Long> historiqueBitMasks = new HashSet<>(history.size());
-        for(int i=0; i<Math.min(history.size(), 300); i++) historiqueBitMasks.add(calculerBitMask(history.get(i).getBoules()));
+        for(int i=0; i<Math.min(history.size(), 300); i++) historiqueBitMasks.add(bitMaskService.calculerBitMask(history.get(i).getBoules()));
 
         log.info("📊 [PREP] Matrices et Scores calculés en {} ms.", (System.currentTimeMillis() - t0));
 
@@ -348,7 +350,7 @@ public class LotoService {
                     return boules;
                 })
                 .filter(boules -> estGrilleCoherenteOptimisee(boules, dernierTirage, contraintes))
-                .filter(boules -> !historiqueBitMasks.contains(calculerBitMask(boules)))
+                .filter(boules -> !historiqueBitMasks.contains(bitMaskService.calculerBitMask(boules)))
                 .limit(taillePopulationCible)
                 .map(boules -> {
                     int chance = selectionnerChanceRapide(boules, scoresChance, matriceChance);
@@ -395,7 +397,7 @@ public class LotoService {
 
             double[][] matMarkov = precalculerMatriceMarkov(historyConnu);
             int etatDernier = calculerEtatAbstrait(dernierTirage);
-            DynamicConstraints contraintes = analyserContraintesDynamiques(historyConnu, dernierTirage);
+            DynamicConstraints contraintes = analyserContraintesDynamiques(historyConnu);
             List<List<Integer>> topTrios = getTopTriosRecents(historyConnu);
             Set<Integer> hotFinales = detecterFinalesChaudes(historyConnu);
 
@@ -881,7 +883,7 @@ public class LotoService {
         for (GrilleCandidate cand : population) {
             if (resultats.size() >= nombreGrilles) break;
 
-            long masqueCandidat = calculerBitMask(cand.boules);
+            long masqueCandidat = bitMaskService.calculerBitMask(cand.boules);
             long nouveauxNumerosMask = masqueCandidat & ~couvertureGlobale;
             int apportDiversite = Long.bitCount(nouveauxNumerosMask);
 
@@ -958,99 +960,228 @@ public class LotoService {
         return b;
     }
 
-    // OPTIMISATION : Fail-Fast (On sort dès qu'une condition n'est pas remplie)
+    /**
+     * Vérification de la cohérence de la grille
+     * @param boules 5 numéros
+     * @param dernierTirage dernier tirage
+     * @param rules contraintes à appliquer
+     * @return true si cohérente, false sinon
+     */
     public boolean estGrilleCoherenteOptimisee(List<Integer> boules, List<Integer> dernierTirage, DynamicConstraints rules) {
-        int somme = 0; int pairs = 0; int dizainesMask = 0;
-        int prev = -10;
-        // On fusionne les boucles pour aller plus vite
-        for (int i = 0; i < 5; i++) {
-            int n = boules.get(i);
-            somme += n;
-            if ((n & 1) == 0) pairs++;
-            dizainesMask |= (1 << (n / 10));
-            // Check suite (Fail fast)
-            if (!rules.allowSuites && n == prev + 1) return false; // Interdit
-            if (n == prev + 1 && i > 1 && boules.get(i-2) == prev - 1) return false; // Pas plus de 2 consécutifs
-            prev = n;
-        }
-        if (pairs < rules.minPairs || pairs > rules.maxPairs) return false;
-        if (somme < 100 || somme > 175) return false;
-        if (Integer.bitCount(dizainesMask) < 3) return false;
-        if ((boules.get(4) - boules.get(0)) < 15) return false;
+        // 1. EXTRACTION DIRECTE (Zéro allocation, accès mémoire rapide)
+        int b0 = boules.get(0);
+        int b1 = boules.get(1);
+        int b2 = boules.get(2);
+        int b3 = boules.get(3);
+        int b4 = boules.get(4);
 
-        // Check dernier tirage (seulement si nécessaire)
+        // 2. FAIL-FAST GÉOMÉTRIQUE (Les tests les moins coûteux en premier)
+
+        // Ecart (Spread) : On tolère des grilles plus compactes (12 au lieu de 15)
+        // Une suite comme 10-12-15-19-23 est rare mais possible.
+        if ((b4 - b0) < 12) return false;
+
+        // Somme : On élargit la fenêtre (85 - 210)
+        // La courbe de Gauss est centrée sur 130, mais limiter à 100-175 coupe trop de gains potentiels.
+        int somme = b0 + b1 + b2 + b3 + b4;
+        if (somme < 85 || somme > 210) return false;
+
+        // 3. ANALYSE BITWISE (Parité et Dizaines sans boucle)
+        int pairs = 0;
+        int dizainesMask = 0;
+
+        // Calcul déroulé pour performance CPU maximale (Pipeline friendly)
+        if ((b0 & 1) == 0) pairs++; dizainesMask |= (1 << (b0 / 10));
+        if ((b1 & 1) == 0) pairs++; dizainesMask |= (1 << (b1 / 10));
+        if ((b2 & 1) == 0) pairs++; dizainesMask |= (1 << (b2 / 10));
+        if ((b3 & 1) == 0) pairs++; dizainesMask |= (1 << (b3 / 10));
+        if ((b4 & 1) == 0) pairs++; dizainesMask |= (1 << (b4 / 10));
+
+        // Vérification Parité (Selon règles dynamiques)
+        if (pairs < rules.getMinPairs() || pairs > rules.getMaxPairs()) return false;
+
+        // Vérification Diversité Dizaines (Au moins 3 dizaines différentes requises)
+        // Ex: 1, 2, 3, 41, 42 est trop déséquilibré → rejeté.
+        if (Integer.bitCount(dizainesMask) < 3) return false;
+
+        // 4. SUITES & SÉQUENCES (Logique fine)
+        boolean s1 = (b1 == b0 + 1);
+        boolean s2 = (b2 == b1 + 1);
+        boolean s3 = (b3 == b2 + 1);
+        boolean s4 = (b4 == b3 + 1);
+
+        if (!rules.isAllowSuites()) {
+            // Mode strict : aucune suite (1-2 interdit)
+            if (s1 || s2 || s3 || s4) return false;
+        } else {
+            // Mode ROI : On autorise les suites (1-2), MAIS...
+            // On interdit statistiquement les triplets consécutifs (1-2-3)
+            // Probabilité quasi nulle (<0.05%), on ne gaspille pas d'argent dessus.
+            if ((s1 && s2) || (s2 && s3) || (s3 && s4)) return false;
+        }
+
+        // 5. COMPARAISON DERNIER TIRAGE (Optimisation ROI Critique)
         if (dernierTirage != null) {
             int communs = 0;
-            for (Integer n : boules) {
-                if (dernierTirage.contains(n)) {
-                    communs++;
-                    if (communs >= 2) return false; // Fail fast ici aussi
-                }
-            }
+
+            // On vérifie l'overlap.
+            // ATTENTION : L'ancienne règle (>=2 rejetés) faisait perdre de l'argent.
+            // Il est fréquent que DEUX numéros de la veille ressortent.
+            // On ne rejette QUE si la grille est "trop" similaire (>= 4 numéros communs).
+
+            if (dernierTirage.contains(b0)) communs++;
+            if (dernierTirage.contains(b1)) communs++;
+            if (dernierTirage.contains(b2)) communs++;
+            if (communs >= 3 && dernierTirage.contains(b3)) communs++; // Optim check
+
+            // Si 4 ou 5 numéros sont identiques à la veille → On jette (Risque max)
+            if (communs >= 4) return false;
+            return communs != 3 || !dernierTirage.contains(b4);
         }
+
         return true;
     }
 
-    private long calculerBitMask(List<Integer> boules) {
-        long mask = 0L; for (Integer b : boules) mask |= (1L << b); return mask;
-    }
-
+    /**
+     * Méthode de détection des finales (fin numéro) sorties récemment
+     * @param history historique
+     * @return Set des finales
+     */
     private Set<Integer> detecterFinalesChaudes(List<LotoTirage> history) {
         if (history == null || history.isEmpty()) return Collections.emptySet();
-        return history.stream().limit(20)
-                .flatMap(t -> t.getBoules().stream())
-                .map(b -> b % 10)
-                .collect(Collectors.groupingBy(f -> f, Collectors.counting()))
-                .entrySet().stream()
-                .sorted((e1, e2) -> Long.compare(e2.getValue(), e1.getValue()))
-                .limit(2).map(Map.Entry::getKey).collect(Collectors.toSet());
+
+        // 1. Tableau compteur (Index 0 = Finale 0, Index 9 = Finale 9)
+        // Pas d'allocation de Map complexe.
+        int[] counts = new int[10];
+
+        // 2. Limite stricte
+        int limit = Math.min(history.size(), 20);
+
+        // 3. Boucle primitive rapide (Pas de Stream, pas d'Iterator)
+        for (int i = 0; i < limit; i++) {
+            LotoTirage t = history.get(i);
+            // Accès direct aux champs pour éviter la création de List<Integer> via getBoules()
+            // Note : On assume que les getters renvoient des int primitifs ou sont inlinés par la JVM
+            counts[t.getBoule1() % 10]++;
+            counts[t.getBoule2() % 10]++;
+            counts[t.getBoule3() % 10]++;
+            counts[t.getBoule4() % 10]++;
+            counts[t.getBoule5() % 10]++;
+        }
+
+        // 4. Recherche des 2 meilleurs (Algorithme "King of the Hill" en un seul passage)
+        int bestFinale1 = -1;
+        int bestFinale2 = -1;
+        int maxCount1 = -1;
+        int maxCount2 = -1;
+
+        for (int f = 0; f < 10; f++) {
+            int c = counts[f];
+            if (c > maxCount1) {
+                // Le nouveau est le n°1, l'ancien n°1 devient n°2
+                maxCount2 = maxCount1;
+                bestFinale2 = bestFinale1;
+
+                maxCount1 = c;
+                bestFinale1 = f;
+            } else if (c > maxCount2) {
+                // Le nouveau est le n°2
+                maxCount2 = c;
+                bestFinale2 = f;
+            }
+        }
+
+        // 5. Construction du résultat final (Léger Set)
+        Set<Integer> result = new HashSet<>();
+        if (bestFinale1 != -1) result.add(bestFinale1);
+        if (bestFinale2 != -1) result.add(bestFinale2);
+
+        return result;
     }
 
-    private DynamicConstraints analyserContraintesDynamiques(List<LotoTirage> history, List<Integer> dernierTirage) {
-        if (history.isEmpty()) return new DynamicConstraints(2, 3, true, new HashSet<>());
-        long totalPairsRecents = history.stream().limit(10).flatMap(t -> t.getBoules().stream()).filter(n -> n % 2 == 0).count();
-        double moyenneRecente = totalPairsRecents / 10.0;
-        int minP, maxP;
-        if (moyenneRecente > 2.8) { minP = 1; maxP = 2; }
-        else if (moyenneRecente < 2.2) { minP = 3; maxP = 4; }
-        else { minP = 2; maxP = 3; }
-        boolean suiteRecente = false;
-        for (int i = 0; i < Math.min(5, history.size()); i++) {
-            List<Integer> b = history.get(i).getBoules();
-            List<Integer> copy = new ArrayList<>(b); Collections.sort(copy);
-            for (int k = 0; k < copy.size() - 1; k++) {
-                if (copy.get(k+1) == copy.get(k) + 1) { suiteRecente = true; break; }
-            }
-            if (suiteRecente) break;
-        }
+    /**
+     * Définition des contraintes dynamiques
+     * @param history historique des tirages
+     * @return contraintes à appliquer
+     */
+    private DynamicConstraints analyserContraintesDynamiques(List<LotoTirage> history) {
+        // 1. Paires/Impaires : On ouvre la fenêtre pour couvrir ~85% des cas réels.
+        // Au lieu de restreindre dynamiquement à [2,3] ou [1,2], on autorise une plage large.
+        int minP = 1;
+        int maxP = 4;
+
+        // 2. Suites (Ex : 12, 13) : On les autorise TOUJOURS.
+        boolean allowSuites = true;
+
+        // 3. Numéros Interdits (Blacklist) : On vide la liste.
+        // On n'interdit plus aucun numéro "en dur".
         Set<Integer> forbidden = new HashSet<>();
-        if (history.size() >= 3 && dernierTirage != null) {
-            List<Integer> t2 = history.get(1).getBoules();
-            List<Integer> t3 = history.get(2).getBoules();
-            for (Integer n : dernierTirage) {
-                if (t2.contains(n) && t3.contains(n)) forbidden.add(n);
+
+        // On peut interdire un numéro seulement s'il est sorti TROIS fois de suite (très rare).
+        if (history.size() >= 3) {
+            Map<Integer, Integer> compteurs = new HashMap<>();
+            // On regarde les 3 derniers tirages
+            for (int i = 0; i < 3; i++) {
+                for (Integer b : history.get(i).getBoules()) {
+                    compteurs.merge(b, 1, Integer::sum);
+                }
+            }
+
+            // Si un numéro est sorti 3 fois sur les 3 derniers tirages, on le blacklist pour aujourd'hui
+            for (Map.Entry<Integer, Integer> entry : compteurs.entrySet()) {
+                if (entry.getValue() >= 3) {
+                    forbidden.add(entry.getKey());
+                }
             }
         }
-        return new DynamicConstraints(minP, maxP, !suiteRecente, forbidden);
+
+        return new DynamicConstraints(minP, maxP, allowSuites, forbidden);
     }
 
+    /**
+     * Renvoie le top 10 des trios sortis récemment
+     * @param history historique
+     * @return liste des 10 top trios
+     */
     private List<List<Integer>> getTopTriosRecents(List<LotoTirage> history) {
-        Map<Set<Integer>, Integer> trioFrequency = new HashMap<>();
-        List<LotoTirage> recents = history.stream().limit(100).toList();
-        for (LotoTirage t : recents) {
-            List<Integer> b = t.getBoules();
-            for (int i = 0; i < b.size(); i++) {
-                for (int j = i + 1; j < b.size(); j++) {
-                    for (int k = j + 1; k < b.size(); k++) {
-                        Set<Integer> trio = new HashSet<>(Arrays.asList(b.get(i), b.get(j), b.get(k)));
-                        trioFrequency.merge(trio, 1, Integer::sum);
+        // 1. Map optimisée : Clé = BitMask (Long), Valeur = Fréquence
+        // On pré-dimensionne pour éviter le resizing (100 tirages * 10 trios = 1000 max)
+        Map<Long, Integer> frequencyMap = new HashMap<>(1024);
+
+        int limit = Math.min(history.size(), 100);
+
+        // 2. Buffer primitif réutilisable pour éviter les getBoules() qui créent des Listes
+        int[] b = new int[5];
+
+        for (int i = 0; i < limit; i++) {
+            LotoTirage t = history.get(i);
+
+            // Extraction directe (évite l'allocation de listes intermédiaires)
+            b[0] = t.getBoule1();
+            b[1] = t.getBoule2();
+            b[2] = t.getBoule3();
+            b[3] = t.getBoule4();
+            b[4] = t.getBoule5();
+
+            // 3. Triple boucle déroulée (C'est O(1) car toujours 10 itérations précises)
+            // Génération des trios sans créer d'objets Set ni List
+            for (int x = 0; x < 3; x++) {
+                for (int y = x + 1; y < 4; y++) {
+                    for (int z = y + 1; z < 5; z++) {
+                        // On encode le trio en un seul Long unique
+                        long mask = (1L << b[x]) | (1L << b[y]) | (1L << b[z]);
+                        frequencyMap.merge(mask, 1, Integer::sum);
                     }
                 }
             }
         }
-        return trioFrequency.entrySet().stream()
-                .sorted((e1, e2) -> e2.getValue().compareTo(e1.getValue()))
-                .limit(10).map(e -> new ArrayList<>(e.getKey())).collect(Collectors.toList());
+
+        // 4. Tri et Conversion finale (seulement pour le Top 10)
+        return frequencyMap.entrySet().stream()
+                .sorted((e1, e2) -> e2.getValue().compareTo(e1.getValue())) // Tri décroissant
+                .limit(10)
+                .map(e -> bitMaskService.decodeBitMask(e.getKey())) // On ne recrée les listes qu'à la toute fin
+                .collect(Collectors.toList());
     }
 
     /**

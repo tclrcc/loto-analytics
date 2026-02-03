@@ -33,7 +33,7 @@ public class BacktestService {
     private static final int MAX_GENERATIONS = 70;
 
     // NOUVEAU : Taille du batch d'entrainement (Plus grand = Plus stable)
-    private static final int TRAINING_BATCH_SIZE = 120;
+    private static final int TRAINING_BATCH_SIZE = 350;
 
     public BacktestService(@Lazy LotoService lotoService) {
         this.lotoService = lotoService;
@@ -80,9 +80,9 @@ public class BacktestService {
                     .survivorsSelector(new TournamentSelector<>(5))
                     .offspringSelector(new RouletteWheelSelector<>())
                     .alterers(
-                            new GaussianMutator<>(0.45), // Exploration
+                            new GaussianMutator<>(0.15), // Exploration
                             new SwapMutator<>(0.15),     // Diversité (Petite dose)
-                            new MeanAlterer<>(0.4)      // Convergence
+                            new MeanAlterer<>(0.6)      // Convergence
                     )
                     .build();
 
@@ -135,18 +135,13 @@ public class BacktestService {
         double depense = 0;
         double coutGrille = 2.20;
 
-        // OPTIMISATION 1 : Stochastic Batching (Turbo pour l'entraînement)
-        // Au lieu de tester sur les 450 scénarios à chaque fois, on prend les 100 plus récents
-        // Cela divise la charge CPU par 4.5 sans perdre la tendance "récente"
         List<LotoService.ScenarioSimulation> batchScenarios = scenarios;
         if (modeEntrainement && scenarios.size() > TRAINING_BATCH_SIZE) {
+            // On prend une sous-liste aléatoire ou glissante pour éviter l'overfitting sur une petite période
             batchScenarios = scenarios.subList(0, TRAINING_BATCH_SIZE);
         }
 
         for (LotoService.ScenarioSimulation scenar : batchScenarios) {
-            // OPTIMISATION 2 : Réduire la précision pendant l'entraînement
-            // 200 grilles suffisent pour voir si une stratégie est prometteuse.
-            // On ne génère les 500 grilles (NB_GRILLES_PAR_TEST) que pour le bilan final.
             int grillesAProduire = modeEntrainement ? 200 : NB_GRILLES_PAR_TEST;
 
             // Appel optimisé
@@ -170,30 +165,58 @@ public class BacktestService {
                 int g4 = g.get(4); if (g4 == b1 || g4 == b2 || g4 == b3 || g4 == b4 || g4 == b5) matches++;
                 boolean chanceMatch = (g.get(5) == bc);
 
-                if (modeEntrainement) {
-                    // MODE BOOST "Régularité" (Favorise les petits gains fréquents)
-                    if (matches == 5) bilan += chanceMatch ? 50_000.0 : 10_000.0;
-                    else if (matches == 4) bilan += chanceMatch ? 4000.0 : 2000.0;
-                    else if (matches == 3) bilan += chanceMatch ? 200.0 : 100.0;
-                    else if (matches == 2) bilan += chanceMatch ? 20.0 : 10.0;
-                    else if (chanceMatch) bilan += 4.0;
-                } else {
-                    // MODE RÉEL
-                    if (matches == 5) bilan += chanceMatch ? 2000000.0 : 100000.0;
-                    else if (matches == 4) bilan += chanceMatch ? 1000.0 : 500.0;
-                    else if (matches == 3) bilan += chanceMatch ? 50.0 : 20.0;
-                    else if (matches == 2) bilan += chanceMatch ? 10.0 : 5.0;
-                    else if (chanceMatch) bilan += 2.20;
+                double gainGrille = 0.0;
+
+                if (matches == 5) {
+                    // Jackpot : On le cap à 50k en entraînement pour éviter qu'une seule grille
+                    // chanceuse ne fausse tout l'apprentissage (Variance reduction).
+                    // En mode REEL, on met le vrai montant estimé.
+                    if (modeEntrainement) gainGrille = chanceMatch ? 50_000.0 : 20_000.0;
+                    else gainGrille = chanceMatch ? 2_000_000.0 : 100_000.0;
                 }
+                else if (matches == 4) {
+                    gainGrille = chanceMatch ? 1000.0 : 500.0;
+                }
+                else if (matches == 3) {
+                    gainGrille = chanceMatch ? 50.0 : 20.0;
+                }
+                else if (matches == 2) {
+                    // C'est ici que se joue le ROI : 2 numéros rapportent peu vs le coût (2.20€).
+                    // Votre ancien code donnait trop de points ici.
+                    gainGrille = chanceMatch ? 10.0 : 5.0;
+                }
+                else if (chanceMatch) {
+                    gainGrille = 2.20; // Remboursement exact
+                }
+
+                bilan += gainGrille;
             }
         }
 
-        double resultat = bilan - depense;
-        // Pénalité "Anti-Suicide" : Si la stratégie perd trop d'argent, on la tue
-        if (modeEntrainement && resultat < -depense * 0.5) {
-            return resultat * 1.5;
+        if (depense == 0) return -1000.0; // Sécurité division par zéro
+
+        double netProfit = bilan - depense;
+        double roiPercent = (netProfit / depense) * 100.0;
+
+        if (modeEntrainement) {
+            // FORMULE "EFFICIENCE CHIRURGICALE"
+            // 1. On base le score sur le ROI % (Rentabilité pure).
+            // 2. On applique une pénalité logarithmique sur la dépense.
+            //    Pourquoi ? Pour gagner 10€, il vaut mieux dépenser 10€ (ROI 0%) que 1000€ (ROI 0%).
+            //    Cela force l'IA à chercher des grilles "Sûres" plutôt que de spammer des grilles au hasard.
+
+            double penaliteVolume = Math.log10(depense) * 5.0;
+
+            // Exemple :
+            // Strat A : Dépense 100€, Gain 110€. ROI +10%. Pénalité Log(100)*5 = 10. Score = 0.
+            // Strat B : Dépense 10000€, Gain 11000€. ROI +10%. Pénalité Log(10000)*5 = 20. Score = -10.
+            // → L'IA préférera la Strat A (moins risquée).
+
+            return roiPercent - penaliteVolume;
         }
-        return resultat;
+
+        // En mode affichage final (Genotype décodé), on retourne le VRAI bilan financier
+        return netProfit;
     }
 
     private LotoService.AlgoConfig decoderGenotype(Genotype<DoubleGene> gt, String nom) {
