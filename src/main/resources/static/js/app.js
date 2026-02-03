@@ -517,7 +517,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     </div>
                     
                     <div class="small text-muted bg-light p-2 rounded mb-0 d-flex justify-content-between align-items-center">
-                        <div><i class="bi bi-graph-up me-1"></i>Score: <strong>${bet.scoreGlobal}</strong></div>
+                        <div><i class="bi bi-graph-up me-1"></i>Score: <strong>${bet.scoreFitness}</strong></div>
                         <button class="btn btn-xs btn-link text-decoration-none p-0" 
                                 onclick="event.stopPropagation(); preparerGrille(${bet.boules[0]}, ${bet.boules[1]}, ${bet.boules[2]}, ${bet.boules[3]}, ${bet.boules[4]}, ${chanceNum})"
                                 title="Jouer cette grille seule">
