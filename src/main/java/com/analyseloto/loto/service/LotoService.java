@@ -572,7 +572,8 @@ public class LotoService {
     }
 
     /**
-     * CŒUR DU RÉACTEUR - Optimisé pour 6 vCores
+     * CŒUR DU RÉACTEUR - CORRECTION DEADLOCK
+     * On retire le .parallel() ici car la méthode est DÉJÀ appelée en parallèle par les 20 experts.
      */
     private List<GrilleCandidate> executerAlgorithmeGenetique(
             int[] hots, int[] neutrals, int[] colds, boolean[] isHot, boolean[] isCold,
@@ -582,16 +583,12 @@ public class LotoService {
             double[][] matriceMarkov, int etatDernierTirage) {
 
         long tStart = System.currentTimeMillis();
-        // UPGRADE : Avec 12 Go RAM, on vise 50 000 grilles
         int taillePopulationCible = 50_000;
 
-        log.info("🚀 [TURBO] Démarrage génération parallèle sur {} cœurs...", Runtime.getRuntime().availableProcessors());
-
         List<GrilleCandidate> population = IntStream.range(0, taillePopulationCible * 2)
-                .parallel() // UTILISATION DES 6 COEURS
-                .unordered() // Permet aux threads de travailler sans se soucier de l'ordre (Gain vitesse)
+                // .parallel()  <-- À SUPPRIMER IMPÉRATIVEMENT (Cause du blocage)
                 .mapToObj(i -> {
-                    // Chaque thread a son propre RNG via ThreadLocalRandom dans la méthode appelée
+                    // ThreadLocalRandom fonctionne bien même en séquentiel
                     List<Integer> boules = genererGrilleOptimisee(hots, neutrals, colds, isHot, isCold, matriceAffinites, dernierTirage, topTrios);
                     Collections.sort(boules);
                     return boules;
@@ -601,17 +598,17 @@ public class LotoService {
                 .limit(taillePopulationCible)
                 .map(boules -> {
                     int chance = selectionnerChanceRapide(boules, scoresChance, matriceChance);
-                    double fitness = calculerScoreFitnessOptimise(boules, chance, scoresBoules, scoresChance, matriceAffinites, config, matriceMarkov,
-                            etatDernierTirage);
+                    double fitness = calculerScoreFitnessOptimise(boules, chance, scoresBoules, scoresChance, matriceAffinites, config, matriceMarkov, etatDernierTirage);
                     return new GrilleCandidate(boules, chance, fitness);
                 })
                 .sorted((g1, g2) -> Double.compare(g2.fitness, g1.fitness))
                 .collect(Collectors.toList());
 
+        // Log uniquement si ça prend du temps (> 1s), sinon c'est du spam
         long duration = System.currentTimeMillis() - tStart;
-        log.info("✅ [TURBO] Terminé en {} ms. {} grilles analysées. Meilleur score : {}",
-                duration, population.size(),
-                population.isEmpty() ? "N/A" : String.format("%.2f", population.get(0).fitness));
+        if (duration > 1000) {
+            log.info("✅ [EXPERT] Terminé en {} ms. {} grilles analysées.", duration, population.size());
+        }
 
         // Fallback
         if (population.isEmpty()) {
