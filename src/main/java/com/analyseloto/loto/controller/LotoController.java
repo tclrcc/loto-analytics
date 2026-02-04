@@ -41,16 +41,6 @@ public class LotoController {
         return ResponseEntity.ok(astroService.analyserProfil(dto));
     }
 
-    @PostMapping("/generate-hybrid")
-    public ResponseEntity<List<PronosticResultDto>> generateHybrid(
-            @RequestParam("date") String dateStr,
-            @RequestParam(value = "count", defaultValue = "5") int count,
-            @RequestBody AstroProfileDto profil
-    ) {
-        LocalDate date = LocalDate.parse(dateStr);
-        return ResponseEntity.ok(service.genererPronosticsHybrides(date, count, profil));
-    }
-
     @GetMapping("/graph-data")
     public ResponseEntity<GraphDto> getGraphData() {
         // 1. Récupérer les stats brutes pour la taille des nœuds

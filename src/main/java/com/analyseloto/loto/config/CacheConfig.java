@@ -25,14 +25,6 @@ public class CacheConfig {
                         .recordStats() // ✅ On active les stats partout
                         .build());
 
-        // 2. PRONOSTICS ASTRO
-        cacheManager.registerCustomCache("pronosticsAstro",
-                Caffeine.newBuilder()
-                        .maximumSize(500)
-                        .expireAfterWrite(24, TimeUnit.HOURS)
-                        .recordStats() // ✅ Ajouté
-                        .build());
-
         // 3. STATISTIQUES (Le gros morceau)
         cacheManager.registerCustomCache("statsGlobales",
                 Caffeine.newBuilder()

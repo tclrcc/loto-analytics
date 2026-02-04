@@ -39,7 +39,6 @@ public class LotoService {
     private final LotoTirageRepository repository;
     private final StrategyConfigRepostiroy strategyConfigRepostiroy;
     // Services
-    private final AstroService astroService;
     private final BacktestService backtestService;
     private final BitMaskService bitMaskService;
 
@@ -215,15 +214,6 @@ public class LotoService {
         forceDailyOptimization();
     }
 
-    public AlgoConfig recupererMeilleureConfig() {
-        // Si on a une équipe, le chef est à l'index 0 (car la liste est triée par fitness)
-        if (this.cachedEliteConfigs != null && !this.cachedEliteConfigs.isEmpty()) {
-            return this.cachedEliteConfigs.get(0);
-        }
-        // Sinon, retour de la config par défaut
-        return AlgoConfig.defaut();
-    }
-
     public void forceDailyOptimization() {
         log.info("🌙 [CRON] Optimisation en cours...");
 
@@ -295,7 +285,7 @@ public class LotoService {
     public List<PronosticResultDto> genererMultiplesPronostics(LocalDate dateCible, int nombreGrilles) {
         long startTotal = System.currentTimeMillis();
 
-        // 1. GESTION DU CACHE (Inchangé)
+        // 1. GESTION DU CACHE
         List<PronosticResultDto> cached = cachedDailyPronosRef.get();
         if (cached != null && dateCible.equals(dateCachedPronos) && cached.size() >= nombreGrilles) {
             log.info("⚡ [CACHE] Pronostics (Consensus) récupérés instantanément en {} ms.", (System.currentTimeMillis() - startTotal));
@@ -500,76 +490,6 @@ public class LotoService {
             if(score > maxScore) { maxScore = score; bestC = c; }
         }
         return bestC;
-    }
-
-    @Cacheable(value = "pronosticsAstro", key = "#dateCible.toString() + '_' + #nombreGrilles + '_' + #profil.signe")
-    public List<PronosticResultDto> genererPronosticsHybrides(LocalDate dateCible, int nombreGrilles, AstroProfileDto profil) {
-        return genererPronosticAvecConfig(dateCible, nombreGrilles, profil);
-    }
-
-    private List<PronosticResultDto> genererPronosticAvecConfig(LocalDate dateCible, int nombreGrilles, AstroProfileDto profilAstro) {
-        long t0 = System.currentTimeMillis();
-        List<LotoTirageRepository.TirageMinimal> rawData = repository.findAllOptimized();
-        List<LotoTirage> history = rawData.stream().map(this::mapToLightEntity).toList();
-
-        if (history.isEmpty()) return new ArrayList<>();
-        List<Integer> dernierTirage = history.get(0).getBoules();
-        AlgoConfig configOptimisee = recupererMeilleureConfig();
-
-        log.info("🕵️ [AUDIT PRE-CALCUL] Stratégie: '{}'", configOptimisee.getNomStrategie());
-
-        // OPTIMISATION PARALLELE (Utilise les 6 cœurs pour préparer les données)
-        CompletableFuture<Set<Integer>> hotFinalesFuture = CompletableFuture.supplyAsync(() -> detecterFinalesChaudes(history));
-        CompletableFuture<List<List<Integer>>> triosFuture = CompletableFuture.supplyAsync(() -> getTopTriosRecents(history));
-        CompletableFuture<int[][]> affFuture = CompletableFuture.supplyAsync(() -> construireMatriceAffinitesDirecte(history, dateCible.getDayOfWeek()));
-        CompletableFuture<int[][]> chanceFuture = CompletableFuture.supplyAsync(() -> construireMatriceChanceDirecte(history, dateCible.getDayOfWeek()));
-        CompletableFuture<double[][]> markovFuture = CompletableFuture.supplyAsync(() -> precalculerMatriceMarkov(history));
-
-        // Jointure des calculs
-        CompletableFuture.allOf(hotFinalesFuture, triosFuture, affFuture, chanceFuture, markovFuture).join();
-
-        // Récupération résultats
-        Set<Integer> hotFinales = hotFinalesFuture.join();
-        List<List<Integer>> topTriosDuJour = triosFuture.join();
-        int[][] matriceAffinitesArr = affFuture.join();
-        int[][] matriceChanceArr = chanceFuture.join();
-        double[][] matriceMarkov = markovFuture.join();
-
-        // Reste des calculs légers (séquentiel)
-        List<Integer> boostNumbers = (profilAstro != null) ? astroService.getLuckyNumbersOnly(profilAstro) : Collections.emptyList();
-        double[] scoresBoules = calculerScoresOptimise(history, 49, dateCible.getDayOfWeek(), false, boostNumbers, hotFinales, configOptimisee, dernierTirage);
-        double[] scoresChance = calculerScoresOptimise(history, 10, dateCible.getDayOfWeek(), true, boostNumbers, Collections.emptySet(), configOptimisee, null);
-        int etatDernierTirage = calculerEtatAbstrait(dernierTirage);
-        DynamicConstraints contraintesDuJour = analyserContraintesDynamiques(history);
-
-        // Buckets et Booléens (Optimisé)
-        Map<String, List<Integer>> buckets = creerBucketsOptimises(scoresBoules);
-        List<Integer> hotsList = buckets.getOrDefault(Constantes.BUCKET_HOT, Collections.emptyList());
-        List<Integer> neutralsList = buckets.getOrDefault(Constantes.BUCKET_NEUTRAL, Collections.emptyList());
-        List<Integer> coldsList = buckets.getOrDefault(Constantes.BUCKET_COLD, Collections.emptyList());
-
-        // CONVERSION EN TABLEAUX PRIMITIFS (Gain performance énorme pour la génération massive)
-        int[] hots = hotsList.stream().mapToInt(i->i).toArray();
-        int[] neutrals = neutralsList.stream().mapToInt(i->i).toArray();
-        int[] colds = coldsList.stream().mapToInt(i->i).toArray();
-
-        boolean[] isHot = new boolean[51];
-        boolean[] isCold = new boolean[51];
-        for(int n : hotsList) isHot[n] = true;
-        for(int n : coldsList) isCold[n] = true;
-
-        Set<Long> historiqueBitMasks = new HashSet<>(history.size());
-        for(int i=0; i<Math.min(history.size(), 300); i++) historiqueBitMasks.add(bitMaskService.calculerBitMask(history.get(i).getBoules()));
-
-        log.info("📊 [PREP] Matrices et Scores calculés en {} ms.", (System.currentTimeMillis() - t0));
-
-        List<GrilleCandidate> population = executerAlgorithmeGenetique(
-                hots, neutrals, colds, isHot, isCold,
-                matriceAffinitesArr, dernierTirage, topTriosDuJour, scoresBoules, scoresChance,
-                matriceChanceArr, contraintesDuJour, configOptimisee, historiqueBitMasks, matriceMarkov, etatDernierTirage
-        );
-
-        return finaliserResultats(population, nombreGrilles, dateCible, history);
     }
 
     /**
@@ -921,7 +841,7 @@ public class LotoService {
         return 0.0;
     }
 
-    @CacheEvict(value = {"statsGlobales", "pronosticsIA", "pronosticsAstro"}, allEntries = true)
+    @CacheEvict(value = {"statsGlobales", "pronosticsIA"}, allEntries = true)
     public void importCsv(MultipartFile file) throws IOException {
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(file.getInputStream()))) {
             List<String> lines = reader.lines().toList();
@@ -952,7 +872,7 @@ public class LotoService {
         }
     }
 
-    @CacheEvict(value = {"statsGlobales", "pronosticsIA", "pronosticsAstro"}, allEntries = true)
+    @CacheEvict(value = {"statsGlobales", "pronosticsIA"}, allEntries = true)
     public LotoTirage ajouterTirageManuel(TirageManuelDto dto) {
         if (repository.existsByDateTirage(dto.getDateTirage())) throw new RuntimeException("Ce tirage existe déjà");
         LotoTirage t = new LotoTirage();
@@ -1116,104 +1036,6 @@ public class LotoService {
             map.put(i, new RawStatData(freqJour[i], ecart, sortiesRecentes[i]>=2, sortiesTresRecentes[i]>=2, false, isHotF, isTen));
         }
         return map;
-    }
-
-    // Remplacement de la méthode existante
-    private List<PronosticResultDto> finaliserResultats(List<GrilleCandidate> population, int nombreGrilles, LocalDate dateCible, List<LotoTirage> history) {
-        List<PronosticResultDto> resultats = new ArrayList<>();
-        // Set pour éviter strictement les doublons exacts (même combinaison)
-        Set<List<Integer>> grillesRetenues = new HashSet<>();
-        long couvertureGlobale = 0L;
-
-        // 1. Tri par score (Fitness)
-        population.sort((g1, g2) -> Double.compare(g2.fitness, g1.fitness));
-
-        // -----------------------------------------------------------
-        // PHASE 1 : Sélection "Intelligente" (Priorité Diversité)
-        // -----------------------------------------------------------
-        for (GrilleCandidate cand : population) {
-            if (resultats.size() >= nombreGrilles) break;
-
-            long masqueCandidat = bitMaskService.calculerBitMask(cand.boules);
-            long nouveauxNumerosMask = masqueCandidat & ~couvertureGlobale;
-            int apportDiversite = Long.bitCount(nouveauxNumerosMask);
-
-            // On garde si c'est la première OU si elle apporte au moins 1 nouveau numéro
-            if (resultats.isEmpty() || apportDiversite >= 1) {
-                if (grillesRetenues.add(cand.boules)) { // .add renvoie true si unique
-                    couvertureGlobale |= masqueCandidat;
-                    ajouterPronostic(resultats, cand.boules, cand.chance, cand.fitness, dateCible, history, "IA_OPTIMAL");
-                }
-            }
-        }
-
-        // -----------------------------------------------------------
-        // PHASE 2 : Complétion avec la population restante (Mode Relaxé)
-        // -----------------------------------------------------------
-        if (resultats.size() < nombreGrilles) {
-            log.warn("⚠️ [PHASE 2] Diversité insuffisante. Récupération des meilleures grilles restantes.");
-            for (GrilleCandidate cand : population) {
-                if (resultats.size() >= nombreGrilles) break;
-
-                // On prend tout ce qui est unique, même si ça n'apporte pas de diversité
-                if (grillesRetenues.add(cand.boules)) {
-                    ajouterPronostic(resultats, cand.boules, cand.chance, cand.fitness, dateCible, history, "IA_CONVERGENCE");
-                }
-            }
-        }
-
-        // -----------------------------------------------------------
-        // PHASE 3 : PLAN C (Génération de Secours - "Emergency Fill")
-        // -----------------------------------------------------------
-        // Si vraiment l'IA n'a produit que 2 ou 3 grilles uniques sur 50 000 essais (convergence extrême),
-        // on génère de nouvelles grilles "fraîches" basées sur les stats pures (buckets) pour compléter.
-        if (resultats.size() < nombreGrilles) {
-            log.error("🚨 [PLAN C] Population épuisée ({} manquantes). Génération forcée !", (nombreGrilles - resultats.size()));
-
-            // On récupère les buckets (nécessite de recalculer ou passer les buckets en paramètre,
-            // mais ici on va utiliser une régénération simplifiée via les méthodes existantes)
-
-            // Pour faire simple et robuste : on boucle jusqu'à remplir
-            int essaisSecours = 0;
-            while (resultats.size() < nombreGrilles && essaisSecours < 200) {
-                essaisSecours++;
-
-                // On génère une grille aléatoire pondérée (sans passer par l'algo génétique complet)
-                // Note: On n'a pas les buckets ici, donc on fait un appel simplifié ou on réutilise
-                // la logique de "genererGrilleOptimisee" si on avait les params.
-                // Comme on ne les a pas dans cette méthode, on va simuler une grille 'hot' simple.
-
-                List<Integer> secours = new ArrayList<>();
-                ThreadLocalRandom rng = ThreadLocalRandom.current();
-                while(secours.size() < 5) {
-                    int n = 1 + rng.nextInt(49);
-                    if(!secours.contains(n)) secours.add(n);
-                }
-                Collections.sort(secours);
-
-                if (grillesRetenues.add(secours)) {
-                    ajouterPronostic(resultats, secours, 1 + rng.nextInt(10), 10.0, dateCible, history, "IA_SECOURS_RANDOM");
-                }
-            }
-        }
-
-        log.info("✅ [FINAL] {} pronostics générés et validés.", resultats.size());
-        return resultats;
-    }
-
-    // Helper pour éviter la duplication de code dans finaliserResultats
-    private void ajouterPronostic(List<PronosticResultDto> resultats, List<Integer> boules, int chance, double fitness,
-            LocalDate dateCible, List<LotoTirage> history, String algoType) {
-        SimulationResultDto simu = simulerGrilleDetaillee(boules, dateCible, history);
-        double maxDuo = simu.getPairs().stream().mapToDouble(MatchGroup::getRatio).max().orElse(0.0);
-
-        resultats.add(new PronosticResultDto(
-                boules, chance,
-                Math.round(fitness * 100.0) / 100.0,
-                maxDuo, 0.0,
-                !simu.getQuintuplets().isEmpty(),
-                algoType
-        ));
     }
 
     private int calculerEtatAbstrait(List<Integer> boules) {

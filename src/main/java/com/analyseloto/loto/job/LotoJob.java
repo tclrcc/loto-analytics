@@ -218,8 +218,8 @@ public class LotoJob {
                         user.getZodiacSign()
                 );
 
-                // B. Génération des pronostics HYBRIDES (Spécifiques à LUI)
-                List<PronosticResultDto> pronostics = lotoService.genererPronosticsHybrides(today, 10, profil);
+                // B. Génération des pronostics (Spécifiques à LUI)
+                List<PronosticResultDto> pronostics = lotoService.genererMultiplesPronostics(today, 10);
 
                 // C. Construction du mail personnalisé
                 String subject = "🎱 " + user.getFirstName() + ", vos numéros chance pour ce soir !";
