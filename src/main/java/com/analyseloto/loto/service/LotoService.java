@@ -50,6 +50,7 @@ public class LotoService {
     private final AtomicReference<List<PronosticResultDto>> cachedDailyPronosRef = new AtomicReference<>();
     private volatile LocalDate dateCachedPronos = null;
 
+
     // Constantes
     private static final String FIELD_DATE_TIRAGE = "dateTirage";
     private static final ZoneId ZONE_PARIS = ZoneId.of("Europe/Paris");
