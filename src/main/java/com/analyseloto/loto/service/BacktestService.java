@@ -30,11 +30,11 @@ public class BacktestService {
     // --- CONSTANTES OPTIMISÉES VPS-2 (6 vCores / 12Go RAM) ---
     private static final int NB_GRILLES_PAR_TEST = 200;
     private static final int DEPTH_BACKTEST = 450;
-    private static final int POPULATION_SIZE = 1000;
-    private static final int MAX_GENERATIONS = 70;
+    private static final int POPULATION_SIZE = 1500;
+    private static final int MAX_GENERATIONS = 100;
 
     // NOUVEAU : Taille du batch d'entrainement (Plus grand = Plus stable)
-    private static final int TRAINING_BATCH_SIZE = 350;
+    private static final int TRAINING_BATCH_SIZE = 400;
 
     public BacktestService(@Lazy LotoService lotoService) {
         this.lotoService = lotoService;
@@ -159,29 +159,28 @@ public class BacktestService {
         double depense = 0;
         double coutGrille = 2.20;
 
+        // Variables pour l'indice de couverture
+        int totalGrillesProduites = 0;
+        int nbGrillesGagnantes = 0;
+
         List<LotoService.ScenarioSimulation> batchScenarios = scenarios;
         if (modeEntrainement && scenarios.size() > TRAINING_BATCH_SIZE) {
-            // On prend une sous-liste aléatoire ou glissante pour éviter l'overfitting sur une petite période
             batchScenarios = scenarios.subList(0, TRAINING_BATCH_SIZE);
         }
 
         for (LotoService.ScenarioSimulation scenar : batchScenarios) {
             int grillesAProduire = modeEntrainement ? 200 : NB_GRILLES_PAR_TEST;
-
-            // Appel optimisé
             List<List<Integer>> grilles = lotoService.genererGrillesDepuisScenario(scenar, config, grillesAProduire);
-            int nbGrilles = grilles.size();
-            depense += (nbGrilles * coutGrille);
 
-            // Optimisation locale (Extraction des variables pour éviter les getters dans la boucle)
+            depense += (grilles.size() * coutGrille);
+            totalGrillesProduites += grilles.size();
+
             LotoTirage target = scenar.getTirageReel();
             int b1 = target.getBoule1(); int b2 = target.getBoule2(); int b3 = target.getBoule3();
             int b4 = target.getBoule4(); int b5 = target.getBoule5(); int bc = target.getNumeroChance();
 
-            // Boucle critique (Hot Path)
             for (List<Integer> g : grilles) {
                 int matches = 0;
-                // Déroulage manuel de la boucle pour performance maximale (CPU Branch Prediction)
                 int g0 = g.get(0); if (g0 == b1 || g0 == b2 || g0 == b3 || g0 == b4 || g0 == b5) matches++;
                 int g1 = g.get(1); if (g1 == b1 || g1 == b2 || g1 == b3 || g1 == b4 || g1 == b5) matches++;
                 int g2 = g.get(2); if (g2 == b1 || g2 == b2 || g2 == b3 || g2 == b4 || g2 == b5) matches++;
@@ -190,56 +189,38 @@ public class BacktestService {
                 boolean chanceMatch = (g.get(5) == bc);
 
                 double gainGrille = 0.0;
+                // Attribution des gains
+                if (matches == 5) gainGrille = chanceMatch ? 50_000.0 : 20_000.0;
+                else if (matches == 4) gainGrille = chanceMatch ? 1000.0 : 500.0;
+                else if (matches == 3) gainGrille = chanceMatch ? 50.0 : 20.0;
+                else if (matches == 2) gainGrille = chanceMatch ? 10.0 : 5.0;
+                else if (chanceMatch) gainGrille = 2.20;
 
-                if (matches == 5) {
-                    // Jackpot : On le cap à 50k en entraînement pour éviter qu'une seule grille
-                    // chanceuse ne fausse tout l'apprentissage (Variance reduction).
-                    // En mode REEL, on met le vrai montant estimé.
-                    if (modeEntrainement) gainGrille = chanceMatch ? 50_000.0 : 20_000.0;
-                    else gainGrille = chanceMatch ? 2_000_000.0 : 100_000.0;
+                if (gainGrille > 0) {
+                    bilan += gainGrille;
+                    nbGrillesGagnantes++; // On incrémente si la grille rapporte au moins son coût
                 }
-                else if (matches == 4) {
-                    gainGrille = chanceMatch ? 1000.0 : 500.0;
-                }
-                else if (matches == 3) {
-                    gainGrille = chanceMatch ? 50.0 : 20.0;
-                }
-                else if (matches == 2) {
-                    // C'est ici que se joue le ROI : 2 numéros rapportent peu vs le coût (2.20€).
-                    // Votre ancien code donnait trop de points ici.
-                    gainGrille = chanceMatch ? 10.0 : 5.0;
-                }
-                else if (chanceMatch) {
-                    gainGrille = 2.20; // Remboursement exact
-                }
-
-                bilan += gainGrille;
             }
         }
 
-        if (depense == 0) return -1000.0; // Sécurité division par zéro
+        if (depense == 0) return -1000.0;
 
         double netProfit = bilan - depense;
         double roiPercent = (netProfit / depense) * 100.0;
 
         if (modeEntrainement) {
-            // FORMULE "EFFICIENCE CHIRURGICALE"
-            // 1. On base le score sur le ROI % (Rentabilité pure).
-            // 2. On applique une pénalité logarithmique sur la dépense.
-            //    Pourquoi ? Pour gagner 10€, il vaut mieux dépenser 10€ (ROI 0%) que 1000€ (ROI 0%).
-            //    Cela force l'IA à chercher des grilles "Sûres" plutôt que de spammer des grilles au hasard.
+            // --- NOUVELLE FORMULE DE FITNESS ---
+            // Indice de couverture : % de grilles qui ne sont pas "perdues"
+            double indiceCouverture = (double) nbGrillesGagnantes / totalGrillesProduites;
 
+            // On pénalise les dépenses massives (Logarithme)
             double penaliteVolume = Math.log10(depense) * 5.0;
 
-            // Exemple :
-            // Strat A : Dépense 100€, Gain 110€. ROI +10%. Pénalité Log(100)*5 = 10. Score = 0.
-            // Strat B : Dépense 10000€, Gain 11000€. ROI +10%. Pénalité Log(10000)*5 = 20. Score = -10.
-            // → L'IA préférera la Strat A (moins risquée).
-
-            return roiPercent - penaliteVolume;
+            // Score final = ROI + (Couverture * 100) - Pénalité
+            // Cela force l'IA à trouver un compromis entre "Gagner gros" et "Gagner souvent".
+            return roiPercent + (indiceCouverture * 100.0) - penaliteVolume;
         }
 
-        // En mode affichage final (Genotype décodé), on retourne le VRAI bilan financier
         return netProfit;
     }
 

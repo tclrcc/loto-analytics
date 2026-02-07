@@ -27,7 +27,6 @@ public class StrategyConfig {
     // Résultats du Backtest (pour savoir pourquoi cette config a gagné)
     private double bilanEstime; // ex: -350.50
     private int nbTiragesTestes; // ex: 50
-
     private String nomStrategie; // ex: "TEST_86"
 
     @Column(name = "nb_grilles_par_test")
@@ -35,4 +34,7 @@ public class StrategyConfig {
 
     @Column(name = "roi")
     private Double roi;
+
+    // Flag pour identifier le leader du batch
+    private boolean leader;
 }

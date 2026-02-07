@@ -156,49 +156,36 @@ public class LotoService {
 
     @EventListener(ApplicationReadyEvent.class)
     public void initConfigFromDb() {
-        log.info("🔌 Démarrage : Recherche stratégie en base...");
+        log.info("🔌 Démarrage : Chargement du Conseil des Sages depuis la BDD...");
 
-        // Note : Attention à la typo dans votre repository "Repostiroy" ;)
-        strategyConfigRepostiroy.findTopByOrderByDateCalculDesc().ifPresentOrElse(
-                last -> {
-                    // 1. Reconstruction du Leader depuis la BDD
-                    AlgoConfig leader = new AlgoConfig(
-                            last.getNomStrategie(),
-                            last.getPoidsFreqJour(),
-                            last.getPoidsForme(),
-                            last.getPoidsEcart(),
-                            last.getPoidsTension(),
-                            last.getPoidsMarkov(),
-                            last.getPoidsAffinite(),
-                            false
-                    );
+        // 1. On cherche d'abord le dernier leader pour identifier la date du dernier batch
+        strategyConfigRepostiroy.findTopByLeaderTrueOrderByDateCalculDesc().ifPresentOrElse(
+                lastLeader -> {
+                    // 2. On récupère TOUS les experts qui ont été créés en même temps que ce leader
+                    List<StrategyConfig> batch = strategyConfigRepostiroy.findAllByDateCalcul(lastLeader.getDateCalcul());
 
-                    // 2. Récupération des stats historiques
-                    leader.setBilanEstime(last.getBilanEstime());
-                    leader.setNbTiragesTestes(last.getNbTiragesTestes());
-                    leader.setNbGrillesParTest(last.getNbGrillesParTest());
-                    leader.setRoiEstime(last.getRoi()); // Attention au nom du getter dans l'entité
+                    this.cachedEliteConfigs = batch.stream().map(s -> {
+                        AlgoConfig cfg = new AlgoConfig(
+                                s.getNomStrategie(),
+                                s.getPoidsFreqJour(), s.getPoidsForme(), s.getPoidsEcart(),
+                                s.getPoidsTension(), s.getPoidsMarkov(), s.getPoidsAffinite(),
+                                false
+                        );
+                        cfg.setRoiEstime(s.getRoi());
+                        cfg.setBilanEstime(s.getBilanEstime());
+                        return cfg;
+                    }).collect(Collectors.toList());
 
-                    // 3. Mise à jour de la date de référence
-                    if (last.getDateCalcul() != null) {
-                        this.lastBacktestDate = last.getDateCalcul()
-                                .atZone(ZoneId.systemDefault())
-                                .withZoneSameInstant(ZONE_PARIS)
-                                .toLocalDate();
-                    } else {
-                        this.lastBacktestDate = LocalDate.now(ZONE_PARIS);
-                    }
-
-                    // 4. ADAPTATION LISTE : On met le Leader seul dans la liste des experts
-                    // Le système tournera avec 1 seul expert jusqu'au prochain calcul nocturne.
-                    this.cachedEliteConfigs = new ArrayList<>(List.of(leader));
-
-                    log.info("✅ Stratégie Leader chargée (Date: {}). Mode 'Solo' activé en attendant le recalcule complet.", this.lastBacktestDate);
+                    this.lastBacktestDate = lastLeader.getDateCalcul().toLocalDate();
+                    log.info("✅ Ensemble chargé : {} experts récupérés (Date: {}).", this.cachedEliteConfigs.size(), this.lastBacktestDate);
                 },
-                () -> log.warn("⚠️ Base vide : Calcul requis au démarrage.")
+                () -> log.warn("⚠️ Aucune stratégie en base. Un calcul initial est requis.")
         );
     }
 
+    /**
+     * Méthode vérification au démarrage de l'application
+     */
     public void verificationAuDemarrage() {
         LocalDate todayParis = LocalDate.now(ZONE_PARIS);
 
@@ -215,11 +202,7 @@ public class LotoService {
     }
 
     public void forceDailyOptimization() {
-        log.info("🌙 [CRON] Optimisation en cours...");
-
-        // Reset des caches
-        this.cachedGlobalStats = null;
-        cachedDailyPronosRef.set(null);
+        log.info("🌙 [CRON] Optimisation de l'Ensemble IA...");
 
         List<LotoTirageRepository.TirageMinimal> rawData = repository.findAllOptimized();
         List<LotoTirage> historyLight = rawData.stream().map(this::mapToLightEntity).toList();
@@ -227,42 +210,43 @@ public class LotoService {
         if (!historyLight.isEmpty()) {
             List<AlgoConfig> newConfigs = backtestService.trouverMeilleuresConfigs(historyLight);
 
-            // 2. Mise en cache de l'équipe complète (pour le consensus)
-            this.cachedEliteConfigs = newConfigs;
-            this.lastBacktestDate = LocalDate.now(ZONE_PARIS);
+            // On définit un timestamp unique pour tout le batch d'experts
+            LocalDateTime batchTimestamp = LocalDateTime.now(ZONE_PARIS);
 
-            if (newConfigs.isEmpty()) {
-                log.warn("⚠️ Aucune stratégie trouvée. Utilisation défaut.");
-                return;
+            this.cachedEliteConfigs = newConfigs;
+            this.lastBacktestDate = batchTimestamp.toLocalDate();
+
+            // SAUVEGARDE DE TOUT LE CONSEIL (20 experts)
+            List<StrategyConfig> entitiesToSave = new ArrayList<>();
+
+            for (int i = 0; i < newConfigs.size(); i++) {
+                AlgoConfig config = newConfigs.get(i);
+                StrategyConfig entity = new StrategyConfig();
+
+                entity.setDateCalcul(batchTimestamp);
+                entity.setNomStrategie(config.getNomStrategie());
+                entity.setPoidsForme(config.getPoidsForme());
+                entity.setPoidsEcart(config.getPoidsEcart());
+                entity.setPoidsAffinite(config.getPoidsAffinite());
+                entity.setPoidsMarkov(config.getPoidsMarkov());
+                entity.setPoidsTension(config.getPoidsTension());
+                entity.setPoidsFreqJour(config.getPoidsFreqJour());
+                entity.setBilanEstime(config.getBilanEstime());
+                entity.setNbTiragesTestes(config.getNbTiragesTestes());
+                entity.setNbGrillesParTest(config.getNbGrillesParTest());
+                entity.setRoi(config.getRoiEstime());
+
+                // Le premier de la liste (triée par fitness) est le leader
+                entity.setLeader(i == 0);
+
+                entitiesToSave.add(entity);
             }
 
-            // 3. On prend le "Capitaine" (le meilleur) pour l'historique DB
-            AlgoConfig leader = newConfigs.get(0);
+            strategyConfigRepostiroy.saveAll(entitiesToSave);
+            log.info("💾 [DB] Conseil des Sages ({} experts) sauvegardé avec succès.", entitiesToSave.size());
 
-            log.info("✅ [UPDATE] {} Stratégies chargées en RAM. Leader : {}", newConfigs.size(), leader.getNomStrategie());
-
-            // 4. Sauvegarde du Leader en BDD (Pour suivi ROI)
-            StrategyConfig entity = new StrategyConfig();
-            entity.setDateCalcul(LocalDateTime.now(ZONE_PARIS));
-            entity.setNomStrategie(leader.getNomStrategie() + " (Leader Ensemble)"); // Petit suffixe pour info
-            entity.setPoidsForme(leader.getPoidsForme());
-            entity.setPoidsEcart(leader.getPoidsEcart());
-            entity.setPoidsAffinite(leader.getPoidsAffinite());
-            entity.setPoidsMarkov(leader.getPoidsMarkov());
-            entity.setPoidsTension(leader.getPoidsTension());
-            entity.setPoidsFreqJour(leader.getPoidsFreqJour());
-            entity.setBilanEstime(leader.getBilanEstime());
-            entity.setNbTiragesTestes(leader.getNbTiragesTestes());
-            entity.setNbGrillesParTest(leader.getNbGrillesParTest());
-            entity.setRoi(leader.getRoiEstime());
-
-            strategyConfigRepostiroy.save(entity);
-
-            // 5. Préchauffage (Génération immédiate des pronostics du lendemain)
-            log.info("🔥 [WARMUP] Préchauffage des pronostics Consensus...");
+            // Préchauffage...
             genererMultiplesPronostics(recupererDateProchainTirage(), 10);
-
-            log.info("💾 [DB] Stratégie Leader sauvegardée. ROI Estimé: {}%", String.format("%.2f", leader.getRoiEstime()));
         }
     }
 
@@ -1079,73 +1063,63 @@ public class LotoService {
      * @return true si cohérente, false sinon
      */
     public boolean estGrilleCoherenteOptimisee(List<Integer> boules, List<Integer> dernierTirage, DynamicConstraints rules) {
-        // 1. EXTRACTION DIRECTE (Zéro allocation, accès mémoire rapide)
+        // 1. EXTRACTION DIRECTE
         int b0 = boules.get(0);
         int b1 = boules.get(1);
         int b2 = boules.get(2);
         int b3 = boules.get(3);
         int b4 = boules.get(4);
 
-        // 2. FAIL-FAST GÉOMÉTRIQUE (Les tests les moins coûteux en premier)
-
-        // Ecart (Spread) : On tolère des grilles plus compactes (12 au lieu de 15)
-        // Une suite comme 10-12-15-19-23 est rare mais possible.
+        // 2. FAIL-FAST GÉOMÉTRIQUE & SOMME
         if ((b4 - b0) < 12) return false;
-
-        // Somme : On élargit la fenêtre (85 - 210)
-        // La courbe de Gauss est centrée sur 130, mais limiter à 100-175 coupe trop de gains potentiels.
         int somme = b0 + b1 + b2 + b3 + b4;
         if (somme < 85 || somme > 210) return false;
 
-        // 3. ANALYSE BITWISE (Parité et Dizaines sans boucle)
+        // --- NOUVEAU : ANALYSE DES DELTAS ---
+        // On calcule l'écart entre chaque boule successive
+        int d1 = b1 - b0;
+        int d2 = b2 - b1;
+        int d3 = b3 - b2;
+        int d4 = b4 - b3;
+
+        // Règle Statistique : Dans 90% des tirages gagnants, au moins 2 deltas sont <= 10
+        // Cela évite les grilles type "1-15-28-39-49" qui sont trop décorrélées.
+        int deltasPetits = 0;
+        if (d1 <= 10) deltasPetits++;
+        if (d2 <= 10) deltasPetits++;
+        if (d3 <= 10) deltasPetits++;
+        if (d4 <= 10) deltasPetits++;
+
+        if (deltasPetits < 2) return false;
+
+        // Règle de sécurité : Pas de delta géant (> 30) qui isole un numéro
+        if (d1 > 30 || d2 > 30 || d3 > 30 || d4 > 30) return false;
+        // ------------------------------------
+
+        // 3. ANALYSE BITWISE (Parité et Dizaines)
         int pairs = 0;
         int dizainesMask = 0;
-
-        // Calcul déroulé pour performance CPU maximale (Pipeline friendly)
         if ((b0 & 1) == 0) pairs++; dizainesMask |= (1 << (b0 / 10));
         if ((b1 & 1) == 0) pairs++; dizainesMask |= (1 << (b1 / 10));
         if ((b2 & 1) == 0) pairs++; dizainesMask |= (1 << (b2 / 10));
         if ((b3 & 1) == 0) pairs++; dizainesMask |= (1 << (b3 / 10));
         if ((b4 & 1) == 0) pairs++; dizainesMask |= (1 << (b4 / 10));
 
-        // Vérification Parité (Selon règles dynamiques)
         if (pairs < rules.getMinPairs() || pairs > rules.getMaxPairs()) return false;
-
-        // Vérification Diversité Dizaines (Au moins 3 dizaines différentes requises)
-        // Ex: 1, 2, 3, 41, 42 est trop déséquilibré → rejeté.
         if (Integer.bitCount(dizainesMask) < 3) return false;
 
-        // 4. SUITES & SÉQUENCES (Logique fine)
-        boolean s1 = (b1 == b0 + 1);
-        boolean s2 = (b2 == b1 + 1);
-        boolean s3 = (b3 == b2 + 1);
-        boolean s4 = (b4 == b3 + 1);
-
+        // 4. SUITES & SÉQUENCES
         if (!rules.isAllowSuites()) {
-            // Mode strict : aucune suite (1-2 interdit)
-            if (s1 || s2 || s3 || s4) return false;
-        } else {
-            // Mode ROI : On autorise les suites (1-2), MAIS...
-            // On interdit statistiquement les triplets consécutifs (1-2-3)
-            // Probabilité quasi nulle (<0.05%), on ne gaspille pas d'argent dessus.
-            if ((s1 && s2) || (s2 && s3) || (s3 && s4)) return false;
+            if ((b1 == b0 + 1) || (b2 == b1 + 1) || (b3 == b2 + 1) || (b4 == b3 + 1)) return false;
         }
 
-        // 5. COMPARAISON DERNIER TIRAGE (Optimisation ROI Critique)
+        // 5. COMPARAISON DERNIER TIRAGE
         if (dernierTirage != null) {
             int communs = 0;
-
-            // On vérifie l'overlap.
-            // ATTENTION : L'ancienne règle (>=2 rejetés) faisait perdre de l'argent.
-            // Il est fréquent que DEUX numéros de la veille ressortent.
-            // On ne rejette QUE si la grille est "trop" similaire (>= 4 numéros communs).
-
             if (dernierTirage.contains(b0)) communs++;
             if (dernierTirage.contains(b1)) communs++;
             if (dernierTirage.contains(b2)) communs++;
-            if (communs >= 3 && dernierTirage.contains(b3)) communs++; // Optim check
-
-            // Si 4 ou 5 numéros sont identiques à la veille → On jette (Risque max)
+            if (communs >= 3 && dernierTirage.contains(b3)) communs++;
             if (communs >= 4) return false;
             return communs != 3 || !dernierTirage.contains(b4);
         }
