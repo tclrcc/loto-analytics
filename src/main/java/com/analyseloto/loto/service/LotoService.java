@@ -11,10 +11,8 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
-import org.springframework.context.event.EventListener;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -200,6 +198,8 @@ public class LotoService {
         forceDailyOptimization();
     }
 
+    // Dans LotoService.java
+
     public void forceDailyOptimization() {
         log.info("🌙 [CRON] Optimisation de l'Ensemble IA...");
 
@@ -207,17 +207,23 @@ public class LotoService {
         List<LotoTirage> historyLight = rawData.stream().map(this::mapToLightEntity).toList();
 
         if (!historyLight.isEmpty()) {
+            // 1. Appel du BacktestService (qui calcule maintenant le ROI pur pour chaque expert)
             List<AlgoConfig> newConfigs = backtestService.trouverMeilleuresConfigs(historyLight);
 
-            // On définit un timestamp unique pour tout le batch d'experts
             LocalDateTime batchTimestamp = LocalDateTime.now(ZONE_PARIS);
-
             this.cachedEliteConfigs = newConfigs;
             this.lastBacktestDate = batchTimestamp.toLocalDate();
 
-            // SAUVEGARDE DE TOUT LE CONSEIL (20 experts)
-            List<StrategyConfig> entitiesToSave = new ArrayList<>();
+            // 2. LOG DU LEADER : On identifie le meilleur expert du batch
+            if (!newConfigs.isEmpty()) {
+                AlgoConfig leader = newConfigs.get(0);
+                log.info("🥇 LEADER IDENTIFIÉ : {} | ROI Estimé : {}%",
+                        leader.getNomStrategie(),
+                        String.format("%.2f", leader.getRoiEstime())); // Affiche le ROI pur calculé
+            }
 
+            // 3. SAUVEGARDE DE TOUT LE CONSEIL
+            List<StrategyConfig> entitiesToSave = new ArrayList<>();
             for (int i = 0; i < newConfigs.size(); i++) {
                 AlgoConfig config = newConfigs.get(i);
                 StrategyConfig entity = new StrategyConfig();
@@ -235,14 +241,17 @@ public class LotoService {
                 entity.setNbGrillesParTest(config.getNbGrillesParTest());
                 entity.setRoi(config.getRoiEstime());
 
-                // Le premier de la liste (triée par fitness) est le leader
                 entity.setLeader(i == 0);
-
                 entitiesToSave.add(entity);
             }
 
             strategyConfigRepostiroy.saveAll(entitiesToSave);
-            log.info("💾 [DB] Conseil des Sages ({} experts) sauvegardé avec succès.", entitiesToSave.size());
+
+            // Log de fin de processus plus détaillé
+            log.info("💾 [DB] Conseil des Sages ({} experts) sauvegardé avec succès. Leader : {} ({}%)",
+                    entitiesToSave.size(),
+                    newConfigs.get(0).getNomStrategie(),
+                    newConfigs.get(0).getRoiEstime());
 
             // Préchauffage...
             genererMultiplesPronostics(recupererDateProchainTirage(), 10);
@@ -460,9 +469,6 @@ public class LotoService {
         cachedDailyPronosRef.set(resultatsConsensus);
         this.dateCachedPronos = dateCible;
 
-        cachedDailyPronosRef.set(resultatsConsensus);
-        this.dateCachedPronos = dateCible;
-
         long duration = System.currentTimeMillis() - startTotal;
         log.info("🏁 [CONSENSUS IA] Terminé en {} ms. {} grilles 'Solidaires' retenues.", duration, resultatsConsensus.size());
 
@@ -580,15 +586,38 @@ public class LotoService {
         int size = 0;
         ThreadLocalRandom rng = ThreadLocalRandom.current();
 
-        // Logique Trio (inchangée mais adaptée au buffer)
+        // 1. LOGIQUE TRIO (Utilisation intelligente du dernier tirage)
         if (trios != null && !trios.isEmpty() && rng.nextBoolean()) {
-            List<Integer> trioChoisi = trios.get(rng.nextInt(trios.size()));
-            for (Integer n : trioChoisi) buffer[size++] = n;
-        } else {
-            buffer[size++] = hots.length > 0 ? hots[rng.nextInt(hots.length)] : 1 + rng.nextInt(49);
+            // On tente de trouver un trio qui n'est pas déjà trop présent dans le dernier tirage
+            for (int attempt = 0; true; attempt++) {
+                List<Integer> trioChoisi = trios.get(rng.nextInt(trios.size()));
+                int communsDernier = 0;
+                if (dernierTirage != null) {
+                    for (Integer n : trioChoisi) if (dernierTirage.contains(n)) communsDernier++;
+                }
+                // Si le trio a 2 ou 3 numéros déjà sortis, on réessaye (rare mais à éviter)
+                if (communsDernier < 2 || attempt == 2) {
+                    for (Integer n : trioChoisi) buffer[size++] = n;
+                    break;
+                }
+            }
         }
 
+        // 2. INITIALISATION DE LA BASE (Si pas de trio ou échec)
+        if (size == 0) {
+            int base = hots.length > 0 ? hots[rng.nextInt(hots.length)] : 1 + rng.nextInt(49);
+            buffer[size++] = base;
+        }
+
+        // 3. REMPLISSAGE PAR AFFINITÉ AVEC CONTRÔLE DE REDONDANCE
         while (size < 5) {
+            // On calcule combien de numéros du dernier tirage on a déjà intégré
+            int countCommuns = 0;
+            if (dernierTirage != null) {
+                for (int i = 0; i < size; i++) if (dernierTirage.contains(buffer[i])) countCommuns++;
+            }
+
+            // Stratégie de Pool
             int nbHot = 0, nbCold = 0;
             for (int i = 0; i < size; i++) {
                 if (isHot[buffer[i]]) nbHot++;
@@ -598,13 +627,26 @@ public class LotoService {
             int[] targetPool = (nbHot < 2) ? hots : (nbCold < 1 ? colds : neutrals);
             int elu = selectionnerParAffiniteFastPrimitive(targetPool, buffer, size, matrice);
 
+            // NOUVEAU : Si l'élu fait partie du dernier tirage et qu'on en a déjà 2, on rejette
+            // (Statistiquement, plus de 2 numéros communs entre deux tirages successifs est rare)
+            if (elu != -1 && dernierTirage != null && dernierTirage.contains(elu) && countCommuns >= 2) {
+                elu = -1; // Force la sélection aléatoire hors pool ou hors dernier tirage
+            }
+
             if (elu == -1) {
-                int n; do { n = 1 + rng.nextInt(49); } while (containsPrimitive(buffer, size, n));
+                int n;
+                int security = 0;
+                do {
+                    n = 1 + rng.nextInt(49);
+                    security++;
+                    // On évite les doublons et on limite les communs avec le dernier tirage
+                } while ((containsPrimitive(buffer, size, n) || (dernierTirage != null && dernierTirage.contains(n) && countCommuns >= 2)) && security < 20);
                 buffer[size++] = n;
             } else {
                 buffer[size++] = elu;
             }
         }
+
         Arrays.sort(buffer);
         return buffer;
     }
@@ -1016,10 +1058,12 @@ public class LotoService {
 
     private double calculerScoreFitnessOptimise(int[] boules, int chance, double[] scoresBoules, double[] scoresChance, int[][] matriceAffinites, AlgoConfig config, double[][] matriceMarkov, int etatDernierTirage) {
         double score = 0.0;
+
+        // 1. Scores individuels (Fréquence, Forme, Ecart, etc.)
         for (int b : boules) score += scoresBoules[b];
         score += scoresChance[chance];
 
-        // Score Affinité (Boucle optimisée sur tableau)
+        // 2. Score Affinité (Boucles sur tableaux primitifs)
         double scoreAffinite = 0;
         for (int i = 0; i < 5; i++) {
             for (int j = i + 1; j < 5; j++) {
@@ -1028,14 +1072,37 @@ public class LotoService {
         }
         score += (scoreAffinite * config.getPoidsAffinite());
 
-        // Somme et Parité
-        int pairs = 0, somme = 0;
+        // 3. NOUVEAU : Score Markov (Transitions d'états)
+        // On calcule l'état de la grille candidate (en utilisant la logique de calculerEtatAbstrait)
+        int sommeCandidate = 0;
+        for (int b : boules) sommeCandidate += b;
+
+        int etatCandidat;
+        if (sommeCandidate < 100) etatCandidat = 1;
+        else if (sommeCandidate <= 125) etatCandidat = 2;
+        else if (sommeCandidate <= 150) etatCandidat = 3;
+        else if (sommeCandidate <= 175) etatCandidat = 4;
+        else etatCandidat = 5;
+
+        // On récupère la probabilité de transition depuis le dernier tirage
+        // etatDernierTirage est l'index de ligne, etatCandidat l'index de colonne
+        if (etatDernierTirage > 0 && etatDernierTirage <= 5) {
+            double probabiliteTransition = matriceMarkov[etatDernierTirage][etatCandidat];
+            // On multiplie par un facteur de 100 pour mettre la probabilité à l'échelle des autres scores
+            score += (probabiliteTransition * 100.0 * config.getPoidsMarkov());
+        }
+
+        // 4. Somme et Parité (Optimisation visuelle)
+        int pairs = 0;
         for (int b : boules) {
             if ((b & 1) == 0) pairs++;
-            somme += b;
         }
+
+        // Bonus pour l'équilibre statistique (2 ou 3 paires sont les cas les plus fréquents)
         if (pairs == 2 || pairs == 3) score += 15.0;
-        if (somme >= 120 && somme <= 170) score += 10.0;
+
+        // Bonus pour la zone de somme "centrale" statistiquement la plus probable
+        if (sommeCandidate >= 120 && sommeCandidate <= 170) score += 10.0;
 
         return score;
     }

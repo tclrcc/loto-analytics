@@ -99,15 +99,28 @@ public class BacktestService {
                 EvolutionResult<DoubleGene, Double> result = engine.stream()
                         .limit(Limits.bySteadyFitness(12))
                         .limit(MAX_GENERATIONS / 2)
+                        .peek(r -> {
+                            if (r.generation() % 5 == 0) {
+                                log.info("   [Gen {}] Meilleure Fitness ({}) : {}", r.generation(), profil.name(), String.format("%.2f", r.bestFitness()));
+                            }
+                        })
                         .collect(EvolutionResult.toBestEvolutionResult());
 
-                // On extrait les 5 meilleurs de cette école
+                // EXTRACTION ET CALCUL DU ROI RÉEL POUR LE LOG
                 List<LotoService.AlgoConfig> topProfil = result.population().stream()
                         .sorted((p1, p2) -> Double.compare(p2.fitness(), p1.fitness()))
                         .limit(5)
-                        .map(p -> decoderGenotype(p.genotype(), profil.name() + "_" + String.format("%.1f", p.fitness())))
+                        .map(p -> {
+                            LotoService.AlgoConfig cfg = decoderGenotype(p.genotype(), profil.name() + "_" + String.format("%.1f", p.fitness()));
+
+                            // IMPORTANT : On recalcule le ROI pur (sans les bonus de couverture) pour le stockage et le log
+                            double roiPur = evaluerFitness(p.genotype(), scenarios, null); // profil null = ROI pur dans notre nouvelle logique
+                            cfg.setRoiEstime(roiPur);
+                            return cfg;
+                        })
                         .toList();
 
+                log.info("✅ Ecole {} terminée. Meilleur ROI pur détecté : {}%", profil.name(), String.format("%.2f", topProfil.get(0).getRoiEstime()));
                 ensembleFinal.addAll(topProfil);
             }
 
@@ -159,10 +172,13 @@ public class BacktestService {
         if (depense == 0) return -1000.0;
 
         double roiPercent = ((bilan - depense) / depense) * 100.0;
+
+        // Si profil est null, on veut juste le ROI (utilisé pour le log final)
+        if (profil == null) return roiPercent;
+
         double couverture = (double) totalGagnant / totalGrilles;
         double penaliteVol = Math.log10(depense) * 5.0;
 
-        // FORMULE PONDÉRÉE : mélange ROI et Couverture selon le profil de l'école
         return (roiPercent * profil.roiWeight) + (couverture * 100.0 * profil.couvWeight) - penaliteVol;
     }
 
