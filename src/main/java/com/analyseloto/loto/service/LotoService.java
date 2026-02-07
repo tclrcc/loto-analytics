@@ -114,7 +114,7 @@ public class LotoService {
     @Data
     private static class GrilleCandidate implements Serializable {
         @Serial private static final long serialVersionUID = 1L;
-        List<Integer> boules;
+        int[] boules;
         int chance;
         double fitness;
     }
@@ -354,11 +354,17 @@ public class LotoService {
                     matriceChanceArr, contraintesDuJour, config, historiqueBitMasks, matriceMarkov, etatDernierTirage
             );
 
-            // d. Enregistrement des votes (Top 30 de cet expert)
+            // Correction pour le stockage des votes dans LotoService
             int limitVote = Math.min(proposals.size(), 30);
-            for(int i=0; i<limitVote; i++) {
+            for(int i = 0; i < limitVote; i++) {
                 GrilleCandidate cand = proposals.get(i);
-                Set<Integer> key = new HashSet<>(cand.getBoules()); // Set pour unicité
+
+                // On transforme le int[] trié en List<Integer> pour que le HashSet l'accepte
+                List<Integer> boulesList = Arrays.stream(cand.getBoules())
+                        .boxed()
+                        .toList();
+
+                Set<Integer> key = new HashSet<>(boulesList);
 
                 votesGrilles.merge(key, 1, Integer::sum);
                 scoresCumules.merge(key, cand.getFitness(), Double::sum);
@@ -491,18 +497,12 @@ public class LotoService {
         int taillePopulationCible = 50_000;
 
         List<GrilleCandidate> population = IntStream.range(0, taillePopulationCible * 2)
-                // .parallel()  <-- À SUPPRIMER IMPÉRATIVEMENT (Cause du blocage)
-                .mapToObj(i -> {
-                    // ThreadLocalRandom fonctionne bien même en séquentiel
-                    List<Integer> boules = genererGrilleOptimisee(hots, neutrals, colds, isHot, isCold, matriceAffinites, dernierTirage, topTrios);
-                    Collections.sort(boules);
-                    return boules;
-                })
+                .mapToObj(i -> genererGrilleOptimiseePrimitive(hots, neutrals, colds, isHot, isCold, matriceAffinites, dernierTirage, topTrios))
                 .filter(boules -> estGrilleCoherenteOptimisee(boules, dernierTirage, contraintes))
                 .filter(boules -> !historiqueBitMasks.contains(bitMaskService.calculerBitMask(boules)))
                 .limit(taillePopulationCible)
                 .map(boules -> {
-                    int chance = selectionnerChanceRapide(boules, scoresChance, matriceChance);
+                    int chance = selectionnerChanceRapidePrimitive(boules, scoresChance, matriceChance);
                     double fitness = calculerScoreFitnessOptimise(boules, chance, scoresBoules, scoresChance, matriceAffinites, config, matriceMarkov, etatDernierTirage);
                     return new GrilleCandidate(boules, chance, fitness);
                 })
@@ -517,12 +517,108 @@ public class LotoService {
 
         // Fallback
         if (population.isEmpty()) {
-            List<Integer> secours = genererGrilleOptimisee(hots, neutrals, colds, isHot, isCold, matriceAffinites, dernierTirage, topTrios);
-            Collections.sort(secours);
+            int[] secours = genererGrilleOptimisee(hots, neutrals, colds, isHot, isCold, matriceAffinites, dernierTirage, topTrios);
+            Arrays.sort(secours);
             population.add(new GrilleCandidate(secours, 1, 50.0));
         }
 
         return population;
+    }
+
+    // Ajouter cette méthode dans LotoService.java
+
+    /**
+     * Version ultra-performante pour le Backtesting (Zéro Allocation / Primitives)
+     * Retourne une liste de int[] où [0-4] sont les boules et [5] est le numéro chance.
+     */
+    public List<int[]> genererGrillesDepuisScenarioOptimise(ScenarioSimulation sc, AlgoConfig config, int nbGrilles) {
+        List<int[]> resultats = new ArrayList<>(nbGrilles);
+
+        // 1. Pré-calcul des scores de boules selon la config de l'expert
+        double[] scoresBoules = new double[50];
+        for (int i = 1; i <= 49; i++) {
+            scoresBoules[i] = appliquerPoids(sc.getRawStatsBoulesArr()[i], config);
+            if (sc.getDernierTirageConnu().contains(i)) scoresBoules[i] -= 10.0;
+        }
+
+        // 2. Préparation des buckets et scores de chance
+        Map<String, List<Integer>> buckets = creerBucketsOptimises(scoresBoules);
+        int[] hots = buckets.getOrDefault(Constantes.BUCKET_HOT, Collections.emptyList()).stream().mapToInt(i->i).toArray();
+        int[] neutrals = buckets.getOrDefault(Constantes.BUCKET_NEUTRAL, Collections.emptyList()).stream().mapToInt(i->i).toArray();
+        int[] colds = buckets.getOrDefault(Constantes.BUCKET_COLD, Collections.emptyList()).stream().mapToInt(i->i).toArray();
+
+        boolean[] isHot = new boolean[51]; boolean[] isCold = new boolean[51];
+        for(int n : hots) isHot[n] = true;
+        for(int n : colds) isCold[n] = true;
+
+        double[] scoresChance = new double[11];
+        for(int i=1; i<=10; i++) scoresChance[i] = appliquerPoids(sc.getRawStatsChance().get(i), config);
+
+        // 3. Boucle de génération
+        int essais = 0; int maxEssais = nbGrilles * 10;
+        while(resultats.size() < nbGrilles && essais < maxEssais) {
+            essais++;
+            // Utilisation de la méthode primitive
+            int[] boules = genererGrilleOptimiseePrimitive(hots, neutrals, colds, isHot, isCold, sc.getMatriceAffinites(), sc.getDernierTirageConnu(), sc.getTopTriosPrecalcules());
+
+            if (estGrilleCoherenteOptimisee(boules, sc.getDernierTirageConnu(), sc.getContraintes())) {
+                // Sélection du numéro chance optimisée
+                int chance = selectionnerChanceRapidePrimitive(boules, scoresChance, sc.getMatriceChance());
+
+                // On crée un tableau de 6 pour stocker toute la grille
+                int[] grilleComplete = new int[6];
+                System.arraycopy(boules, 0, grilleComplete, 0, 5);
+                grilleComplete[5] = chance;
+
+                resultats.add(grilleComplete);
+            }
+        }
+        return resultats;
+    }
+
+    private int[] genererGrilleOptimiseePrimitive(int[] hots, int[] neutrals, int[] colds, boolean[] isHot, boolean[] isCold, int[][] matrice, List<Integer> dernierTirage, List<List<Integer>> trios) {
+        int[] buffer = new int[5];
+        int size = 0;
+        ThreadLocalRandom rng = ThreadLocalRandom.current();
+
+        // Logique Trio (inchangée mais adaptée au buffer)
+        if (trios != null && !trios.isEmpty() && rng.nextBoolean()) {
+            List<Integer> trioChoisi = trios.get(rng.nextInt(trios.size()));
+            for (Integer n : trioChoisi) buffer[size++] = n;
+        } else {
+            buffer[size++] = hots.length > 0 ? hots[rng.nextInt(hots.length)] : 1 + rng.nextInt(49);
+        }
+
+        while (size < 5) {
+            int nbHot = 0, nbCold = 0;
+            for (int i = 0; i < size; i++) {
+                if (isHot[buffer[i]]) nbHot++;
+                else if (isCold[buffer[i]]) nbCold++;
+            }
+
+            int[] targetPool = (nbHot < 2) ? hots : (nbCold < 1 ? colds : neutrals);
+            int elu = selectionnerParAffiniteFastPrimitive(targetPool, buffer, size, matrice);
+
+            if (elu == -1) {
+                int n; do { n = 1 + rng.nextInt(49); } while (containsPrimitive(buffer, size, n));
+                buffer[size++] = n;
+            } else {
+                buffer[size++] = elu;
+            }
+        }
+        Arrays.sort(buffer);
+        return buffer;
+    }
+
+    private int selectionnerChanceRapidePrimitive(int[] boules, double[] scoresChanceArr, int[][] matriceChance) {
+        int meilleurChance = 1;
+        double meilleurScore = -Double.MAX_VALUE;
+        for (int c = 1; c <= 10; c++) {
+            double score = scoresChanceArr[c];
+            for (int b : boules) score += (matriceChance[b][c] * 2.0);
+            if (score > meilleurScore) { meilleurScore = score; meilleurChance = c; }
+        }
+        return meilleurChance;
     }
 
     // ==================================================================================
@@ -559,45 +655,11 @@ public class LotoService {
         return scenarios;
     }
 
-    public List<List<Integer>> genererGrillesDepuisScenario(ScenarioSimulation sc, AlgoConfig config, int nbGrilles) {
-        List<List<Integer>> resultats = new ArrayList<>(nbGrilles);
-        double[] scoresBoules = new double[50];
-
-        for (int i = 1; i <= 49; i++) {
-            scoresBoules[i] = appliquerPoids(sc.rawStatsBoulesArr[i], config);
-            if (sc.dernierTirageConnu.contains(i)) scoresBoules[i] -= 10.0;
-        }
-
-        Map<String, List<Integer>> buckets = creerBucketsOptimises(scoresBoules);
-
-        // Conversion Primitive à la volée pour utiliser la méthode optimisée
-        int[] hots = buckets.getOrDefault(Constantes.BUCKET_HOT, Collections.emptyList()).stream().mapToInt(i->i).toArray();
-        int[] neutrals = buckets.getOrDefault(Constantes.BUCKET_NEUTRAL, Collections.emptyList()).stream().mapToInt(i->i).toArray();
-        int[] colds = buckets.getOrDefault(Constantes.BUCKET_COLD, Collections.emptyList()).stream().mapToInt(i->i).toArray();
-
-        boolean[] isHot = new boolean[51];
-        boolean[] isCold = new boolean[51];
-        for(int n : hots) isHot[n] = true;
-        for(int n : colds) isCold[n] = true;
-
-        int essais = 0; int maxEssais = nbGrilles * 5;
-        while(resultats.size() < nbGrilles && essais < maxEssais) {
-            essais++;
-            List<Integer> boules = genererGrilleOptimisee(hots, neutrals, colds, isHot, isCold, sc.matriceAffinites, sc.dernierTirageConnu, sc.topTriosPrecalcules);
-            Collections.sort(boules);
-            if (estGrilleCoherenteOptimisee(boules, sc.dernierTirageConnu, sc.contraintes)) {
-                List<Integer> grilleFinale = new ArrayList<>(boules); grilleFinale.add(1);
-                resultats.add(grilleFinale);
-            }
-        }
-        return resultats;
-    }
-
     // ------------------------------------------------------------------------
     // OPTIMISATION "ZERO ALLOCATION" : Utilisation de tableaux primitifs int[]
     // ------------------------------------------------------------------------
 
-    private List<Integer> genererGrilleOptimisee(int[] hots, int[] neutrals, int[] colds, boolean[] isHot,
+    private int[] genererGrilleOptimisee(int[] hots, int[] neutrals, int[] colds, boolean[] isHot,
             boolean[] isCold, int[][] matrice, List<Integer> dernierTirage, List<List<Integer>> trios) {
         // 1. Buffer Primitif (évite de créer une ArrayList et des objets Integer inutilement)
         int[] buffer = new int[5];
@@ -649,9 +711,8 @@ public class LotoService {
             }
         }
 
-        List<Integer> selection = new ArrayList<>(5);
-        for (int i = 0; i < 5; i++) selection.add(buffer[i]);
-        return selection;
+        Arrays.sort(buffer);
+        return buffer;
     }
 
     /**
@@ -685,22 +746,6 @@ public class LotoService {
     private boolean containsPrimitive(int[] arr, int size, int val) {
         for (int i = 0; i < size; i++) if (arr[i] == val) return true;
         return false;
-    }
-
-    private int selectionnerChanceRapide(List<Integer> boules, double[] scoresChanceArr, int[][] matriceChance) {
-        int meilleurChance = 1;
-        double meilleurScore = -Double.MAX_VALUE;
-        ThreadLocalRandom rng = ThreadLocalRandom.current();
-
-        for (int c = 1; c <= 10; c++) {
-            double score = scoresChanceArr[c];
-            double affiniteScore = 0;
-            for (Integer b : boules) affiniteScore += matriceChance[b][c];
-            score += (affiniteScore * 2.0);
-            double scoreFinal = score + (rng.nextDouble() * 5.0);
-            if (scoreFinal > meilleurScore) { meilleurScore = scoreFinal; meilleurChance = c; }
-        }
-        return meilleurChance;
     }
 
     private double appliquerPoids(RawStatData raw, AlgoConfig cfg) {
@@ -970,24 +1015,29 @@ public class LotoService {
         return scores;
     }
 
-    private double calculerScoreFitnessOptimise(List<Integer> boules, int chance, double[] scoresBoules, double[] scoresChance, int[][] matriceAffinites, AlgoConfig config, double[][] matriceMarkov, int etatDernierTirage) {
+    private double calculerScoreFitnessOptimise(int[] boules, int chance, double[] scoresBoules, double[] scoresChance, int[][] matriceAffinites, AlgoConfig config, double[][] matriceMarkov, int etatDernierTirage) {
         double score = 0.0;
         for (int b : boules) score += scoresBoules[b];
-        if (chance >= 0 && chance < scoresChance.length) score += scoresChance[chance];
-        double scoreAffinite = 0; int size = boules.size();
-        for (int i = 0; i < size; i++) {
-            int b1 = boules.get(i);
-            for (int j = i + 1; j < size; j++) scoreAffinite += matriceAffinites[b1][boules.get(j)];
+        score += scoresChance[chance];
+
+        // Score Affinité (Boucle optimisée sur tableau)
+        double scoreAffinite = 0;
+        for (int i = 0; i < 5; i++) {
+            for (int j = i + 1; j < 5; j++) {
+                scoreAffinite += matriceAffinites[boules[i]][boules[j]];
+            }
         }
         score += (scoreAffinite * config.getPoidsAffinite());
-        int pairs = 0; int somme = 0;
-        for (int b : boules) { if ((b & 1) == 0) pairs++; somme += b; }
+
+        // Somme et Parité
+        int pairs = 0, somme = 0;
+        for (int b : boules) {
+            if ((b & 1) == 0) pairs++;
+            somme += b;
+        }
         if (pairs == 2 || pairs == 3) score += 15.0;
         if (somme >= 120 && somme <= 170) score += 10.0;
-        if (config.getPoidsMarkov() > 0) {
-            int etatCandidat = calculerEtatAbstrait(boules);
-            score += (matriceMarkov[etatDernierTirage][etatCandidat] * config.getPoidsMarkov());
-        }
+
         return score;
     }
 
@@ -1062,68 +1112,33 @@ public class LotoService {
      * @param rules contraintes à appliquer
      * @return true si cohérente, false sinon
      */
-    public boolean estGrilleCoherenteOptimisee(List<Integer> boules, List<Integer> dernierTirage, DynamicConstraints rules) {
+    public boolean estGrilleCoherenteOptimisee(int[] boules, List<Integer> dernierTirage, DynamicConstraints rules) {
         // 1. EXTRACTION DIRECTE
-        int b0 = boules.get(0);
-        int b1 = boules.get(1);
-        int b2 = boules.get(2);
-        int b3 = boules.get(3);
-        int b4 = boules.get(4);
+        int b0 = boules[0], b1 = boules[1], b2 = boules[2], b3 = boules[3], b4 = boules[4];
 
-        // 2. FAIL-FAST GÉOMÉTRIQUE & SOMME
-        if ((b4 - b0) < 12) return false;
+        // Calcul des Deltas (Astuce de l'analyse précédente intégrée)
+        int d1 = b1 - b0, d2 = b2 - b1, d3 = b3 - b2, d4 = b4 - b3;
+        if (d1 > 30 || d2 > 30 || d3 > 30 || d4 > 30) return false;
+
         int somme = b0 + b1 + b2 + b3 + b4;
         if (somme < 85 || somme > 210) return false;
 
-        // --- NOUVEAU : ANALYSE DES DELTAS ---
-        // On calcule l'écart entre chaque boule successive
-        int d1 = b1 - b0;
-        int d2 = b2 - b1;
-        int d3 = b3 - b2;
-        int d4 = b4 - b3;
-
-        // Règle Statistique : Dans 90% des tirages gagnants, au moins 2 deltas sont <= 10
-        // Cela évite les grilles type "1-15-28-39-49" qui sont trop décorrélées.
-        int deltasPetits = 0;
-        if (d1 <= 10) deltasPetits++;
-        if (d2 <= 10) deltasPetits++;
-        if (d3 <= 10) deltasPetits++;
-        if (d4 <= 10) deltasPetits++;
-
-        if (deltasPetits < 2) return false;
-
-        // Règle de sécurité : Pas de delta géant (> 30) qui isole un numéro
-        if (d1 > 30 || d2 > 30 || d3 > 30 || d4 > 30) return false;
-        // ------------------------------------
-
-        // 3. ANALYSE BITWISE (Parité et Dizaines)
-        int pairs = 0;
-        int dizainesMask = 0;
-        if ((b0 & 1) == 0) pairs++; dizainesMask |= (1 << (b0 / 10));
-        if ((b1 & 1) == 0) pairs++; dizainesMask |= (1 << (b1 / 10));
-        if ((b2 & 1) == 0) pairs++; dizainesMask |= (1 << (b2 / 10));
-        if ((b3 & 1) == 0) pairs++; dizainesMask |= (1 << (b3 / 10));
-        if ((b4 & 1) == 0) pairs++; dizainesMask |= (1 << (b4 / 10));
+        // Bitwise pour parité et dizaines
+        int pairs = 0, dizainesMask = 0;
+        for (int b : boules) {
+            if ((b & 1) == 0) pairs++;
+            dizainesMask |= (1 << (b / 10));
+        }
 
         if (pairs < rules.getMinPairs() || pairs > rules.getMaxPairs()) return false;
         if (Integer.bitCount(dizainesMask) < 3) return false;
 
-        // 4. SUITES & SÉQUENCES
-        if (!rules.isAllowSuites()) {
-            if ((b1 == b0 + 1) || (b2 == b1 + 1) || (b3 == b2 + 1) || (b4 == b3 + 1)) return false;
-        }
-
-        // 5. COMPARAISON DERNIER TIRAGE
+        // Comparaison dernier tirage (Boxing minimal ici)
         if (dernierTirage != null) {
             int communs = 0;
-            if (dernierTirage.contains(b0)) communs++;
-            if (dernierTirage.contains(b1)) communs++;
-            if (dernierTirage.contains(b2)) communs++;
-            if (communs >= 3 && dernierTirage.contains(b3)) communs++;
-            if (communs >= 4) return false;
-            return communs != 3 || !dernierTirage.contains(b4);
+            for (int b : boules) if (dernierTirage.contains(b)) communs++;
+            return communs < 4;
         }
-
         return true;
     }
 

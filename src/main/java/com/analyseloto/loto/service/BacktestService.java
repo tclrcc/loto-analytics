@@ -45,195 +45,109 @@ public class BacktestService {
      */
     // DANS BacktestService.java
 
-    public List<LotoService.AlgoConfig> trouverMeilleuresConfigs(List<LotoTirage> historiqueComplet) {
-        log.info("🧬 Démarrage de la Méta-Optimisation IA (Deep Learning / Ensemble)...");
+    public List<LotoService.AlgoConfig> trouverMeilleuresConfigs(List<LotoTirage> historique) {
+        log.info("🧬 Démarrage de la Méta-Optimisation IA (Zero-Boxing & Multi-Objective)...");
         long start = System.currentTimeMillis();
 
-        // 1. Préparation des scénarios
-        List<LotoService.ScenarioSimulation> scenarios = lotoService.preparerScenariosBacktest(historiqueComplet, 500, DEPTH_BACKTEST);
+        List<LotoService.ScenarioSimulation> scenarios = lotoService.preparerScenariosBacktest(historique, 500, DEPTH_BACKTEST);
+        if (scenarios.isEmpty()) return List.of(LotoService.AlgoConfig.defaut());
 
-        if (scenarios.isEmpty()) {
-            return List.of(LotoService.AlgoConfig.defaut());
-        }
-
-        // DÉTECTION AUTOMATIQUE DES CŒURS (VPS Scalable)
-        int availableProcessors = Runtime.getRuntime().availableProcessors();
-        // On laisse toujours 1 cœur libre pour le Système et la BDD
-        int nThreads = Math.max(1, availableProcessors - 1);
-
-        log.info("✅ {} Scénarios chargés. Utilisation de {} Cores (sur {}) pour le calcul intensif.",
-                scenarios.size(), nThreads, availableProcessors);
-
-        // 2. Génome (Plages de recherche affinées pour convergence rapide)
-        Factory<Genotype<DoubleGene>> gtf = Genotype.of(
-                DoubleChromosome.of(0.0, 20.0),   // FreqJour
-                DoubleChromosome.of(0.0, 80.0),   // Forme
-                DoubleChromosome.of(0.0, 20.0),   // Ecart
-                DoubleChromosome.of(0.0, 60.0),   // Tension
-                DoubleChromosome.of(0.0, 60.0),   // Markov
-                DoubleChromosome.of(0.0, 60.0)    // Affinité
-        );
-
-        // Gestionnaire de Threads Dédié
+        int nThreads = Math.max(1, Runtime.getRuntime().availableProcessors() - 1);
         ExecutorService executor = Executors.newFixedThreadPool(nThreads);
 
+        Factory<Genotype<DoubleGene>> gtf = Genotype.of(
+                DoubleChromosome.of(0.0, 30.0), DoubleChromosome.of(0.0, 100.0), // Freq, Forme
+                DoubleChromosome.of(0.0, 30.0), DoubleChromosome.of(0.0, 80.0),  // Ecart, Tension
+                DoubleChromosome.of(0.0, 80.0), DoubleChromosome.of(0.0, 80.0)   // Markov, Affinité
+        );
+
         try {
-            // 3. Moteur Evolutionnaire "Heavy Duty"
             Engine<DoubleGene, Double> engine = Engine.builder(gt -> evaluerFitness(gt, scenarios, true), gtf)
                     .populationSize(POPULATION_SIZE)
-                    .executor(executor) // Calcul parallèle
-                    .survivorsSelector(new TournamentSelector<>(5))
-                    .offspringSelector(new RouletteWheelSelector<>())
-                    .alterers(
-                            new GaussianMutator<>(0.15), // Exploration (Réduit pour stabilité)
-                            new SwapMutator<>(0.15),     // Diversité
-                            new MeanAlterer<>(0.6)       // Convergence (Consensus)
-                    )
+                    .executor(executor)
+                    .alterers(new GaussianMutator<>(0.2), new MeanAlterer<>(0.6))
                     .build();
 
-            // 4. Exécution et récupération de TOUTE la population finale
             EvolutionResult<DoubleGene, Double> result = engine.stream()
                     .limit(MAX_GENERATIONS)
-                    .peek(r -> {
-                        // Log toutes les 5 générations
-                        if (r.generation() % 5 == 0 || r.generation() == 1) {
-                            log.info("🏁 Gen {}/{} - Bilan Top 1: {} (Fitness)",
-                                    r.generation(), MAX_GENERATIONS, String.format("%.2f", r.bestFitness()));
-                        }
-                    })
-                    .collect(EvolutionResult.toBestEvolutionResult()); // On garde tout le résultat, pas juste le meilleur
+                    .collect(EvolutionResult.toBestEvolutionResult());
 
-            // 5. Extraction et Filtrage "Ensemble Elite"
-            log.info("📊 Extraction des stratégies 'Elite' pour le consensus...");
-
-            List<Phenotype<DoubleGene, Double>> sortedPopulation = result.population().stream()
-                    .sorted((p1, p2) -> Double.compare(p2.fitness(), p1.fitness())) // Tri décroissant (Meilleur en premier)
+            // Extraction des 20 experts pour l'Ensemble
+            List<LotoService.AlgoConfig> topConfigs = result.population().stream()
+                    .sorted((p1, p2) -> Double.compare(p2.fitness(), p1.fitness()))
+                    .limit(20)
+                    .map(p -> decoderGenotype(p.genotype(), "EXPERT_" + p.fitness()))
                     .toList();
 
-            List<LotoService.AlgoConfig> topConfigs = new ArrayList<>();
-            int count = 0;
-
-            for (Phenotype<DoubleGene, Double> phenotype : sortedPopulation) {
-                // On s'arrête si on a nos 20 experts
-                if (topConfigs.size() >= 20) break;
-
-                LotoService.AlgoConfig candidat = decoderGenotype(phenotype.genotype(), "ELITE_" + (++count));
-
-                // FILTRE DE DIVERSITÉ : On évite les doublons quasi-identiques
-                // Si une config existante est trop proche de la candidate, on ignore la candidate.
-                boolean isTooSimilar = topConfigs.stream().anyMatch(existing ->
-                        Math.abs(existing.getPoidsForme() - candidat.getPoidsForme()) < 0.5 &&
-                                Math.abs(existing.getPoidsEcart() - candidat.getPoidsEcart()) < 0.5 &&
-                                Math.abs(existing.getPoidsAffinite() - candidat.getPoidsAffinite()) < 0.5
-                );
-
-                if (!isTooSimilar) {
-                    // Calcul rapide des stats réelles pour information (sur le Top 1 seulement pour pas ralentir)
-                    if (topConfigs.isEmpty()) {
-                        double bilanReel = evaluerFitness(phenotype.genotype(), scenarios, false);
-                        int nbTirages = scenarios.size();
-                        double coutTotal = nbTirages * NB_GRILLES_PAR_TEST * 2.20;
-                        double roiReel = (coutTotal > 0) ? (bilanReel / coutTotal) * 100.0 : 0.0;
-
-                        candidat.setBilanEstime(bilanReel);
-                        candidat.setRoiEstime(roiReel);
-                        log.info("🥇 Leader du groupe : ROI Réel estimé à {}%", String.format("%.2f", roiReel));
-                    }
-
-                    topConfigs.add(candidat);
-                }
-            }
-
-            long duration = (System.currentTimeMillis() - start) / 1000;
-            log.info("🏆 Terminé en {}s. {} Stratégies uniques retenues pour le vote.", duration, topConfigs.size());
-
+            log.info("🏆 Optimisation terminée en {}s. 20 experts prêts.", (System.currentTimeMillis() - start) / 1000);
             return topConfigs;
         } finally {
             executor.shutdown();
         }
     }
 
-    private double evaluerFitness(Genotype<DoubleGene> gt, List<LotoService.ScenarioSimulation> scenarios, boolean modeEntrainement) {
+    private double evaluerFitness(Genotype<DoubleGene> gt, List<LotoService.ScenarioSimulation> scenarios, boolean training) {
         LotoService.AlgoConfig config = decoderGenotype(gt, "TEST");
-        double bilan = 0;
-        double depense = 0;
-        double coutGrille = 2.20;
+        double bilan = 0; double depense = 0;
+        int totalGagnant = 0; int totalGrilles = 0;
 
-        // Variables pour l'indice de couverture
-        int totalGrillesProduites = 0;
-        int nbGrillesGagnantes = 0;
+        List<LotoService.ScenarioSimulation> batch = training ? scenarios.subList(0, Math.min(scenarios.size(), TRAINING_BATCH_SIZE)) : scenarios;
 
-        List<LotoService.ScenarioSimulation> batchScenarios = scenarios;
-        if (modeEntrainement && scenarios.size() > TRAINING_BATCH_SIZE) {
-            batchScenarios = scenarios.subList(0, TRAINING_BATCH_SIZE);
-        }
+        for (LotoService.ScenarioSimulation sc : batch) {
+            // APPEL DE LA NOUVELLE MÉTHODE OPTIMISÉE
+            List<int[]> grilles = lotoService.genererGrillesDepuisScenarioOptimise(sc, config, NB_GRILLES_PAR_TEST);
 
-        for (LotoService.ScenarioSimulation scenar : batchScenarios) {
-            int grillesAProduire = modeEntrainement ? 200 : NB_GRILLES_PAR_TEST;
-            List<List<Integer>> grilles = lotoService.genererGrillesDepuisScenario(scenar, config, grillesAProduire);
+            depense += (grilles.size() * 2.20);
+            totalGrilles += grilles.size();
 
-            depense += (grilles.size() * coutGrille);
-            totalGrillesProduites += grilles.size();
+            LotoTirage t = sc.getTirageReel();
+            int b1 = t.getBoule1(); int b2 = t.getBoule2(); int b3 = t.getBoule3();
+            int b4 = t.getBoule4(); int b5 = t.getBoule5(); int bc = t.getNumeroChance();
 
-            LotoTirage target = scenar.getTirageReel();
-            int b1 = target.getBoule1(); int b2 = target.getBoule2(); int b3 = target.getBoule3();
-            int b4 = target.getBoule4(); int b5 = target.getBoule5(); int bc = target.getNumeroChance();
-
-            for (List<Integer> g : grilles) {
+            for (int[] g : grilles) {
                 int matches = 0;
-                int g0 = g.get(0); if (g0 == b1 || g0 == b2 || g0 == b3 || g0 == b4 || g0 == b5) matches++;
-                int g1 = g.get(1); if (g1 == b1 || g1 == b2 || g1 == b3 || g1 == b4 || g1 == b5) matches++;
-                int g2 = g.get(2); if (g2 == b1 || g2 == b2 || g2 == b3 || g2 == b4 || g2 == b5) matches++;
-                int g3 = g.get(3); if (g3 == b1 || g3 == b2 || g3 == b3 || g3 == b4 || g3 == b5) matches++;
-                int g4 = g.get(4); if (g4 == b1 || g4 == b2 || g4 == b3 || g4 == b4 || g4 == b5) matches++;
-                boolean chanceMatch = (g.get(5) == bc);
+                // Zero-Boxing : Accès direct aux primitives (g[0] à g[4] sont les boules, g[5] la chance)
+                if (g[0]==b1 || g[0]==b2 || g[0]==b3 || g[0]==b4 || g[0]==b5) matches++;
+                if (g[1]==b1 || g[1]==b2 || g[1]==b3 || g[1]==b4 || g[1]==b5) matches++;
+                if (g[2]==b1 || g[2]==b2 || g[2]==b3 || g[2]==b4 || g[2]==b5) matches++;
+                if (g[3]==b1 || g[3] == b2 || g[3] == b3 || g[3] == b4 || g[3] == b5) matches++;
+                if (g[4]==b1 || g[4] == b2 || g[4] == b3 || g[4] == b4 || g[4] == b5) matches++;
+                boolean chanceMatch = (g[5] == bc);
 
-                double gainGrille = 0.0;
-                // Attribution des gains
-                if (matches == 5) gainGrille = chanceMatch ? 50_000.0 : 20_000.0;
-                else if (matches == 4) gainGrille = chanceMatch ? 1000.0 : 500.0;
-                else if (matches == 3) gainGrille = chanceMatch ? 50.0 : 20.0;
-                else if (matches == 2) gainGrille = chanceMatch ? 10.0 : 5.0;
-                else if (chanceMatch) gainGrille = 2.20;
-
-                if (gainGrille > 0) {
-                    bilan += gainGrille;
-                    nbGrillesGagnantes++; // On incrémente si la grille rapporte au moins son coût
+                double gain = calculerGainRapide(matches, chanceMatch, training);
+                if (gain > 0) {
+                    bilan += gain;
+                    totalGagnant++;
                 }
             }
         }
 
         if (depense == 0) return -1000.0;
+        double roi = ((bilan - depense) / depense) * 100.0;
 
-        double netProfit = bilan - depense;
-        double roiPercent = (netProfit / depense) * 100.0;
-
-        if (modeEntrainement) {
-            // --- NOUVELLE FORMULE DE FITNESS ---
-            // Indice de couverture : % de grilles qui ne sont pas "perdues"
-            double indiceCouverture = (double) nbGrillesGagnantes / totalGrillesProduites;
-
-            // On pénalise les dépenses massives (Logarithme)
-            double penaliteVolume = Math.log10(depense) * 5.0;
-
-            // Score final = ROI + (Couverture * 100) - Pénalité
-            // Cela force l'IA à trouver un compromis entre "Gagner gros" et "Gagner souvent".
-            return roiPercent + (indiceCouverture * 100.0) - penaliteVolume;
+        if (training) {
+            // FORMULE MULTI-OBJECTIF (Astuce 2)
+            double couverture = (double) totalGagnant / totalGrilles;
+            double penaliteVol = Math.log10(depense) * 5.0;
+            // On veut du ROI ET de la couverture (remboursements réguliers)
+            return roi + (couverture * 100.0) - penaliteVol;
         }
+        return roi;
+    }
 
-        return netProfit;
+    private double calculerGainRapide(int m, boolean c, boolean training) {
+        if (m == 5) return c ? (training ? 50000 : 2000000) : (training ? 20000 : 100000);
+        if (m == 4) return c ? 1000 : 400;
+        if (m == 3) return c ? 50 : 20;
+        if (m == 2) return c ? 10 : 5;
+        if (c) return 2.20;
+        return 0;
     }
 
     private LotoService.AlgoConfig decoderGenotype(Genotype<DoubleGene> gt, String nom) {
-        return new LotoService.AlgoConfig(
-                nom,
-                gt.get(0).get(0).doubleValue(), // Poids FreqJour
-                gt.get(1).get(0).doubleValue(), // Poids Forme
-                gt.get(2).get(0).doubleValue(), // Poids Ecart
-                gt.get(3).get(0).doubleValue(), // Poids Tension
-                gt.get(4).get(0).doubleValue(), // Poids Markov
-                gt.get(5).get(0).doubleValue(), // Poids Affinité
-                false
-        );
+        return new LotoService.AlgoConfig(nom,
+                gt.get(0).get(0).doubleValue(), gt.get(1).get(0).doubleValue(),
+                gt.get(2).get(0).doubleValue(), gt.get(3).get(0).doubleValue(),
+                gt.get(4).get(0).doubleValue(), gt.get(5).get(0).doubleValue(), false);
     }
 }

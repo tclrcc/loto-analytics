@@ -15,10 +15,20 @@ public class BitMaskService {
      */
     public long calculerBitMask(List<Integer> boules) {
         long mask = 0L;
-
-        // Transformation du numéro en mask
         for (Integer b : boules) mask |= (1L << b);
+        return mask;
+    }
 
+    /**
+     * Méthode calcul BitMask à partir d'un tableau d'entiers
+     * @param boules numéros
+     * @return valeur BitMask
+     */
+    public long calculerBitMask(int[] boules) {
+        long mask = 0L;
+        for (int b : boules) {
+            mask |= (1L << b);
+        }
         return mask;
     }
 
@@ -28,16 +38,12 @@ public class BitMaskService {
      * @return liste des numéros
      */
     public List<Integer> decodeBitMask(long mask) {
-        List<Integer> result = new ArrayList<>(3);
-
-        // On décode les bit mask et sort dès qu'on a les 3
+        List<Integer> result = new ArrayList<>(5);
         for (int i = 1; i <= 49; i++) {
             if ((mask & (1L << i)) != 0) {
                 result.add(i);
-                if (result.size() == 3) break;
             }
         }
-
         return result;
     }
 }
