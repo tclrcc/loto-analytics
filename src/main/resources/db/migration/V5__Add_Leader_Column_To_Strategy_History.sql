@@ -1,10 +1,10 @@
--- Migration pour ajouter la colonne 'leader' à la table strategy_history
--- On définit une valeur par défaut à 'false' pour ne pas casser les données existantes
-ALTER TABLE strategy_history ADD COLUMN leader BOOLEAN DEFAULT FALSE;
+-- V5 : Ajout de la colonne 'leader' pour identifier le meilleur algo
+-- Utilisation de IF NOT EXISTS pour éviter l'erreur en prod si la colonne est déjà là
 
--- Optionnel : Marquer le tirage le plus récent comme leader par défaut pour initialiser proprement
-UPDATE strategy_history
-SET leader = TRUE
-WHERE id IN (
-    SELECT id FROM strategy_history ORDER BY date_calcul DESC LIMIT 1
-    );
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                   WHERE table_name='strategy_history' AND column_name='leader') THEN
+ALTER TABLE strategy_history ADD COLUMN leader BOOLEAN DEFAULT FALSE;
+END IF;
+END $$;
