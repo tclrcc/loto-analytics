@@ -13,7 +13,7 @@ COPY src ./src
 RUN mvn clean package -DskipTests
 
 # =====================
-# ÉTAPE 2 : RUN
+# RUN
 # =====================
 FROM eclipse-temurin:17-jre-jammy
 WORKDIR /app
@@ -28,8 +28,9 @@ RUN apt-get update && apt-get install -y \
 
 # 2. Copie des scripts et installation des dépendances
 COPY scripts ./scripts
-# L'option --break-system-packages est requise sur les Debian/Ubuntu récents
-RUN pip3 install -r scripts/requirements.txt --break-system-packages
+
+# CORRECTION ICI : On retire "--break-system-packages" car pip est en version 22.0.2 sur Jammy
+RUN pip3 install -r scripts/requirements.txt
 
 COPY --from=build /app/target/*.jar app.jar
 
