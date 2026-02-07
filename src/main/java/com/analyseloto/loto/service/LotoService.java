@@ -355,6 +355,12 @@ public class LotoService {
             for(int n : buckets.get(Constantes.BUCKET_HOT)) isHot[n] = true;
             for(int n : buckets.get(Constantes.BUCKET_COLD)) isCold[n] = true;
 
+            // NOUVEAU : Poids de vote basé sur le ROI réel (Performance-Based Weighting)
+            // On transforme le ROI (ex: -56.0) en un poids positif.
+            // Formule : plus le ROI est proche de 0 (ou positif), plus le poids est fort.
+            double roiEstime = config.getRoiEstime();
+            double poidsPerformance = Math.max(0.1, (roiEstime + 100.0) / 40.0);
+
             // c. L'expert génère ses grilles (On génère ~30 grilles par expert)
             List<GrilleCandidate> proposals = executerAlgorithmeGenetique(
                     hots, neutrals, colds, isHot, isCold,
@@ -362,20 +368,15 @@ public class LotoService {
                     matriceChanceArr, contraintesDuJour, config, historiqueBitMasks, matriceMarkov, etatDernierTirage
             );
 
-            // DÉTERMINATION DU POIDS DU VOTE
-            double poidsVote = 1.0;
-            if (config.getNomStrategie().startsWith("AGRESSIF")) poidsVote = 1.2; // Un expert agressif "pousse" plus ses choix
-            if (config.getNomStrategie().startsWith("PRUDENT")) poidsVote = 0.8; // Un expert prudent est plus conservateur
-
             int limitVote = Math.min(proposals.size(), 30);
             for(int i=0; i<limitVote; i++) {
                 GrilleCandidate cand = proposals.get(i);
                 List<Integer> boulesList = Arrays.stream(cand.getBoules()).boxed().toList();
                 Set<Integer> key = new HashSet<>(boulesList);
 
-                // On utilise le poids du vote au lieu d'un simple +1
-                votesGrilles.merge(key, (int)(poidsVote * 10), Integer::sum);
-                scoresCumules.merge(key, cand.getFitness() * poidsVote, Double::sum);
+                // On applique le poids de performance au vote
+                votesGrilles.merge(key, (int)(poidsPerformance * 100), Integer::sum);
+                scoresCumules.merge(key, cand.getFitness() * poidsPerformance, Double::sum);
             }
         });
 

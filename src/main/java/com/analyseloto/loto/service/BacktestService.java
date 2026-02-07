@@ -173,26 +173,31 @@ public class BacktestService {
             }
         }
 
-        if (depense == 0) return -1000.0;
+        double regulariteGains = (double) totalGagnant / batch.size();
+
+        if (depense == 0) {
+            return -2000.0; // Une fitness très basse pour éliminer cet individu du pool génétique
+        }
 
         double roiPercent = ((bilan - depense) / depense) * 100.0;
-
-        // Si profil est null, on veut juste le ROI (utilisé pour le log final)
         if (profil == null) return roiPercent;
 
         double couverture = (double) totalGagnant / totalGrilles;
         double penaliteVol = Math.log10(depense) * 5.0;
 
-        return (roiPercent * profil.roiWeight) + (couverture * 100.0 * profil.couvWeight) - penaliteVol;
+        // Ajout d'un bonus de régularité pour favoriser la stabilité du ROI
+        double bonusStabilite = regulariteGains * 15.0;
+
+        return (roiPercent * profil.roiWeight) + (couverture * 100.0 * profil.couvWeight) + bonusStabilite - penaliteVol;
     }
 
     private double calculerGainRapide(int m, boolean c) {
-        if (m == 5) return c ? (50000) : (20000);
-        if (m == 4) return c ? 1000 : 400;
-        if (m == 3) return c ? 50 : 20;
-        if (m == 2) return c ? 10 : 5;
+        if (m == 5) return c ? 2_000_000.0 : 100_000.0; // Valeurs lissées pour l'IA
+        if (m == 4) return c ? 1000.0 : 400.0;
+        if (m == 3) return c ? 50.0 : 20.0;
+        if (m == 2) return c ? 10.0 : 5.0;
         if (c) return 2.20;
-        return 0;
+        return 0.0;
     }
 
     private LotoService.AlgoConfig decoderGenotype(Genotype<DoubleGene> gt, String nom) {
