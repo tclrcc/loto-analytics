@@ -310,36 +310,73 @@ public class LotoService {
      * Appelle le module Python pour obtenir des prédictions Deep Learning (LSTM).
      * @return un tableau de 50 doubles (index 1 à 49 remplis) représentant les probabilités.
      */
+    /**
+     * Exécute le script Python LSTM pour obtenir des prédictions.
+     */
     public double[] getDeepLearningWeights() {
         double[] weights = new double[50];
-        Arrays.fill(weights, 0.0); // Neutre par défaut
+        Arrays.fill(weights, 0.0);
 
+        File tempFile = null;
         try {
-            // Chemin vers ton script Python
-            ProcessBuilder pb = new ProcessBuilder("python3", "scripts/loto_lstm.py");
-            pb.redirectErrorStream(true);
+            // 1. Création d'un CSV temporaire avec l'historique
+            List<LotoTirage> history = repository.findAll(Sort.by(Sort.Direction.ASC, "dateTirage"));
+            if (history.size() < 50) return weights; // Pas assez de données
+
+            tempFile = File.createTempFile("loto_history", ".csv");
+            try (PrintWriter writer = new PrintWriter(tempFile)) {
+                writer.println("boule1,boule2,boule3,boule4,boule5"); // Header
+                for (LotoTirage t : history) {
+                    writer.printf("%d,%d,%d,%d,%d%n",
+                            t.getBoule1(), t.getBoule2(), t.getBoule3(), t.getBoule4(), t.getBoule5());
+                }
+            }
+
+            // 2. Appel du script Python
+            ProcessBuilder pb = new ProcessBuilder("python3", "scripts/loto_lstm.py", tempFile.getAbsolutePath());
+            pb.redirectErrorStream(true); // Rediriger stderr vers stdout pour debug
             Process p = pb.start();
 
+            // 3. Lecture de la sortie JSON
             BufferedReader in = new BufferedReader(new InputStreamReader(p.getInputStream()));
-            String line = in.readLine(); // On s'attend à recevoir un JSON : {"1": 0.5, "2": 0.1, ...}
+            String line = in.readLine();
 
-            // Parsing simple du JSON (ou utilise Jackson si tu veux faire propre)
-            if (line != null && line.startsWith("{")) {
-                line = line.replace("{", "").replace("}", "").replace("\"", "");
-                String[] parts = line.split(",");
-                for (String part : parts) {
-                    String[] kv = part.split(":");
-                    int boule = Integer.parseInt(kv[0].trim());
-                    double score = Double.parseDouble(kv[1].trim());
-                    if (boule >= 1 && boule <= 49) {
-                        weights[boule] = score * 10.0; // On booste le score pour qu'il pèse face aux stats classiques
-                    }
-                }
-                log.info("🧠 [DEEP LEARNING] Poids neuronaux chargés avec succès.");
+            // Logs si le script plante (affiche les erreurs Python dans les logs Java)
+            while (in.ready()) {
+                String errorLine = in.readLine();
+                if (errorLine != null) log.debug("[PYTHON LOG] {}", errorLine);
             }
-            p.waitFor();
+
+            p.waitFor(30, java.util.concurrent.TimeUnit.SECONDS); // Timeout sécurité
+
+            if (line != null && line.trim().startsWith("{")) {
+                // Parsing manuel simple (ou via Jackson/Gson)
+                line = line.replace("{", "").replace("}", "").replace("\"", "");
+                if (!line.isBlank()) {
+                    String[] parts = line.split(",");
+                    for (String part : parts) {
+                        String[] kv = part.split(":");
+                        if (kv.length == 2) {
+                            int boule = Integer.parseInt(kv[0].trim());
+                            double score = Double.parseDouble(kv[1].trim());
+                            if (boule >= 1 && boule <= 49) {
+                                weights[boule] = score;
+                            }
+                        }
+                    }
+                    log.info("🧠 [LSTM] Prédictions IA intégrées avec succès.");
+                }
+            } else {
+                log.warn("⚠️ [LSTM] Sortie Python invalide ou vide : {}", line);
+            }
+
         } catch (Exception e) {
-            log.warn("⚠️ Module Deep Learning non disponible : {}", e.getMessage());
+            log.error("❌ Erreur lors de l'appel au module Python", e);
+        } finally {
+            // Nettoyage
+            if (tempFile != null && tempFile.exists()) {
+                tempFile.delete();
+            }
         }
         return weights;
     }
