@@ -4,6 +4,7 @@ import com.analyseloto.loto.entity.LotoTirage;
 import io.jenetics.*;
 import io.jenetics.engine.Engine;
 import io.jenetics.engine.EvolutionResult;
+import io.jenetics.engine.Limits;
 import io.jenetics.util.Factory;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Lazy;
@@ -69,7 +70,13 @@ public class BacktestService {
                     .build();
 
             EvolutionResult<DoubleGene, Double> result = engine.stream()
-                    .limit(MAX_GENERATIONS)
+                    .limit(Limits.bySteadyFitness(15)) // Stop si pas d'amélioration pendant 15 gens
+                    .limit(MAX_GENERATIONS)            // Limite absolue à 100 gens
+                    .peek(r -> {
+                        if (r.generation() % 10 == 0) {
+                            log.info("🏁 Gen {} - Fitness: {}", r.generation(), r.bestFitness());
+                        }
+                    })
                     .collect(EvolutionResult.toBestEvolutionResult());
 
             // Extraction des 20 experts pour l'Ensemble

@@ -154,7 +154,6 @@ public class LotoService {
 
     // DANS LotoService.java
 
-    @EventListener(ApplicationReadyEvent.class)
     public void initConfigFromDb() {
         log.info("🔌 Démarrage : Chargement du Conseil des Sages depuis la BDD...");
 
@@ -189,15 +188,15 @@ public class LotoService {
     public void verificationAuDemarrage() {
         LocalDate todayParis = LocalDate.now(ZONE_PARIS);
 
-        // On vérifie si la liste des experts est présente et à jour
-        if (this.cachedEliteConfigs != null && !this.cachedEliteConfigs.isEmpty() && todayParis.equals(this.lastBacktestDate)) {
-            log.info("✋ [WARMUP] Stratégies Ensemble ({} experts) du {} déjà en mémoire. OK.", this.cachedEliteConfigs.size(), todayParis);
-            // On lance un petit calcul pour être sûr que tout est chaud
-            genererMultiplesPronostics(recupererDateProchainTirage(), 5);
+        // On considère que le conseil est complet s'il y a au moins 10 experts (plus robuste)
+        boolean conseilIncomplet = this.cachedEliteConfigs.size() < 10;
+
+        if (!conseilIncomplet && todayParis.equals(this.lastBacktestDate)) {
+            log.info("✋ [WARMUP] Conseil des Sages ({} experts) déjà opérationnel. OK.", this.cachedEliteConfigs.size());
             return;
         }
 
-        log.info("⚠️ [WARMUP] Stratégies obsolètes ou absentes. Lancement optimisation complète !");
+        log.info("⚠️ [WARMUP] Conseil incomplet ou obsolète. Optimisation IA requise.");
         forceDailyOptimization();
     }
 

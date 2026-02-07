@@ -8,6 +8,7 @@ import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
 
+import java.util.concurrent.CompletableFuture;
 
 @Component
 @Slf4j
@@ -15,15 +16,15 @@ import org.springframework.stereotype.Component;
 public class AppStartupRunner {
     private final LotoService lotoService;
 
-    @Async // Important : on ne bloque pas le démarrage du serveur
     @EventListener(ApplicationReadyEvent.class)
-    public void warmupCache() {
-        log.info("🔥 [WARMUP] Initialisation au démarrage...");
+    public void onApplicationReady() {
+        // 1. D'abord on charge ce qu'on a en BDD (Synchrone et Prioritaire)
+        lotoService.initConfigFromDb();
 
-        log.info("🖥️  CPU DISPONIBLES (JVM) : {}", Runtime.getRuntime().availableProcessors());
-        log.info("💾  MÉMOIRE MAX (JVM) : {} Mo", Runtime.getRuntime().maxMemory() / (1024 * 1024));
-
-        // Appelle méthode vérification config algo
-        lotoService.verificationAuDemarrage();
+        // 2. Ensuite, on lance le calcul lourd si nécessaire (Délégué à un thread séparé)
+        CompletableFuture.runAsync(() -> {
+            log.info("🔥 [WARMUP] Vérification de la fraîcheur des données...");
+            lotoService.verificationAuDemarrage();
+        });
     }
 }
