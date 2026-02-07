@@ -36,5 +36,6 @@ public class StrategyConfig {
     private Double roi;
 
     // Flag pour identifier le leader du batch
-    private boolean leader;
+    @Column(name = "leader", nullable = false)
+    private boolean leader = false;
 }
