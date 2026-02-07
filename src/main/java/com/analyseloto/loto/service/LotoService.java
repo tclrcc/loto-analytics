@@ -307,73 +307,91 @@ public class LotoService {
     }
 
     /**
-     * Appelle le module Python pour obtenir des prédictions Deep Learning (LSTM).
-     * @return un tableau de 50 doubles (index 1 à 49 remplis) représentant les probabilités.
-     */
-    /**
-     * Exécute le script Python LSTM pour obtenir des prédictions.
+     * Appelle le module Python (LSTM) pour obtenir des prédictions basées sur l'apprentissage profond.
+     * @return un tableau de 50 doubles (index 1 à 49 remplis) représentant les poids additionnels.
      */
     public double[] getDeepLearningWeights() {
         double[] weights = new double[50];
-        Arrays.fill(weights, 0.0);
+        Arrays.fill(weights, 0.0); // Poids neutres par défaut
 
+        log.info("🧠 [DEEP LEARNING] Lancement de l'analyse neuronale...");
         File tempFile = null;
-        try {
-            // 1. Création d'un CSV temporaire avec l'historique
-            List<LotoTirage> history = repository.findAll(Sort.by(Sort.Direction.ASC, "dateTirage"));
-            if (history.size() < 50) return weights; // Pas assez de données
 
-            tempFile = File.createTempFile("loto_history", ".csv");
+        try {
+            // 1. Export des données depuis la BDD vers un CSV temporaire
+            // On a besoin de l'historique trié par date croissante pour que le LSTM comprenne la suite logique
+            List<LotoTirage> history = repository.findAll(Sort.by(Sort.Direction.ASC, "dateTirage"));
+
+            if (history.size() < 20) {
+                log.warn("⚠️ [DEEP LEARNING] Historique insuffisant pour l'entraînement.");
+                return weights;
+            }
+
+            tempFile = File.createTempFile("loto_training_data", ".csv");
             try (PrintWriter writer = new PrintWriter(tempFile)) {
-                writer.println("boule1,boule2,boule3,boule4,boule5"); // Header
+                writer.println("boule1,boule2,boule3,boule4,boule5"); // Header CSV
                 for (LotoTirage t : history) {
                     writer.printf("%d,%d,%d,%d,%d%n",
                             t.getBoule1(), t.getBoule2(), t.getBoule3(), t.getBoule4(), t.getBoule5());
                 }
             }
 
-            // 2. Appel du script Python
+            // 2. Appel du script Python via ProcessBuilder
+            // On passe le chemin du CSV en argument
             ProcessBuilder pb = new ProcessBuilder("python3", "scripts/loto_lstm.py", tempFile.getAbsolutePath());
-            pb.redirectErrorStream(true); // Rediriger stderr vers stdout pour debug
+            pb.redirectErrorStream(true); // Redirige les erreurs Python vers la sortie standard pour debug
             Process p = pb.start();
 
-            // 3. Lecture de la sortie JSON
+            // 3. Lecture de la réponse JSON
             BufferedReader in = new BufferedReader(new InputStreamReader(p.getInputStream()));
-            String line = in.readLine();
-
-            // Logs si le script plante (affiche les erreurs Python dans les logs Java)
-            while (in.ready()) {
-                String errorLine = in.readLine();
-                if (errorLine != null) log.debug("[PYTHON LOG] {}", errorLine);
+            String jsonOutput = "";
+            String line;
+            while ((line = in.readLine()) != null) {
+                // On filtre les logs potentiels de TensorFlow qui n'auraient pas été supprimés
+                if (line.trim().startsWith("{")) {
+                    jsonOutput = line;
+                } else {
+                    log.debug("[PYTHON LOG] {}", line);
+                }
             }
 
-            p.waitFor(30, java.util.concurrent.TimeUnit.SECONDS); // Timeout sécurité
+            // Timeout de sécurité (30 secondes max pour l'entraînement)
+            boolean finished = p.waitFor(30, java.util.concurrent.TimeUnit.SECONDS);
+            if (!finished) {
+                p.destroy();
+                log.error("❌ [DEEP LEARNING] Timeout du script Python.");
+                return weights;
+            }
 
-            if (line != null && line.trim().startsWith("{")) {
-                // Parsing manuel simple (ou via Jackson/Gson)
-                line = line.replace("{", "").replace("}", "").replace("\"", "");
-                if (!line.isBlank()) {
-                    String[] parts = line.split(",");
+            // 4. Parsing manuel du JSON (Format attendu : {"1": 20.0, "14": 20.0, ...})
+            if (!jsonOutput.isEmpty()) {
+                jsonOutput = jsonOutput.replace("{", "").replace("}", "").replace("\"", "");
+                if (!jsonOutput.isBlank()) {
+                    String[] parts = jsonOutput.split(",");
                     for (String part : parts) {
                         String[] kv = part.split(":");
                         if (kv.length == 2) {
-                            int boule = Integer.parseInt(kv[0].trim());
-                            double score = Double.parseDouble(kv[1].trim());
-                            if (boule >= 1 && boule <= 49) {
-                                weights[boule] = score;
+                            try {
+                                int boule = Integer.parseInt(kv[0].trim());
+                                double score = Double.parseDouble(kv[1].trim());
+                                if (boule >= 1 && boule <= 49) {
+                                    weights[boule] = score;
+                                }
+                            } catch (NumberFormatException e) {
+                                // Ignorer les erreurs de parsing mineures
                             }
                         }
                     }
-                    log.info("🧠 [LSTM] Prédictions IA intégrées avec succès.");
+                    log.info("✅ [DEEP LEARNING] Poids neuronaux intégrés.");
                 }
             } else {
-                log.warn("⚠️ [LSTM] Sortie Python invalide ou vide : {}", line);
+                log.warn("⚠️ [DEEP LEARNING] Aucune prédiction retournée par Python.");
             }
 
         } catch (Exception e) {
-            log.error("❌ Erreur lors de l'appel au module Python", e);
+            log.error("❌ [DEEP LEARNING] Erreur technique : {}", e.getMessage());
         } finally {
-            // Nettoyage
+            // Nettoyage du fichier temporaire
             if (tempFile != null && tempFile.exists()) {
                 tempFile.delete();
             }

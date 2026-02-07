@@ -1,3 +1,5 @@
-numpy==1.26.4
+# scripts/requirements.txt
 pandas==2.2.0
+numpy==1.26.4
+# On utilise la version CPU pour garder l'image légère (~500Mo vs 3Go pour la version GPU)
 tensorflow-cpu==2.15.0
