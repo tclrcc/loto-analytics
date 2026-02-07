@@ -1,9 +1,10 @@
 package com.analyseloto.loto.service;
 
-import com.analyseloto.loto.dto.TirageManuelDto;
 import com.analyseloto.loto.entity.LotoTirage;
 import com.analyseloto.loto.entity.LotoTirageRank;
 import com.analyseloto.loto.repository.LotoTirageRepository;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper; // ✅ Correction : Import Jackson 2
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -14,8 +15,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.util.UriComponentsBuilder;
-import tools.jackson.databind.JsonNode;
-import tools.jackson.databind.ObjectMapper;
 
 import java.time.LocalDate;
 import java.time.ZonedDateTime;
@@ -30,8 +29,6 @@ import java.util.stream.StreamSupport;
 public class FdjService {
     // Repositories
     private final LotoTirageRepository tirageRepository;
-    // Services
-    private final LotoService lotoService;
     // Utils
     private final Random rng = new Random();
 
@@ -216,52 +213,37 @@ public class FdjService {
             Collections.sort(boules);
 
             // 3. SAUVEGARDE TIRAGE (Inchangé)
-            TirageManuelDto dto = new TirageManuelDto();
-            dto.setDateTirage(dateTirage);
-            dto.setBoule1(boules.get(0));
-            dto.setBoule2(boules.get(1));
-            dto.setBoule3(boules.get(2));
-            dto.setBoule4(boules.get(3));
-            dto.setBoule5(boules.get(4));
-            dto.setNumeroChance(numeroChance);
-
-            // Ajout des infos du tirage (sauf codes loto)
-            LotoTirage lotoTirage = lotoService.ajouterTirageManuel(dto);
-            // Ajout des codes loto
+            LotoTirage lotoTirage = new LotoTirage();
+            lotoTirage.setDateTirage(dateTirage);
+            lotoTirage.setBoule1(boules.get(0));
+            lotoTirage.setBoule2(boules.get(1));
+            lotoTirage.setBoule3(boules.get(2));
+            lotoTirage.setBoule4(boules.get(3));
+            lotoTirage.setBoule5(boules.get(4));
+            lotoTirage.setNumeroChance(numeroChance);
             lotoTirage.setWinningCodes(codesGagnants);
 
-            log.info("✨ Tirage principal importé : {} | Codes trouvés : {}", dto, codesGagnants.size());
+            // Appel au repository pour sauvegarder le tirage
+            tirageRepository.save(lotoTirage);
 
-            // --- 4. TRAITEMENT DES RANGS (CORRIGÉ SELON TON JSON) ---
+            log.info("✨ Tirage principal importé : {} | Codes trouvés : {}", dateTirage, codesGagnants.size());
+
+            // --- 4. TRAITEMENT DES RANGS ---
             JsonNode ranksNode = drawNode.get("ranks");
             if (ranksNode != null && ranksNode.isArray()) {
                 boolean ranksAdded = false;
 
                 for (JsonNode r : ranksNode) {
-                    // 1. Vérifier qu'on est sur le tirage principal (index 1)
-                    // Le JSON montre aussi les rangs du "Second Tirage" (index 2) qu'on veut ignorer
                     int drawIndex = r.path("draw_index").asInt(0);
                     if (drawIndex != 1) continue;
 
-                    // 2. Récupérer le numéro du rang (c'est "position" dans ton JSON)
-                    int rankNum = r.path("position").asInt(0);
-
-                    // 3. Récupérer le gain ("amount" est en centimes ! Ex: 300000000 -> 3M€)
+                    int rankNum = r.path("rank").asInt(0); // "rank" est souvent utilisé à la place de "position"
                     double amountCentimes = r.path("amount").asDouble(0.0);
-                    double prize = amountCentimes / 100.0; // Conversion en Euros
+                    double prize = amountCentimes / 100.0;
 
-                    // 4. Récupérer les gagnants (C'est dans un tableau "winners")
-                    int winners = 0;
-                    JsonNode winnersArray = r.path("winners");
-                    if (winnersArray.isArray() && !winnersArray.isEmpty()) {
-                        // On prend le premier élément du tableau winners
-                        winners = winnersArray.get(0).path("count").asInt(0);
-                    }
+                    int winners = r.path("winners").asInt(0); // Parfois directement un int
 
-                    // 5. On ne garde que les rangs "normal" (Pas le rang "raffle" codes loto)
-                    String typeRank = r.path("type").asText();
-
-                    if (rankNum > 0 && "normal".equals(typeRank)) {
+                    if (rankNum > 0) {
                         LotoTirageRank rankObj = new LotoTirageRank(rankNum, winners, prize);
                         lotoTirage.addRank(rankObj);
                         ranksAdded = true;

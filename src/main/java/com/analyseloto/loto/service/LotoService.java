@@ -14,6 +14,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Sort;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -39,6 +40,7 @@ public class LotoService {
     // Services
     private final BacktestService backtestService;
     private final BitMaskService bitMaskService;
+    private final RedisTemplate<String, Object> redisTemplate;
 
     // --- VARIABLES DU CACHE MANUEL (Architecture Stateful) ---
     private volatile List<AlgoConfig> cachedEliteConfigs = new ArrayList<>();
@@ -152,13 +154,37 @@ public class LotoService {
 
     // DANS LotoService.java
 
+    @SuppressWarnings("unchecked") // On garantit à Java que le cast est maîtrisé
     public void initConfigFromDb() {
-        log.info("🔌 Démarrage : Chargement du Conseil des Sages depuis la BDD...");
+        log.info("🔌 Démarrage : Chargement du Conseil des Sages...");
+        String cacheKey = "LOTO_ELITE_CONFIGS_V1";
 
-        // 1. On cherche d'abord le dernier leader pour identifier la date du dernier batch
+        // 1. TENTATIVE REDIS (Architecture Stateless)
+        try {
+            if (redisTemplate != null) {
+                // On récupère d'abord l'objet générique
+                Object cachedObject = redisTemplate.opsForValue().get(cacheKey);
+
+                if (cachedObject instanceof List<?>) {
+                    // On cast explicitement avec la suppression de l'avertissement
+                    List<AlgoConfig> cached = (List<AlgoConfig>) cachedObject;
+
+                    if (!cached.isEmpty()) {
+                        this.cachedEliteConfigs = cached;
+                        // Si tu as stocké la date, récupère-la, sinon utilise aujourd'hui
+                        this.lastBacktestDate = LocalDate.now(ZONE_PARIS);
+                        log.info("⚡ [REDIS HIT] {} experts chargés depuis le cache distribué.", cached.size());
+                        return; // On sort, pas besoin d'aller en BDD
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.warn("⚠️ Redis indisponible ou erreur de désérialisation : {}", e.getMessage());
+        }
+
+        // 2. FALLBACK BDD (Si Redis vide ou échoué)
         strategyConfigRepostiroy.findTopByLeaderTrueOrderByDateCalculDesc().ifPresentOrElse(
                 lastLeader -> {
-                    // 2. On récupère TOUS les experts qui ont été créés en même temps que ce leader
                     List<StrategyConfig> batch = strategyConfigRepostiroy.findAllByDateCalcul(lastLeader.getDateCalcul());
 
                     this.cachedEliteConfigs = batch.stream().map(s -> {
@@ -178,6 +204,16 @@ public class LotoService {
                 },
                 () -> log.warn("⚠️ Aucune stratégie en base. Un calcul initial est requis.")
         );
+
+        // 3. SAUVEGARDE DANS REDIS APRÈS CHARGEMENT DB
+        if (!this.cachedEliteConfigs.isEmpty() && redisTemplate != null) {
+            try {
+                redisTemplate.opsForValue().set(cacheKey, this.cachedEliteConfigs, Duration.ofHours(24));
+                log.info("💾 [REDIS SAVE] Conseil des Sages sauvegardé dans le cache.");
+            } catch (Exception e) {
+                log.error("❌ Impossible d'écrire dans Redis", e);
+            }
+        }
     }
 
     /**
@@ -270,6 +306,58 @@ public class LotoService {
         return t;
     }
 
+    /**
+     * Appelle le module Python pour obtenir des prédictions Deep Learning (LSTM).
+     * @return un tableau de 50 doubles (index 1 à 49 remplis) représentant les probabilités.
+     */
+    public double[] getDeepLearningWeights() {
+        double[] weights = new double[50];
+        Arrays.fill(weights, 0.0); // Neutre par défaut
+
+        try {
+            // Chemin vers ton script Python
+            ProcessBuilder pb = new ProcessBuilder("python3", "scripts/loto_lstm.py");
+            pb.redirectErrorStream(true);
+            Process p = pb.start();
+
+            BufferedReader in = new BufferedReader(new InputStreamReader(p.getInputStream()));
+            String line = in.readLine(); // On s'attend à recevoir un JSON : {"1": 0.5, "2": 0.1, ...}
+
+            // Parsing simple du JSON (ou utilise Jackson si tu veux faire propre)
+            if (line != null && line.startsWith("{")) {
+                line = line.replace("{", "").replace("}", "").replace("\"", "");
+                String[] parts = line.split(",");
+                for (String part : parts) {
+                    String[] kv = part.split(":");
+                    int boule = Integer.parseInt(kv[0].trim());
+                    double score = Double.parseDouble(kv[1].trim());
+                    if (boule >= 1 && boule <= 49) {
+                        weights[boule] = score * 10.0; // On booste le score pour qu'il pèse face aux stats classiques
+                    }
+                }
+                log.info("🧠 [DEEP LEARNING] Poids neuronaux chargés avec succès.");
+            }
+            p.waitFor();
+        } catch (Exception e) {
+            log.warn("⚠️ Module Deep Learning non disponible : {}", e.getMessage());
+        }
+        return weights;
+    }
+
+    private double calculerPoidsBayesien(double roiEstime, int nbTiragesTestes) {
+        // Décalage pour gérer les ROI négatifs (ex: -100% devient 0)
+        // On accorde un crédit de base pour encourager la diversité
+        double baseScore = Math.max(0, roiEstime + 100.0);
+
+        // Facteur de confiance logarithmique :
+        // Un expert ayant testé 1000 tirages est plus crédible qu'un expert à 10 tirages,
+        // mais pas 100 fois plus (rendement décroissant).
+        double confiance = Math.log10(nbTiragesTestes + 10);
+
+        // Le poids final est le produit de la performance et de la crédibilité
+        return Math.max(0.001, baseScore * confiance);
+    }
+
     // ==================================================================================
     // 2. GÉNÉRATION DE PRONOSTICS (Optimisée)
     // ==================================================================================
@@ -294,6 +382,9 @@ public class LotoService {
 
         List<Integer> dernierTirage = history.get(0).getBoules();
         int etatDernierTirage = calculerEtatAbstrait(dernierTirage);
+
+        // On récupère les poids neuronaux AVANT de lancer les experts
+        double[] deepWeights = getDeepLearningWeights();
 
         // CALCULS PARALLÈLES DES MATRICES INVARIANTES (Lourds mais faits 1 seule fois)
         // Ces données ne dépendent pas de la config, donc on les partage entre tous les experts.
@@ -334,17 +425,20 @@ public class LotoService {
         }
 
         // Structures pour le vote (Thread-Safe, car remplies en parallèle)
-        Map<Set<Integer>, Integer> votesGrilles = new java.util.concurrent.ConcurrentHashMap<>();
+        Map<Set<Integer>, Double> votesPonderes = new java.util.concurrent.ConcurrentHashMap<>();
         Map<Set<Integer>, Double> scoresCumules = new java.util.concurrent.ConcurrentHashMap<>();
 
-        log.info("🗳️ [VOTE] Lancement de la génération parallèle avec {} experts...", eliteConfigs.size());
+        log.info("🗳️ [VOTE BMA] Lancement de la génération avec pondération Bayésienne...");
 
         // 4. GÉNÉRATION PARALLÈLE (Chaque expert propose ses grilles)
         eliteConfigs.parallelStream().forEach(config -> {
             // a. Calcul des scores spécifiques à CETTE config (Chaque expert a sa vision des poids)
             // Note: boostNumbers est vide ici car c'est de l'IA pure, pas de l'Astro
-            double[] scoresBoules = calculerScoresOptimise(history, 49, dateCible.getDayOfWeek(), false, Collections.emptyList(), hotFinales, config, dernierTirage);
-            double[] scoresChance = calculerScoresOptimise(history, 10, dateCible.getDayOfWeek(), true, Collections.emptyList(), Collections.emptySet(), config, null);
+            // Pour les boules (1-49), on passe les poids de l'IA
+            double[] scoresBoules = calculerScoresOptimise(history, 49, dateCible.getDayOfWeek(), false, Collections.emptyList(), hotFinales, config, dernierTirage, deepWeights);
+
+            // Pour le numéro chance (1-10), on passe null (l'IA ne prédit pas la chance ici)
+            double[] scoresChance = calculerScoresOptimise(history, 10, dateCible.getDayOfWeek(), true, Collections.emptyList(), Collections.emptySet(), config, null, null);
 
             // b. Buckets & Primitives
             Map<String, List<Integer>> buckets = creerBucketsOptimises(scoresBoules);
@@ -355,11 +449,8 @@ public class LotoService {
             for(int n : buckets.get(Constantes.BUCKET_HOT)) isHot[n] = true;
             for(int n : buckets.get(Constantes.BUCKET_COLD)) isCold[n] = true;
 
-            // NOUVEAU : Poids de vote basé sur le ROI réel (Performance-Based Weighting)
-            // On transforme le ROI (ex: -56.0) en un poids positif.
-            // Formule : plus le ROI est proche de 0 (ou positif), plus le poids est fort.
-            double roiEstime = config.getRoiEstime();
-            double poidsPerformance = Math.max(0.1, (roiEstime + 100.0) / 40.0);
+            // 2. CALCUL DU POIDS DE L'EXPERT (NOUVEAU)
+            double expertWeight = calculerPoidsBayesien(config.getRoiEstime(), config.getNbTiragesTestes());
 
             // c. L'expert génère ses grilles (On génère ~30 grilles par expert)
             List<GrilleCandidate> proposals = executerAlgorithmeGenetique(
@@ -368,51 +459,53 @@ public class LotoService {
                     matriceChanceArr, contraintesDuJour, config, historiqueBitMasks, matriceMarkov, etatDernierTirage
             );
 
+            // 4. Vote Pondéré
             int limitVote = Math.min(proposals.size(), 30);
             for(int i=0; i<limitVote; i++) {
                 GrilleCandidate cand = proposals.get(i);
                 List<Integer> boulesList = Arrays.stream(cand.getBoules()).boxed().toList();
                 Set<Integer> key = new HashSet<>(boulesList);
 
-                // On applique le poids de performance au vote
-                votesGrilles.merge(key, (int)(poidsPerformance * 100), Integer::sum);
-                scoresCumules.merge(key, cand.getFitness() * poidsPerformance, Double::sum);
+                // Au lieu de +1, on ajoute le POIDS de l'expert
+                votesPonderes.merge(key, expertWeight, Double::sum);
+                // Le fitness est aussi pondéré par la crédibilité de l'expert
+                scoresCumules.merge(key, cand.getFitness() * expertWeight, Double::sum);
             }
         });
 
         // 5. DÉPOUILLEMENT DU SCRUTIN (Consensus)
         List<PronosticResultDto> resultatsConsensus = new ArrayList<>();
 
-        // SEUIL DE CONSENSUS : Une grille doit être trouvée par au moins 15% des experts
-        // Avec 20 experts, il faut au moins 3 votes.
-        int seuilVote = Math.max(2, eliteConfigs.size() / 6);
+        // Seuil dynamique : Il faut accumuler assez de "poids" pour être élu.
+        // On peut dire arbitrairement qu'il faut l'équivalent de "2 experts moyens"
+        double poidsMoyen = eliteConfigs.stream()
+                .mapToDouble(c -> calculerPoidsBayesien(c.getRoiEstime(), c.getNbTiragesTestes()))
+                .average().orElse(1.0);
+        double seuilVote = poidsMoyen * 2.5;
 
-        for (Map.Entry<Set<Integer>, Integer> entry : votesGrilles.entrySet()) {
-            int nbVotes = entry.getValue();
-            if (nbVotes >= seuilVote) {
+        for (Map.Entry<Set<Integer>, Double> entry : votesPonderes.entrySet()) {
+            double poidsTotal = entry.getValue();
+            if (poidsTotal >= seuilVote) {
                 Set<Integer> boulesSet = entry.getKey();
                 List<Integer> boulesList = new ArrayList<>(boulesSet);
                 Collections.sort(boulesList);
 
-                // Score Consensus = Moyenne des fitness * Bonus de confiance (Unanimité)
-                double scoreMoyen = scoresCumules.get(boulesSet) / nbVotes;
-                double confiance = 1.0 + (nbVotes * 0.15); // +15% par vote supplémentaire
-                double finalScore = scoreMoyen * confiance;
+                double scorePondereTotal = scoresCumules.get(boulesSet);
+                // Score final normalisé
+                double finalScore = scorePondereTotal / poidsTotal;
+                // Bonus de consensus (plus le poids total est grand, plus on booste)
+                finalScore *= (1.0 + Math.log10(poidsTotal));
 
-                // On recalcule le meilleur numéro chance pour cette combinaison spécifique
-                // (On utilise la moyenne des matrices chances)
                 int chanceConsensus = selectionnerChancePourConsensus(boulesList, matriceChanceArr);
-
-                // Simulation rapide pour les infos d'affichage
                 SimulationResultDto simu = simulerGrilleDetaillee(boulesList, dateCible, history);
                 double maxDuo = simu.getPairs().stream().mapToDouble(MatchGroup::getRatio).max().orElse(0.0);
 
                 resultatsConsensus.add(new PronosticResultDto(
                         boulesList, chanceConsensus,
                         Math.round(finalScore * 100.0) / 100.0,
-                        maxDuo, 0.0, // Ecart max pas calculé ici pour perf
+                        maxDuo, 0.0,
                         !simu.getQuintuplets().isEmpty(),
-                        "CONSENSUS (Votes: " + nbVotes + "/" + eliteConfigs.size() + ")"
+                        "CONSENSUS BMA (Poids: " + String.format("%.1f", poidsTotal) + ")"
                 ));
             }
         }
@@ -425,13 +518,11 @@ public class LotoService {
         if (resultatsConsensus.isEmpty()) {
             log.warn("⚠️ [FALLBACK] Aucun consensus strict (Seuil: {}). Bascule sur les meilleurs scores individuels.", seuilVote);
 
-            // On abaisse le seuil à 1 (on accepte tout le monde)
-            // Mais on va trier drastiquement par score pur
-            for (Map.Entry<Set<Integer>, Integer> entry : votesGrilles.entrySet()) {
+            // CORRECTION ICI : On boucle sur votesPonderes (Double) et non votesGrilles (qui n'existe plus)
+            for (Map.Entry<Set<Integer>, Double> entry : votesPonderes.entrySet()) {
                 Set<Integer> boulesSet = entry.getKey();
 
-                // On récupère le score brut cumulé.
-                // Note : Si 1 seul vote, scoreCumulé = scoreFitness de l'unique expert.
+                // On récupère le score brut cumulé (fitness * poids expert)
                 double rawScore = scoresCumules.get(boulesSet);
 
                 List<Integer> boulesList = new ArrayList<>(boulesSet);
@@ -1024,7 +1115,7 @@ public class LotoService {
 
     // --- Private Calculation Helpers ---
 
-    private double[] calculerScoresOptimise(List<LotoTirage> history, int maxNum, DayOfWeek jourCible, boolean isChance, List<Integer> boostNumbers, Set<Integer> hotFinales, AlgoConfig config, List<Integer> dernierTirage) {
+    private double[] calculerScoresOptimise(List<LotoTirage> history, int maxNum, DayOfWeek jourCible, boolean isChance, List<Integer> boostNumbers, Set<Integer> hotFinales, AlgoConfig config, List<Integer> dernierTirage, double[] deepWeights) {
         double[] scores = new double[maxNum + 1]; Arrays.fill(scores, 10.0);
         int[] freqJour = new int[maxNum + 1]; int[] lastSeenIndex = new int[maxNum + 1]; Arrays.fill(lastSeenIndex, -1);
         int[] sortiesRecentes = new int[maxNum + 1]; int[] sortiesTresRecentes = new int[maxNum + 1]; int[] totalSorties = new int[maxNum + 1];
@@ -1052,43 +1143,40 @@ public class LotoService {
             if (boostNumbers.contains(num)) s += 30.0;
             if (!isChance && hotFinales != null && hotFinales.contains(num % 10)) s += 8.0;
             if (!isChance && dernierTirage != null && dernierTirage.contains(num)) s -= 10.0;
+
+            // On vérifie que le tableau existe et que l'index "num" est valide
+            if (deepWeights != null && num < deepWeights.length) {
+                // On ajoute le poids neuronal au score classique
+                s += deepWeights[num];
+            }
+
             scores[num] = s;
         }
         return scores;
     }
 
-    // Dans LotoService.java - Version optimisée pour le calcul intensif
-    private double calculerEntropieOptimisee(int[] boules) {
-        // 1. Calcul des deltas (4 écarts pour 5 boules)
-        int d1 = boules[1] - boules[0];
-        int d2 = boules[2] - boules[1];
-        int d3 = boules[3] - boules[2];
-        int d4 = boules[4] - boules[3];
-
-        int[] ds = {d1, d2, d3, d4};
-        double entropy = 0;
-
-        // 2. Calcul des fréquences sans Map (O(n²) sur 4 éléments est plus rapide qu'une Map)
-        for (int i = 0; i < 4; i++) {
-            int count = 0;
-            boolean alreadyProcessed = false;
-            for (int k = 0; k < i; k++) {
-                if (ds[k] == ds[i]) {
-                    alreadyProcessed = true;
-                    break;
-                }
-            }
-            if (alreadyProcessed) continue;
-
-            for (int j = 0; j < 4; j++) {
-                if (ds[j] == ds[i]) count++;
-            }
-
-            // 3. Formule de Shannon : H = -Σ p_i * log2(p_i)
-            double p = count / 4.0;
-            // log2(p) = ln(p) / ln(2). ln(2) ≈ 0.69314718
-            entropy -= p * (Math.log(p) / 0.69314718056);
+    /**
+     * Calcule l'Entropie de Shannon normalisée de la grille.
+     * Une grille de Loto aléatoire doit avoir une entropie élevée.
+     * @return valeur entre 0.0 (Ordre total) et 1.0 (Chaos maximal)
+     */
+    private double calculerEntropieShannon(int[] boules) {
+        Map<Integer, Integer> deciles = new HashMap<>();
+        // On classe les boules par décile (0-9, 10-19, etc.)
+        for (int b : boules) {
+            int d = b / 10;
+            deciles.merge(d, 1, Integer::sum);
         }
+
+        double entropy = 0.0;
+        int total = boules.length; // 5
+
+        for (int count : deciles.values()) {
+            double p = (double) count / total;
+            // Formule de Shannon : -Σ p * log2(p)
+            entropy -= p * (Math.log(p) / 0.69314718056); // ln(2) approx 0.693
+        }
+
         return entropy;
     }
 
@@ -1142,7 +1230,7 @@ public class LotoService {
 
         // NOUVEAU : Bonus d'Entropie
         // On favorise les grilles qui ne sont pas des suites simples ou des patterns trop réguliers
-        double entropie = calculerEntropieOptimisee(boules);
+        double entropie = calculerEntropieShannon(boules);
         score += (entropie * 12.0);
 
         return score;
@@ -1237,6 +1325,13 @@ public class LotoService {
     public boolean estGrilleCoherenteOptimisee(int[] boules, List<Integer> dernierTirage, DynamicConstraints rules) {
         // 1. EXTRACTION DIRECTE
         int b0 = boules[0], b1 = boules[1], b2 = boules[2], b3 = boules[3], b4 = boules[4];
+
+        // AJOUT ANALYST : Filtre d'Entropie
+        // Une entropie < 1.5 signifie que les nombres sont très groupés (ex: 12, 13, 14, 15, 18)
+        // Statistiquement, le Loto favorise la dispersion (Entropie élevée).
+        if (calculerEntropieShannon(boules) < 1.5) {
+            return false;
+        }
 
         // Calcul des Deltas (Astuce de l'analyse précédente intégrée)
         int d1 = b1 - b0, d2 = b2 - b1, d3 = b3 - b2, d4 = b4 - b3;

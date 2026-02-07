@@ -26,7 +26,7 @@ public class SecurityConfig {
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http,
-            @Value("${loto.security.remember-key}") String rememberKey) {
+            @Value("${loto.security.remember-key}") String rememberKey) throws Exception {
         http
                 .csrf(AbstractHttpConfigurer::disable) // Désactivé pour simplifier les appels API
                 .authorizeHttpRequests(auth -> auth
