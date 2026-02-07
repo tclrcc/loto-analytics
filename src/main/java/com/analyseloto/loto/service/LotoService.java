@@ -353,20 +353,20 @@ public class LotoService {
                     matriceChanceArr, contraintesDuJour, config, historiqueBitMasks, matriceMarkov, etatDernierTirage
             );
 
-            // Correction pour le stockage des votes dans LotoService
+            // DÉTERMINATION DU POIDS DU VOTE
+            double poidsVote = 1.0;
+            if (config.getNomStrategie().startsWith("AGRESSIF")) poidsVote = 1.2; // Un expert agressif "pousse" plus ses choix
+            if (config.getNomStrategie().startsWith("PRUDENT")) poidsVote = 0.8; // Un expert prudent est plus conservateur
+
             int limitVote = Math.min(proposals.size(), 30);
-            for(int i = 0; i < limitVote; i++) {
+            for(int i=0; i<limitVote; i++) {
                 GrilleCandidate cand = proposals.get(i);
-
-                // On transforme le int[] trié en List<Integer> pour que le HashSet l'accepte
-                List<Integer> boulesList = Arrays.stream(cand.getBoules())
-                        .boxed()
-                        .toList();
-
+                List<Integer> boulesList = Arrays.stream(cand.getBoules()).boxed().toList();
                 Set<Integer> key = new HashSet<>(boulesList);
 
-                votesGrilles.merge(key, 1, Integer::sum);
-                scoresCumules.merge(key, cand.getFitness(), Double::sum);
+                // On utilise le poids du vote au lieu d'un simple +1
+                votesGrilles.merge(key, (int)(poidsVote * 10), Integer::sum);
+                scoresCumules.merge(key, cand.getFitness() * poidsVote, Double::sum);
             }
         });
 
