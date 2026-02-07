@@ -84,11 +84,15 @@ public class BacktestService {
             for (ExpertProfile profil : ExpertProfile.values()) {
                 log.info("📡 Optimisation de l'école : {}", profil.name());
 
+                int adaptivePop = (profil == ExpertProfile.AGRESSIF || profil == ExpertProfile.EXPLORATEUR)
+                        ? POPULATION_SIZE / 3
+                        : POPULATION_SIZE / 5;
+
                 // Correction "Ambiguous method call" : on définit la fonction explicitement
                 Function<Genotype<DoubleGene>, Double> fitnessFunc = gt -> evaluerFitness(gt, scenarios, profil);
 
                 Engine<DoubleGene, Double> engine = Engine.builder(fitnessFunc, gtf)
-                        .populationSize(POPULATION_SIZE / 4)
+                        .populationSize(adaptivePop)
                         .executor(executor)
                         .alterers(
                                 new GaussianMutator<>(profil.mutationRate),
@@ -97,7 +101,7 @@ public class BacktestService {
                         .build();
 
                 EvolutionResult<DoubleGene, Double> result = engine.stream()
-                        .limit(Limits.bySteadyFitness(12))
+                        .limit(Limits.bySteadyFitness(profil == ExpertProfile.EXPLORATEUR ? 15 : 10))
                         .limit(MAX_GENERATIONS / 2)
                         .peek(r -> {
                             if (r.generation() % 5 == 0) {

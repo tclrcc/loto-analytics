@@ -301,7 +301,7 @@ public class LotoService {
         CompletableFuture<List<List<Integer>>> triosFuture = CompletableFuture.supplyAsync(() -> getTopTriosRecents(history));
         CompletableFuture<int[][]> affFuture = CompletableFuture.supplyAsync(() -> construireMatriceAffinitesDirecte(history, dateCible.getDayOfWeek()));
         CompletableFuture<int[][]> chanceFuture = CompletableFuture.supplyAsync(() -> construireMatriceChanceDirecte(history, dateCible.getDayOfWeek()));
-        CompletableFuture<double[][]> markovFuture = CompletableFuture.supplyAsync(() -> precalculerMatriceMarkov(history));
+        CompletableFuture<double[][]> markovFuture = CompletableFuture.supplyAsync(() -> precalculerMatriceMarkovParJour(history, dateCible.getDayOfWeek()));
         CompletableFuture<DynamicConstraints> contraintesFuture = CompletableFuture.supplyAsync(() -> analyserContraintesDynamiques(history));
 
         // On attend que tout soit prêt
@@ -681,7 +681,7 @@ public class LotoService {
             int[][] matAffArr = construireMatriceAffinitesDirecte(historyConnu, cible.getDateTirage().getDayOfWeek());
             int[][] matChanceArr = construireMatriceChanceDirecte(historyConnu, cible.getDateTirage().getDayOfWeek());
 
-            double[][] matMarkov = precalculerMatriceMarkov(historyConnu);
+            double[][] matMarkov = precalculerMatriceMarkovParJour(historyConnu, cible.getDateTirage().getDayOfWeek());
             int etatDernier = calculerEtatAbstrait(dernierTirage);
             DynamicConstraints contraintes = analyserContraintesDynamiques(historyConnu);
             List<List<Integer>> topTrios = getTopTriosRecents(historyConnu);
@@ -1056,6 +1056,41 @@ public class LotoService {
         return scores;
     }
 
+    // Dans LotoService.java - Version optimisée pour le calcul intensif
+    private double calculerEntropieOptimisee(int[] boules) {
+        // 1. Calcul des deltas (4 écarts pour 5 boules)
+        int d1 = boules[1] - boules[0];
+        int d2 = boules[2] - boules[1];
+        int d3 = boules[3] - boules[2];
+        int d4 = boules[4] - boules[3];
+
+        int[] ds = {d1, d2, d3, d4};
+        double entropy = 0;
+
+        // 2. Calcul des fréquences sans Map (O(n²) sur 4 éléments est plus rapide qu'une Map)
+        for (int i = 0; i < 4; i++) {
+            int count = 0;
+            boolean alreadyProcessed = false;
+            for (int k = 0; k < i; k++) {
+                if (ds[k] == ds[i]) {
+                    alreadyProcessed = true;
+                    break;
+                }
+            }
+            if (alreadyProcessed) continue;
+
+            for (int j = 0; j < 4; j++) {
+                if (ds[j] == ds[i]) count++;
+            }
+
+            // 3. Formule de Shannon : H = -Σ p_i * log2(p_i)
+            double p = count / 4.0;
+            // log2(p) = ln(p) / ln(2). ln(2) ≈ 0.69314718
+            entropy -= p * (Math.log(p) / 0.69314718056);
+        }
+        return entropy;
+    }
+
     private double calculerScoreFitnessOptimise(int[] boules, int chance, double[] scoresBoules, double[] scoresChance, int[][] matriceAffinites, AlgoConfig config, double[][] matriceMarkov, int etatDernierTirage) {
         double score = 0.0;
 
@@ -1104,6 +1139,11 @@ public class LotoService {
         // Bonus pour la zone de somme "centrale" statistiquement la plus probable
         if (sommeCandidate >= 120 && sommeCandidate <= 170) score += 10.0;
 
+        // NOUVEAU : Bonus d'Entropie
+        // On favorise les grilles qui ne sont pas des suites simples ou des patterns trop réguliers
+        double entropie = calculerEntropieOptimisee(boules);
+        score += (entropie * 12.0);
+
         return score;
     }
 
@@ -1147,16 +1187,31 @@ public class LotoService {
         return 5;
     }
 
-    private double[][] precalculerMatriceMarkov(List<LotoTirage> history) {
+    private double[][] precalculerMatriceMarkovParJour(List<LotoTirage> history, DayOfWeek jourCible) {
         double[][] matrix = new double[6][6];
         int[] totalTransitions = new int[6];
-        int limit = Math.min(history.size(), 350);
+
+        // On ne filtre que les tirages du même jour de la semaine
+        List<LotoTirage> historyJour = history.stream()
+                .filter(t -> t.getDateTirage().getDayOfWeek() == jourCible)
+                .toList();
+
+        int limit = Math.min(historyJour.size(), 150); // Moins de données, donc on limite la profondeur
         for (int i = 0; i < limit - 1; i++) {
-            int etatHier = calculerEtatAbstrait(history.get(i+1).getBoules());
-            int etatAuj = calculerEtatAbstrait(history.get(i).getBoules());
-            matrix[etatHier][etatAuj]++; totalTransitions[etatHier]++;
+            // Transition d'un Lundi vers le Lundi précédent
+            int etatHier = calculerEtatAbstrait(historyJour.get(i+1).getBoules());
+            int etatAuj = calculerEtatAbstrait(historyJour.get(i).getBoules());
+
+            matrix[etatHier][etatAuj]++;
+            totalTransitions[etatHier]++;
         }
-        for (int i = 1; i <= 5; i++) if (totalTransitions[i] > 0) for (int j = 1; j <= 5; j++) matrix[i][j] /= totalTransitions[i];
+
+        // Normalisation
+        for (int i = 1; i <= 5; i++) {
+            if (totalTransitions[i] > 0) {
+                for (int j = 1; j <= 5; j++) matrix[i][j] /= totalTransitions[i];
+            }
+        }
         return matrix;
     }
 
