@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDate;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -110,6 +111,40 @@ public class LotoController {
 
         // Réponse pronostics JSON
         return ResponseEntity.ok(service.genererMultiplesPronostics(date, count));
+    }
+
+    @GetMapping("/pro-generate")
+    public ResponseEntity<?> generateProGrid(
+            @RequestParam("date") String dateStr,
+            @RequestParam(value = "budget", defaultValue = "20") int budget,
+            HttpServletRequest request) {
+
+        // 1. Sécurité : Rate Limiting (Même protection que l'autre endpoint)
+        io.github.bucket4j.Bucket bucket = rateLimiterService.resolveBucket(request);
+        if (!bucket.tryConsume(1)) {
+            return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                    .body("⏳ Mode Pro : Veuillez patienter entre deux calculs lourds.");
+        }
+
+        try {
+            // 2. Parsing de la date
+            LocalDate date = LocalDate.parse(dateStr);
+
+            // 3. Appel de la méthode PRO
+            // Le budget correspond au nombre max de grilles (ex: 20 grilles = 44€)
+            List<PronosticResultDto> resultats = service.genererGrillesPro(date, budget);
+
+            if (resultats.isEmpty()) {
+                return ResponseEntity.ok(Map.of("message", "Aucune grille n'a passé les filtres stricts du Mode Pro."));
+            }
+
+            return ResponseEntity.ok(resultats);
+
+        } catch (DateTimeParseException e) {
+            return ResponseEntity.badRequest().body("Format de date invalide. Utilisez YYYY-MM-DD.");
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body("Erreur critique du système expert : " + e.getMessage());
+        }
     }
 
     @PostMapping("/add-result")

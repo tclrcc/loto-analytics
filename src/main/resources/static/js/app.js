@@ -47,8 +47,6 @@ function initDarkMode() {
 document.addEventListener('DOMContentLoaded', () => {
     // --- Variables Globales ---
     let currentChart = null;
-    let radarChart = null;
-    let rawData = [];
     let activeTab = 'main';
 
     // Variables pour la sélection multiple
@@ -88,7 +86,7 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     // 3. Sélectionner une grille unique (Click sur la carte)
-    window.toggleGridSelection = function(index, cardElement) {
+    window.toggleGridSelection = function(index) {
         if (selectedGrids.has(index)) {
             selectedGrids.delete(index);
             updateCardStyle(index, false);
@@ -134,12 +132,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Initialisation des Popovers Bootstrap
     var popoverTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="popover"]'));
-    var popoverList = popoverTriggerList.map(function (popoverTriggerEl) {
+    popoverTriggerList.map(function (popoverTriggerEl) {
         return new bootstrap.Popover(popoverTriggerEl)
     });
 
     chargerFavoris();
     checkWinEffect();
+
+    const btnGeneratePro = document.getElementById('btnGeneratePro');
+    if (btnGeneratePro) {
+        btnGeneratePro.addEventListener('click', async () => {
+            await lancerModePro();
+        });
+    }
 
     // Bouton Sauvegarder Favori (Simulateur)
     const btnSaveFav = document.getElementById('btnSaveFav');
@@ -480,7 +485,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // 4. Génération des nouvelles cartes
         list.forEach((bet, index) => {
             // Gestion des Badges Algo
-            let badgeHtml = '';
+            let badgeHtml;
             const type = bet.typeAlgo || '';
             if (type.includes('GENETIQUE') || type.includes('OPTIMAL'))
                 badgeHtml = '<span class="badge bg-primary bg-opacity-10 text-primary border border-primary"><i class="bi bi-cpu-fill"></i> IA Optimal</span>';
@@ -499,7 +504,7 @@ document.addEventListener('DOMContentLoaded', () => {
             col.innerHTML = `
             <div class="card h-100 shadow-sm border-light grid-card cursor-pointer position-relative" 
                  id="grid-card-${index}"
-                 onclick="toggleGridSelection(${index}, this)">
+                 onclick="toggleGridSelection(${index})">
                 
                 <div class="position-absolute top-0 end-0 p-2">
                     <input type="checkbox" class="form-check-input fs-5" id="check-${index}" style="pointer-events: none;">
@@ -699,14 +704,6 @@ document.addEventListener('DOMContentLoaded', () => {
         return `<div class="tab-pane fade ${isActive ? 'show active' : ''}" id="${id}">${content}</div>`;
     }
 
-    // --- CHARTS UTILS ---
-    function jitter(val) { return val + (Math.random() - 0.5) * 0.7; }
-    function parseSearch(str) { return str.split(/[\s,]+/).map(s => parseInt(s)).filter(n => !isNaN(n)); }
-    function getColorByDay(j) {
-        const c = { 'MONDAY': '#ff6384', 'WEDNESDAY': '#4bc0c0', 'SATURDAY': '#36a2eb' };
-        return c[j] || '#36a2eb';
-    }
-
     function checkWinEffect() {
         const urlParams = new URLSearchParams(window.location.search);
         if (urlParams.has('win')) {
@@ -735,51 +732,109 @@ document.addEventListener('DOMContentLoaded', () => {
             confetti(Object.assign({}, defaults, { particleCount, origin: { x: randomInRange(0.7, 0.9), y: Math.random() - 0.2 } }));
         }, 250);
     }
-
-    function updateRadar(data) {
-        const recentData = data.slice(0, 50);
-        let totalPairs = 0;
-        let totalHigh = 0;
-        let totalSum = 0;
-        recentData.forEach(d => {
-            if (d.numero % 2 === 0) totalPairs += d.frequence;
-            if (d.numero > 25) totalHigh += d.frequence;
-            totalSum += (d.numero * d.frequence);
-        });
-        const totalSorties = recentData.reduce((acc, val) => acc + val.frequence, 0);
-        const pctPair = Math.round((totalPairs / totalSorties) * 100);
-        const pctHigh = Math.round((totalHigh / totalSorties) * 100);
-        const ctx = document.getElementById('radarChart').getContext('2d');
-        if (radarChart) radarChart.destroy();
-        radarChart = new Chart(ctx, {
-            type: 'radar',
-            data: {
-                labels: ['Parité (Pairs)', 'Taille (>25)', 'Zone Chaude', 'Finales 0-4', 'Finales 5-9'],
-                datasets: [{
-                    label: 'Tendance Actuelle',
-                    data: [pctPair, pctHigh, 60, 55, 45],
-                    fill: true, backgroundColor: 'rgba(79, 70, 229, 0.2)', borderColor: '#4F46E5', pointBackgroundColor: '#4F46E5', pointBorderColor: '#fff', pointHoverBackgroundColor: '#fff', pointHoverBorderColor: '#4F46E5'
-                }, {
-                    label: 'Équilibre Théorique', data: [50, 50, 50, 50, 50], fill: true, backgroundColor: 'rgba(200, 200, 200, 0.1)', borderColor: 'rgba(200, 200, 200, 0.5)', pointRadius: 0
-                }]
-            },
-            options: {
-                elements: { line: { tension: 0.3 } },
-                scales: { r: { angleLines: { display: true, color: '#eee' }, suggestedMin: 30, suggestedMax: 70, pointLabels: { font: { size: 12, family: "'Poppins', sans-serif" } } } }
-            }
-        });
-        const conseilDiv = document.getElementById('radarAnalysis');
-        if(conseilDiv) {
-            let analyse = [];
-            if (pctPair > 55) analyse.push("Les <strong>Pairs</strong> dominent");
-            if (pctPair < 45) analyse.push("Les <strong>Impairs</strong> dominent");
-            if (pctHigh > 55) analyse.push("Les <strong>Gros numéros</strong> (>25) sont fréquents");
-            if (pctHigh < 45) analyse.push("Les <strong>Petits numéros</strong> (≤25) sont fréquents");
-            if (analyse.length === 0) conseilDiv.innerHTML = '<span class="text-success"><i class="bi bi-check-circle me-1"></i> Équilibre parfait. Le hasard fait bien les choses.</span>';
-            else conseilDiv.innerHTML = '<span class="text-primary"><i class="bi bi-lightbulb me-1"></i> Tendance : ' + analyse.join(" et ") + '.</span>';
-        }
-    }
 });
+
+/**
+ * Fonction dédiée au Mode Pro (Appel API et Affichage)
+ */
+async function lancerModePro() {
+    // 1. Récupération des inputs
+    const dateTirage = document.getElementById('dateTirage').value; // Ton input date existant
+    const budget = document.getElementById('budgetPro').value;
+    const resultContainer = document.getElementById('resultats-container'); // Ou resultatsProContainer selon ton choix
+
+    // 2. Validation
+    if (!dateTirage) {
+        alert("⚠️ Veuillez sélectionner une date de tirage.");
+        return;
+    }
+    if (budget < 10) {
+        alert("⚠️ Le système réducteur nécessite au moins 10 grilles pour être efficace.");
+        return;
+    }
+
+    // 3. UI : État de chargement
+    const btn = document.getElementById('btnGeneratePro');
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Calcul Mathématique...';
+    btn.disabled = true;
+    resultContainer.innerHTML = '<div class="text-center p-5"><div class="spinner-border text-warning" role="status"></div><p class="mt-2 text-muted">L\'IA optimise le système réducteur...</p></div>';
+
+    try {
+        // 4. APPEL API CONTROLLEUR JAVA
+        const url = `/api/loto/pro-generate?date=${dateTirage}&budget=${budget}`;
+        const response = await fetch(url);
+
+        if (response.status === 429) {
+            throw new Error("⏳ Trop de requêtes ! Veuillez patienter.");
+        }
+        if (!response.ok) {
+            throw new Error("Erreur serveur lors de la génération expert.");
+        }
+
+        const data = await response.json();
+
+        // 5. Affichage des résultats
+        renderProGrids(data, resultContainer);
+
+    } catch (error) {
+        console.error("Erreur Pro:", error);
+        resultContainer.innerHTML = `<div class="alert alert-danger"><i class="fas fa-exclamation-triangle me-2"></i>${error.message}</div>`;
+    } finally {
+        // Rétablissement du bouton
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+    }
+}
+
+/**
+ * Affiche les grilles avec le style "Pro"
+ */
+function renderProGrids(grids, container) {
+    container.innerHTML = ''; // Nettoyage
+
+    if (!grids || grids.length === 0) {
+        container.innerHTML = '<div class="alert alert-warning">Aucune grille n\'a pu être générée avec ces critères stricts.</div>';
+        return;
+    }
+
+    // Header du résultat
+    const header = document.createElement('div');
+    header.className = 'col-12 mb-3 text-center';
+    header.innerHTML = `<h4 class="text-golden">Système Validé : ${grids.length} Grilles</h4>`;
+    container.appendChild(header);
+
+    grids.forEach((grid, index) => {
+        const col = document.createElement('div');
+        col.className = 'col-md-4 col-lg-3 mb-3'; // 3 ou 4 par ligne
+
+        // Construction des boules HTML
+        let boulesHtml = '';
+        grid.boules.forEach(b => {
+            boulesHtml += `<span class="ball">${b}</span>`;
+        });
+        const chanceHtml = `<span class="ball chance">${grid.chance}</span>`;
+
+        col.innerHTML = `
+            <div class="card grid-card-pro h-100 shadow-sm">
+                <div class="card-body text-center p-2">
+                    <h6 class="card-title text-muted mb-2">Grille #${index + 1}</h6>
+                    <div class="d-flex justify-content-center gap-1 mb-2">
+                        ${boulesHtml}
+                        ${chanceHtml}
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center mt-2 border-top pt-2">
+                        <span class="badge bg-light text-dark border">
+                            <i class="fas fa-shield-alt text-warning me-1"></i>Garantie 3/5
+                        </span>
+                        <span class="badge badge-score text-white">Score IA: ${grid.scoreFitness}</span>
+                    </div>
+                </div>
+            </div>
+        `;
+        container.appendChild(col);
+    });
+}
 
 // Enregistrement du Service Worker pour la PWA
 if ('serviceWorker' in navigator) {

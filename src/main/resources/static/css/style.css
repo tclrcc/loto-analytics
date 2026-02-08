@@ -589,3 +589,49 @@ div.dataTables_length label {
 /* Effet Hover sur le bouton valider */
 .hover-scale { transition: transform 0.2s; }
 .hover-scale:hover { transform: scale(1.05); }
+
+/* --- Mode Expert Styles --- */
+
+/* Bouton Doré Dégradé */
+.btn-pro {
+    background: linear-gradient(135deg, #FFD700 0%, #DAA520 100%);
+    border: none;
+    box-shadow: 0 4px 15px rgba(218, 165, 32, 0.4);
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.btn-pro:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(218, 165, 32, 0.6);
+    background: linear-gradient(135deg, #FFE066 0%, #B8860B 100%);
+}
+
+.text-golden {
+    color: #B8860B;
+    font-weight: bold;
+}
+
+/* Carte de résultat Pro */
+.grid-card-pro {
+    border: 2px solid #FFD700; /* Bordure dorée */
+    background-color: #fffae6; /* Fond très légèrement jaune */
+    position: relative;
+    overflow: hidden;
+}
+
+.grid-card-pro::before {
+    content: "SYSTEM";
+    position: absolute;
+    top: 5px;
+    right: -20px;
+    background: #FFD700;
+    color: #000;
+    font-size: 0.6rem;
+    font-weight: bold;
+    padding: 2px 20px;
+    transform: rotate(45deg);
+}
+
+.grid-card-pro .badge-score {
+    background-color: #B8860B !important; /* Score en or foncé */
+}

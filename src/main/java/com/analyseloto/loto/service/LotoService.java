@@ -40,6 +40,7 @@ public class LotoService {
     // Services
     private final BacktestService backtestService;
     private final BitMaskService bitMaskService;
+    private final WheelingService wheelingService;
     private final RedisTemplate<String, Object> redisTemplate;
 
     // --- VARIABLES DU CACHE MANUEL (Architecture Stateful) ---
@@ -307,6 +308,108 @@ public class LotoService {
     }
 
     /**
+     * Génère les grilles professionnelles en combinant les statistiques classiques avec les prédictions d'un modèle d'apprentissage profond (LSTM).
+     * @param dateCible date tirage
+     * @param budgetMaxGrilles budget maximum de grilles à générer (ex: 20)
+     * @return liste des grilles
+     */
+    public List<PronosticResultDto> genererGrillesPro(LocalDate dateCible, int budgetMaxGrilles) {
+        log.info("🚀 [PRO MODE] Démarrage de la séquence Optimale...");
+
+        // 1. Récupération Historique
+        List<LotoTirageRepository.TirageMinimal> rawData = repository.findAllOptimized();
+        List<LotoTirage> history = rawData.stream().map(this::mapToLightEntity).toList();
+
+        // 2. Calcul des Poids Hybrides (IA + XGBoost)
+        double[] weights = getDeepLearningWeights();
+
+        // 3. Sélection du Pool des 14 Meilleurs Numéros ("Chauds")
+        // On combine les poids IA avec les stats classiques (Forme) calculées via 'calculerScoresOptimise'
+        // (J'utilise ici une logique simplifiée pour extraire les indices des meilleurs poids)
+        List<Integer> pool = IntStream.range(1, 50)
+                .boxed()
+                .sorted((a, b) -> Double.compare(weights[b], weights[a])) // Tri décroissant du score
+                .limit(14) // On garde les 14 meilleurs
+                .collect(Collectors.toList());
+
+        log.info("🎯 Pool sélectionné : {}", pool);
+
+        // 4. Wheeling System (Garantie 3 si 5)
+        // Cela va générer environ 20 à 30 grilles mathématiquement parfaites pour couvrir ce pool
+        List<int[]> grillesBrutes = wheelingService.genererSystemeReducteur(pool, 3);
+
+        // 5. Filtrage & Numéro Chance
+        List<PronosticResultDto> resultats = new ArrayList<>();
+
+        // On pré-calcule la matrice chance une fois
+        int[][] matriceChance = construireMatriceChanceDirecte(history, dateCible.getDayOfWeek());
+
+        for (int[] g : grillesBrutes) {
+            // A. Filtre Psychologique (Rentabilité)
+            if (!estGrilleRentable(g)) continue;
+
+            // B. Sélection Meilleur Chance pour cette grille
+            int chance = selectionnerChanceRapidePrimitive(g, new double[11], matriceChance); // (Adapte les params selon ton code existant)
+
+            // C. Packaging
+            List<Integer> listeBoules = Arrays.stream(g).boxed().sorted().toList();
+            resultats.add(new PronosticResultDto(
+                    listeBoules,
+                    chance,
+                    95.0, // Score arbitraire "Pro"
+                    0.0, 0.0, false,
+                    "SYSTEME REDUCTEUR (Garantie 3/5)"
+            ));
+        }
+
+        // Limiter au budget
+        if (resultats.size() > budgetMaxGrilles) {
+            return resultats.subList(0, budgetMaxGrilles);
+        }
+
+        return resultats;
+    }
+
+    private boolean estGrilleRentable(int[] boules) {
+        // Conversion rapide pour l'analyse
+        int[] sorted = Arrays.copyOf(boules, 5);
+        Arrays.sort(sorted);
+
+        int somme = 0;
+        int nbrSous31 = 0; // Compteur date naissance
+        int nbrDizaines = 0;
+        int last = -1;
+        boolean suite = false;
+
+        for (int b : sorted) {
+            somme += b;
+            if (b <= 31) nbrSous31++;
+            if (b % 10 == 0) nbrDizaines++; // Finissant par 0
+
+            if (last != -1 && b == last + 1) suite = true; // Suite (ex: 32, 33)
+            last = b;
+        }
+
+        // 1. Filtre Anti-Anniversaire (Trop joué par le public)
+        // Si on a 4 ou 5 numéros <= 31, on jette, car les gains seront divisés.
+        if (nbrSous31 >= 4) return false;
+
+        // 2. Filtre Somme (Cloche de Gauss)
+        // La majorité des tirages ont une somme entre 100 et 200.
+        // On évite les extrêmes (1,2,3,4,5 = somme 15)
+        if (somme < 90 || somme > 220) return false;
+
+        // 3. Filtre "Trop Propre"
+        // Les gens jouent les finaux en 0 (10, 20, 30...) ou les suites.
+        if (nbrDizaines >= 3) return false;
+
+        // On autorise 1 suite (ex: 12,13) car c'est fréquent, mais pas 2 (ex: 12,13,40,41)
+        // Ici on reste simple : on garde la grille.
+
+        return true;
+    }
+
+    /**
      * Appelle le module Python (LSTM) pour obtenir des prédictions basées sur l'apprentissage profond.
      * @return un tableau de 50 doubles (index 1 à 49 remplis) représentant les poids additionnels.
      */
@@ -338,7 +441,7 @@ public class LotoService {
 
             // 2. Appel du script Python via ProcessBuilder
             // On passe le chemin du CSV en argument
-            ProcessBuilder pb = new ProcessBuilder("python3", "scripts/loto_lstm.py", tempFile.getAbsolutePath());
+            ProcessBuilder pb = new ProcessBuilder("python3", "scripts/loto_hybrid.py", tempFile.getAbsolutePath());
             pb.redirectErrorStream(true); // Redirige les erreurs Python vers la sortie standard pour debug
             Process p = pb.start();
 

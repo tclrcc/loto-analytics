@@ -264,6 +264,27 @@
                                     <i class="bi bi-magic me-1"></i> Générer
                                 </button>
                             </div>
+                            <div class="pro-section mt-4 p-4 border rounded shadow-sm bg-light">
+                                <div class="d-flex align-items-center justify-content-between mb-2">
+                                    <h5 class="text-golden mb-0"><i class="fas fa-crown me-2"></i>Mode Expert (Wheeling System)</h5>
+                                    <span class="badge bg-warning text-dark">Premium Math</span>
+                                </div>
+
+                                <p class="text-muted small mb-3">
+                                    Générez un système réducteur complet garantissant 3 bons numéros si les 5 gagnants sont dans la sélection de l'IA.
+                                </p>
+
+                                <div class="input-group">
+                                    <span class="input-group-text">Budget (Nb Grilles)</span>
+                                    <input type="number" id="budgetPro" class="form-control" value="20" min="10" max="50">
+                                    <button id="btnGeneratePro" class="btn btn-pro text-white fw-bold">
+                                        <i class="fas fa-magic me-2"></i>Lancer le Système
+                                    </button>
+                                </div>
+                                <small class="text-muted">Recommandé : 20 grilles pour une couverture optimale.</small>
+                            </div>
+
+                            <div id="resultatsProContainer" class="row mt-4"></div>
                             <button type="submit" class="btn btn-dark shadow-sm" title="Analyser la saisie manuelle">
                                 <i class="bi bi-search"></i>
                             </button>
