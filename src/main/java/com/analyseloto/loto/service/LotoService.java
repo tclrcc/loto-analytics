@@ -365,21 +365,24 @@ public class LotoService {
 
             // 4. Parsing manuel du JSON (Format attendu : {"1": 20.0, "14": 20.0, ...})
             if (!jsonOutput.isEmpty()) {
-                jsonOutput = jsonOutput.replace("{", "").replace("}", "").replace("\"", "");
                 if (!jsonOutput.isBlank()) {
+                    jsonOutput = jsonOutput.replace("{", "").replace("}", "").replace("\"", "");
                     String[] parts = jsonOutput.split(",");
                     for (String part : parts) {
                         String[] kv = part.split(":");
                         if (kv.length == 2) {
                             try {
                                 int boule = Integer.parseInt(kv[0].trim());
-                                double score = Double.parseDouble(kv[1].trim());
+                                double proba = Double.parseDouble(kv[1].trim()); // ex: 0.85
+
                                 if (boule >= 1 && boule <= 49) {
-                                    weights[boule] = score;
+                                    // FORMULE MAGIQUE :
+                                    // On multiplie par un facteur de confiance (ex: 50.0)
+                                    // Une boule avec 90% de proba aura +45 points.
+                                    // Une boule avec 10% de proba aura +5 points.
+                                    weights[boule] = proba * 50.0;
                                 }
-                            } catch (NumberFormatException e) {
-                                // Ignorer les erreurs de parsing mineures
-                            }
+                            } catch (Exception e) { /* ignore */ }
                         }
                     }
                     log.info("✅ [DEEP LEARNING] Poids neuronaux intégrés.");
@@ -619,7 +622,56 @@ public class LotoService {
         long duration = System.currentTimeMillis() - startTotal;
         log.info("🏁 [CONSENSUS IA] Terminé en {} ms. {} grilles 'Solidaires' retenues.", duration, resultatsConsensus.size());
 
+
+
         return resultatsConsensus.subList(0, Math.min(resultatsConsensus.size(), nombreGrilles));
+    }
+
+    /**
+     * FILTRE DE DIVERSITÉ (Smart Covering)
+     * Élimine les grilles trop similaires pour maximiser la couverture du champ des possibles.
+     */
+    private List<PronosticResultDto> appliquerSmartCovering(List<PronosticResultDto> candidats, int nombreFinal) {
+        List<PronosticResultDto> selectionFinale = new ArrayList<>();
+
+        // On parcourt les candidats triés par score décroissant
+        for (PronosticResultDto candidat : candidats) {
+            if (selectionFinale.size() >= nombreFinal) break;
+
+            boolean tropSimilaire = false;
+            Set<Integer> boulesCandidat = new HashSet<>(candidat.getBoules());
+
+            for (PronosticResultDto elu : selectionFinale) {
+                // Calculer l'intersection
+                Set<Integer> intersection = new HashSet<>(elu.getBoules());
+                intersection.retainAll(boulesCandidat);
+
+                // Si la grille a 4 ou 5 numéros en commun avec une grille déjà choisie, on la rejette.
+                // Pourquoi ? Car si l'autre grille perd, celle-ci perdra aussi probablement.
+                // On veut maximiser la "surface d'attaque".
+                if (intersection.size() >= 4) {
+                    tropSimilaire = true;
+                    break;
+                }
+            }
+
+            if (!tropSimilaire) {
+                selectionFinale.add(candidat);
+            }
+        }
+
+        // Si le filtrage a été trop agressif et qu'on n'a pas assez de grilles
+        if (selectionFinale.size() < nombreFinal) {
+            // On comble avec les meilleures restantes même si elles sont similaires
+            for (PronosticResultDto c : candidats) {
+                if (selectionFinale.size() >= nombreFinal) break;
+                if (!selectionFinale.contains(c)) {
+                    selectionFinale.add(c);
+                }
+            }
+        }
+
+        return selectionFinale;
     }
 
     // Helper pour le numéro chance en mode consensus

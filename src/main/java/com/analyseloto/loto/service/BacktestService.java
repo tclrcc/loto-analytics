@@ -141,6 +141,7 @@ public class BacktestService {
         double depense = 0;
         int totalGagnant = 0;
         int totalGrilles = 0;
+        double scorePunitif = 0.0;
 
         // On utilise un sous-échantillon pour l'entraînement
         List<LotoService.ScenarioSimulation> batch = scenarios.subList(0, Math.min(scenarios.size(), TRAINING_BATCH_SIZE));
@@ -163,6 +164,12 @@ public class BacktestService {
                 if (g[3]==b1 || g[3]==b2 || g[3]==b3 || g[3]==b4 || g[3]==b5) matches++;
                 if (g[4]==b1 || g[4]==b2 || g[4]==b3 || g[4]==b4 || g[4]==b5) matches++;
                 boolean chanceMatch = (g[5] == bc);
+
+                // Si une grille fait 0 ou 1 match, elle reçoit une pénalité.
+                // Cela force l'IA à trouver des zones "denses" en numéros.
+                if (matches <= 1 && !chanceMatch) {
+                    scorePunitif -= 0.5;
+                }
 
                 // Mode entraînement : on utilise des gains lissés pour la fitness
                 double gain = calculerGainRapide(matches, chanceMatch);
@@ -188,7 +195,7 @@ public class BacktestService {
         // Ajout d'un bonus de régularité pour favoriser la stabilité du ROI
         double bonusStabilite = regulariteGains * 15.0;
 
-        return (roiPercent * profil.roiWeight) + (couverture * 100.0 * profil.couvWeight) + bonusStabilite - penaliteVol;
+        return (roiPercent * profil.roiWeight) + (couverture * 100.0 * profil.couvWeight) + bonusStabilite - penaliteVol + scorePunitif;
     }
 
     private double calculerGainRapide(int m, boolean c) {
