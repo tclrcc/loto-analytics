@@ -35,14 +35,14 @@ class PredictionRequest(BaseModel):
 async def load_models():
     print("🔄 [API] Chargement des modèles en mémoire...")
     try:
-        # LSTM
-        if os.path.exists("models/lstm_v4.h5"):
-            models["lstm"] = tf.keras.models.load_model("models/lstm_v4.h5")
+        # LSTM : Changement d'extension ici (.h5 -> .keras)
+        if os.path.exists("models/lstm_v4.keras"):
+            models["lstm"] = tf.keras.models.load_model("models/lstm_v4.keras")
             print("✅ LSTM Engine: CHARGÉ")
         else:
-            print("⚠️ LSTM Engine: Fichier introuvable (Lancez train_models.py)")
+            print("⚠️ LSTM Engine: Fichier 'models/lstm_v4.keras' introuvable")
 
-        # XGBoost
+        # XGBoost (Inchangé)
         if os.path.exists("models/xgb_v4.json"):
             models["xgb"] = xgb.Booster()
             models["xgb"].load_model("models/xgb_v4.json")

@@ -3,7 +3,7 @@ import numpy as np
 import os
 import tensorflow as tf
 from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import LSTM, Dense, BatchNormalization, Dropout
+from tensorflow.keras.layers import LSTM, Dense, BatchNormalization, Dropout, Input
 import xgboost as xgb
 
 # Configuration
@@ -18,7 +18,7 @@ def get_multi_hot_encoded(row):
     return vector
 
 def train_lstm(df):
-    print("🧠 Entraînement LSTM en cours...")
+    print("🧠 Entraînement LSTM (Syntaxe V2)...")
     data = df[['boule1', 'boule2', 'boule3', 'boule4', 'boule5']].values
 
     sequence_length = 12
@@ -32,26 +32,28 @@ def train_lstm(df):
     X = np.array(X)
     y = np.array(y)
 
+    # CORRECTION CLEAN CODE : Utilisation de Input() et format .keras
     model = Sequential([
-        LSTM(128, return_sequences=True, input_shape=(sequence_length, 49)),
+        Input(shape=(sequence_length, 49)), # Nouvelle syntaxe explicite
+        LSTM(128, return_sequences=True),   # Plus besoin de input_shape ici
         BatchNormalization(),
         Dropout(0.3),
         LSTM(64),
         Dropout(0.3),
-        Dense(49, activation='sigmoid') # Classification Multi-Label
+        Dense(49, activation='sigmoid')
     ])
 
     model.compile(optimizer='adam', loss='binary_crossentropy')
     model.fit(X, y, epochs=50, batch_size=32, verbose=1)
 
-    model.save(f"{MODEL_DIR}/lstm_v4.h5")
-    print("✅ Modèle LSTM sauvegardé (models/lstm_v4.h5)")
+    # Sauvegarde au nouveau format natif Keras (plus rapide et sécurisé)
+    model.save(f"{MODEL_DIR}/lstm_v4.keras")
+    print("✅ Modèle LSTM sauvegardé (models/lstm_v4.keras)")
 
 def train_xgboost(df):
     print("🌲 Initialisation XGBoost...")
-    # Création d'un modèle structurel pour la V4
     model = xgb.XGBClassifier()
-    # Dummy train pour initialiser la structure du fichier
+    # Dummy train pour initialiser la structure
     X = np.random.rand(10, 5)
     y = np.random.randint(0, 2, 10)
     model.fit(X, y)
@@ -65,4 +67,4 @@ if __name__ == "__main__":
         train_lstm(df)
         train_xgboost(df)
     else:
-        print(f"❌ Erreur: Fichier {csv_path} manquant. Exportez la base d'abord.")
+        print(f"❌ Erreur: Fichier {csv_path} manquant.")
