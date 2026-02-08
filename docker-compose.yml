@@ -103,6 +103,8 @@ services:
       context: .
       dockerfile: Dockerfile.python
     container_name: loto-ai-engine
+    environment:
+      - TZ=Europe/Paris
     ports:
       - "8000:8000"
     volumes:
