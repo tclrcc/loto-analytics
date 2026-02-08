@@ -733,107 +733,300 @@ document.addEventListener('DOMContentLoaded', () => {
         }, 250);
     }
 });
-
-/**
- * Fonction dédiée au Mode Pro (Appel API et Affichage)
- */
 async function lancerModePro() {
-    // 1. Récupération des inputs
-    const dateTirage = document.getElementById('dateTirage').value; // Ton input date existant
-    const budget = document.getElementById('budgetPro').value;
-    const resultContainer = document.getElementById('resultats-container'); // Ou resultatsProContainer selon ton choix
+    const dateInput = document.getElementById('dateTirage');
+    const budgetInput = document.getElementById('budgetPro');
+    const resultContainer = document.getElementById('results-area');
+    const btn = document.getElementById('btnPro');
 
-    // 2. Validation
-    if (!dateTirage) {
+    // Validation
+    const date = dateInput.value;
+    const budget = parseInt(budgetInput.value) || 20;
+
+    if (!date) {
         alert("⚠️ Veuillez sélectionner une date de tirage.");
         return;
     }
     if (budget < 10) {
-        alert("⚠️ Le système réducteur nécessite au moins 10 grilles pour être efficace.");
-        return;
+        if(!confirm("⚠️ Le système réducteur est optimal avec au moins 10 grilles. Continuer avec " + budget + " ?")) return;
     }
 
-    // 3. UI : État de chargement
-    const btn = document.getElementById('btnGeneratePro');
+    // UI Loading (Effet Gold)
     const originalText = btn.innerHTML;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Calcul Mathématique...';
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> IA V4...';
     btn.disabled = true;
-    resultContainer.innerHTML = '<div class="text-center p-5"><div class="spinner-border text-warning" role="status"></div><p class="mt-2 text-muted">L\'IA optimise le système réducteur...</p></div>';
+
+    resultContainer.innerHTML = `
+        <div class="text-center py-5 fade-in">
+            <div class="spinner-border text-warning" role="status" style="width: 3rem; height: 3rem;"></div>
+            <h5 class="mt-3 text-warning fw-bold">Le Neural Engine V4 calcule les probabilités...</h5>
+            <p class="text-muted">Analyse des cycles • Pattern Recognition (LSTM) • Wheeling System</p>
+        </div>
+    `;
 
     try {
-        // 4. APPEL API CONTROLLEUR JAVA
-        const url = `/api/loto/pro-generate?date=${dateTirage}&budget=${budget}`;
-        const response = await fetch(url);
+        // Appel API Pro
+        const response = await fetch(`/api/loto/pro-generate?date=${date}&budget=${budget}`);
 
         if (response.status === 429) {
-            throw new Error("⏳ Trop de requêtes ! Veuillez patienter.");
+            throw new Error("⏳ Le processeur IA surchauffe ! Attendez une minute.");
         }
         if (!response.ok) {
-            throw new Error("Erreur serveur lors de la génération expert.");
+            throw new Error("Erreur lors du calcul expert.");
         }
 
         const data = await response.json();
 
-        // 5. Affichage des résultats
-        renderProGrids(data, resultContainer);
+        // Stockage global
+        window.currentGridsData = data;
+
+        // Affichage
+        renderResults(data, resultContainer, 'EXPERT');
 
     } catch (error) {
-        console.error("Erreur Pro:", error);
+        console.error(error);
         resultContainer.innerHTML = `<div class="alert alert-danger"><i class="fas fa-exclamation-triangle me-2"></i>${error.message}</div>`;
     } finally {
-        // Rétablissement du bouton
         btn.innerHTML = originalText;
         btn.disabled = false;
     }
 }
 
 /**
- * Affiche les grilles avec le style "Pro"
+ * ------------------------------------------------------------------
+ * 3. AFFICHAGE DES RÉSULTATS (Commun)
+ * ------------------------------------------------------------------
  */
-function renderProGrids(grids, container) {
-    container.innerHTML = ''; // Nettoyage
-
+function renderResults(grids, container, mode) {
     if (!grids || grids.length === 0) {
-        container.innerHTML = '<div class="alert alert-warning">Aucune grille n\'a pu être générée avec ces critères stricts.</div>';
+        container.innerHTML = '<div class="alert alert-warning">Aucune grille générée. Réessayez.</div>';
         return;
     }
 
-    // Header du résultat
-    const header = document.createElement('div');
-    header.className = 'col-12 mb-3 text-center';
-    header.innerHTML = `<h4 class="text-golden">Système Validé : ${grids.length} Grilles</h4>`;
-    container.appendChild(header);
+    // Header spécifique selon le mode
+    let headerHtml;
+    let cardClass = '';
+    let badgeClass;
 
-    grids.forEach((grid, index) => {
-        const col = document.createElement('div');
-        col.className = 'col-md-4 col-lg-3 mb-3'; // 3 ou 4 par ligne
+    if (mode === 'EXPERT') {
+        headerHtml = `
+            <div class="d-flex justify-content-between align-items-center mb-3 fade-in">
+                <h4 class="text-warning fw-bold"><i class="bi bi-trophy-fill me-2"></i>Système Expert : ${grids.length} Grilles</h4>
+                <div>
+                    <span class="badge bg-dark text-warning border border-warning me-2"><i class="bi bi-shield-check me-1"></i>Garantie 3/5</span>
+                    <button class="btn btn-sm btn-outline-warning" onclick="toggleAllGrids()">Tout sélectionner</button>
+                </div>
+            </div>
+        `;
+        cardClass = 'border-warning shadow'; // Bordure dorée
+        badgeClass = 'bg-warning text-dark';
+    } else {
+        headerHtml = `
+            <div class="d-flex justify-content-between align-items-center mb-3 fade-in">
+                <h5 class="text-primary"><i class="bi bi-robot me-2"></i>Pronostics IA : ${grids.length} Grilles</h5>
+                <button class="btn btn-sm btn-outline-primary" onclick="toggleAllGrids()">Tout sélectionner</button>
+            </div>
+        `;
+        cardClass = 'border-light shadow-sm';
+        badgeClass = 'bg-primary';
+    }
 
-        // Construction des boules HTML
-        let boulesHtml = '';
-        grid.boules.forEach(b => {
-            boulesHtml += `<span class="ball">${b}</span>`;
-        });
-        const chanceHtml = `<span class="ball chance">${grid.chance}</span>`;
+    let html = headerHtml + '<div class="row g-3">';
 
-        col.innerHTML = `
-            <div class="card grid-card-pro h-100 shadow-sm">
-                <div class="card-body text-center p-2">
-                    <h6 class="card-title text-muted mb-2">Grille #${index + 1}</h6>
-                    <div class="d-flex justify-content-center gap-1 mb-2">
-                        ${boulesHtml}
-                        ${chanceHtml}
+    grids.forEach((g, index) => {
+        // Boules HTML
+        const boulesHtml = g.boules.map(b =>
+            `<span class="badge rounded-circle bg-dark fs-6 d-flex align-items-center justify-content-center shadow-sm" style="width:32px; height:32px;">${b}</span>`
+        ).join('');
+
+        const chanceHtml = `<span class="badge rounded-circle bg-danger fs-6 d-flex align-items-center justify-content-center shadow-sm" style="width:32px; height:32px;">${g.chance}</span>`;
+
+        // Badge Score IA
+        let scoreHtml = `<span class="badge bg-light text-muted border"><i class="bi bi-activity me-1"></i>Score: ${g.scoreFitness.toFixed(1)}</span>`;
+        if (g.scoreFitness > 90) {
+            scoreHtml = `<span class="badge bg-success bg-opacity-10 text-success border border-success"><i class="bi bi-lightning-fill me-1"></i>Top IA: ${g.scoreFitness.toFixed(1)}</span>`;
+        }
+
+        html += `
+            <div class="col-md-6 col-lg-4 animate-up" style="animation-delay: ${index * 0.05}s">
+                <div class="card h-100 ${cardClass} position-relative cursor-pointer grid-card" 
+                     id="grid-card-${index}"
+                     onclick="toggleGridSelection(${index}, this)">
+                    
+                    <div class="position-absolute top-0 end-0 p-2">
+                        <input type="checkbox" class="form-check-input fs-5 pointer-events-none" id="check-${index}">
                     </div>
-                    <div class="d-flex justify-content-between align-items-center mt-2 border-top pt-2">
-                        <span class="badge bg-light text-dark border">
-                            <i class="fas fa-shield-alt text-warning me-1"></i>Garantie 3/5
-                        </span>
-                        <span class="badge badge-score text-white">Score IA: ${grid.scoreFitness}</span>
+
+                    <div class="card-body p-3 text-center">
+                        <div class="mb-2 text-muted small text-uppercase fw-bold">Grille #${index + 1}</div>
+                        <div class="d-flex justify-content-center gap-1 mb-3">
+                            ${boulesHtml} ${chanceHtml}
+                        </div>
+                        <div class="d-flex justify-content-center">
+                            ${scoreHtml}
+                        </div>
                     </div>
                 </div>
             </div>
         `;
-        container.appendChild(col);
     });
+
+    html += '</div>';
+    container.innerHTML = html;
+}
+
+/**
+ * ------------------------------------------------------------------
+ * 4. GESTION DU PANIER (Sélection)
+ * ------------------------------------------------------------------
+ */
+
+// Sélectionner/Désélectionner une grille
+function toggleGridSelection(index, cardElement) {
+    const checkbox = document.getElementById(`check-${index}`);
+    const grilleData = window.currentGridsData[index]; // On récupère les données brutes (boules)
+
+    // On inverse l'état
+    checkbox.checked = !checkbox.checked;
+
+    if (checkbox.checked) {
+        // Ajouter au panier
+        cardElement.classList.add('border-primary', 'bg-light');
+        // Format API attendu : [b1, b2, b3, b4, b5, chance]
+        const grilleArray = [...grilleData.boules, grilleData.chance];
+        window.panierGrilles.push(grilleArray);
+    } else {
+        // Retirer du panier
+        cardElement.classList.remove('border-primary', 'bg-light');
+        const grilleArray = [...grilleData.boules, grilleData.chance];
+
+        // Filtre : on garde tout sauf celle qu'on vient d'enlever
+        // (Comparaison simple via JSON.stringify pour les tableaux)
+        window.panierGrilles = window.panierGrilles.filter(g => JSON.stringify(g) !== JSON.stringify(grilleArray));
+    }
+
+    // Mise à jour de la barre du bas (fonction définie dans index.html)
+    if(typeof updateBulkUI === 'function') {
+        updateBulkUI();
+    }
+}
+
+// Tout sélectionner
+function toggleAllGrids() {
+    const allCards = document.querySelectorAll('.grid-card');
+    let allChecked = true;
+
+    // Vérifier si tout est déjà coché
+    allCards.forEach(card => {
+        const checkbox = card.querySelector('input[type="checkbox"]');
+        if (!checkbox.checked) allChecked = false;
+    });
+
+    // Si tout est coché -> on décoche tout. Sinon -> on coche tout.
+    const targetState = !allChecked;
+
+    allCards.forEach((card, index) => {
+        const checkbox = card.querySelector('input[type="checkbox"]');
+        // On ne déclenche que si l'état change
+        if (checkbox.checked !== targetState) {
+            toggleGridSelection(index, card);
+        }
+    });
+}
+
+// Helper pour l'initialisation depuis le serveur (Thymeleaf)
+function setCurrentGridsData(data) {
+    window.currentGridsData = data;
+}
+
+function afficherResultatsPro(grilles, container) {
+    if (!grilles || grilles.length === 0) {
+        container.innerHTML = '<div class="alert alert-warning">Aucune grille optimisée trouvée. Essayez d\'augmenter le budget.</div>';
+        return;
+    }
+
+    let html = `
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h4 class="text-warning"><i class="fas fa-trophy me-2"></i>Système Validé : ${grilles.length} Grilles</h4>
+            <span class="badge bg-dark">Garantie 3/5 active</span>
+        </div>
+        <div class="row g-3">
+    `;
+
+    grilles.forEach((g, index) => {
+        // Construction des boules
+        const boulesHtml = g.boules.map(b =>
+            `<span class="badge rounded-pill bg-primary fs-6 me-1" style="width:35px; height:35px; display:inline-flex; align-items:center; justify-content:center;">${b}</span>`
+        ).join('');
+
+        const chanceHtml = `<span class="badge rounded-pill bg-danger fs-6" style="width:35px; height:35px; display:inline-flex; align-items:center; justify-content:center;">${g.chance}</span>`;
+
+        html += `
+            <div class="col-md-6 col-lg-4">
+                <div class="card border-warning h-100">
+                    <div class="card-body text-center">
+                        <div class="mb-2 text-muted small">Grille #${index + 1}</div>
+                        <div class="mb-2">${boulesHtml} + ${chanceHtml}</div>
+                        <div class="d-flex justify-content-between border-top pt-2 mt-2">
+                            <small class="text-muted">Score IA</small>
+                            <strong class="text-warning">${g.scoreFitness.toFixed(1)}</strong>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+
+    html += '</div>';
+    container.innerHTML = html;
+}
+
+async function generateGrid() {
+    const countInput = document.getElementById('gridCount');
+    const dateInput = document.getElementById('dateTirage');
+    const resultContainer = document.getElementById('results-area');
+
+    // Validation
+    const count = parseInt(countInput.value) || 1;
+    const date = dateInput.value;
+
+    if (!date) {
+        alert("⚠️ Veuillez sélectionner une date de tirage.");
+        return;
+    }
+
+    // UI Loading
+    resultContainer.innerHTML = `
+        <div class="text-center py-5 fade-in">
+            <div class="spinner-border text-primary" role="status"></div>
+            <h5 class="mt-3 text-muted">Consultation du Conseil des Sages...</h5>
+            <p class="small text-muted">Analyse de 20 experts IA en parallèle</p>
+        </div>
+    `;
+
+    try {
+        // Appel API Standard
+        const response = await fetch(`/api/loto/generate?date=${date}&count=${count}`);
+
+        if (response.status === 429) {
+            throw new Error("⏳ Trop de demandes ! Veuillez patienter.");
+        }
+        if (!response.ok) {
+            throw new Error("Erreur serveur lors de la génération.");
+        }
+
+        const data = await response.json();
+
+        // Stockage global pour le panier
+        window.currentGridsData = data;
+
+        // Affichage
+        renderResults(data, resultContainer, 'STANDARD');
+
+    } catch (error) {
+        console.error(error);
+        resultContainer.innerHTML = `<div class="alert alert-danger"><i class="fas fa-exclamation-triangle me-2"></i>${error.message}</div>`;
+    }
 }
 
 // Enregistrement du Service Worker pour la PWA

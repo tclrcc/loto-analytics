@@ -252,39 +252,51 @@
 
                     <div class="col-md-5">
                         <div class="d-flex gap-2">
-                            <div class="input-group shadow-sm">
-                                <span class="input-group-text bg-warning text-dark border-warning fw-bold">Qté</span>
-                                <select class="form-select border-warning bg-white" id="pronoCount" style="max-width: 80px;">
-                                    <option value="1">1</option>
-                                    <option value="2">2</option>
-                                    <option value="5" selected>5</option>
-                                    <option value="10">10</option>
-                                </select>
-                                <button type="button" id="btnMagic" class="btn btn-warning fw-bold text-dark flex-grow-1 btn-pulse">
-                                    <i class="bi bi-magic me-1"></i> Générer
-                                </button>
-                            </div>
-                            <div class="pro-section mt-4 p-4 border rounded shadow-sm bg-light">
-                                <div class="d-flex align-items-center justify-content-between mb-2">
-                                    <h5 class="text-golden mb-0"><i class="fas fa-crown me-2"></i>Mode Expert (Wheeling System)</h5>
-                                    <span class="badge bg-warning text-dark">Premium Math</span>
-                                </div>
-
-                                <p class="text-muted small mb-3">
-                                    Générez un système réducteur complet garantissant 3 bons numéros si les 5 gagnants sont dans la sélection de l'IA.
-                                </p>
-
-                                <div class="input-group">
-                                    <span class="input-group-text">Budget (Nb Grilles)</span>
-                                    <input type="number" id="budgetPro" class="form-control" value="20" min="10" max="50">
-                                    <button id="btnGeneratePro" class="btn btn-pro text-white fw-bold">
-                                        <i class="fas fa-magic me-2"></i>Lancer le Système
-                                    </button>
-                                </div>
-                                <small class="text-muted">Recommandé : 20 grilles pour une couverture optimale.</small>
+                            <div class="mb-3">
+                                <label for="dateTirage" class="form-label">Date du Tirage</label>
+                                <input type="date" id="dateTirage" class="form-control">
                             </div>
 
-                            <div id="resultatsProContainer" class="row mt-4"></div>
+                            <div class="row g-3">
+
+                                <div class="col-md-6">
+                                    <div class="card h-100 border-0 shadow-sm">
+                                        <div class="card-body">
+                                            <h6 class="card-title text-primary"><i class="fas fa-random me-2"></i>Génération Standard</h6>
+                                            <p class="small text-muted">Générez des grilles diversifiées basées sur le consensus des 20 experts.</p>
+                                            <div class="input-group">
+                                                <input type="number" id="gridCount" class="form-control" value="1" min="1" max="10">
+                                                <button class="btn btn-primary" onclick="generateGrid()">
+                                                    Générer
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="col-md-6">
+                                    <div class="card h-100 border-warning shadow-sm" style="background: linear-gradient(to right bottom, #fffbf0, #fff);">
+                                        <div class="card-body">
+                                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                                <h6 class="card-title text-warning fw-bold mb-0"><i class="fas fa-crown me-2"></i>Mode Expert V4</h6>
+                                                <span class="badge bg-warning text-dark">IA + Wheeling</span>
+                                            </div>
+                                            <p class="small text-muted">Système réducteur garantissant 3 bons numéros si le pool de l'IA est correct.</p>
+
+                                            <div class="input-group">
+                                                <span class="input-group-text bg-white text-muted">Budget</span>
+                                                <input type="number" id="budgetPro" class="form-control" value="20" min="10" max="50">
+                                                <button class="btn btn-warning text-dark fw-bold" id="btnPro" onclick="lancerModePro()">
+                                                    <i class="fas fa-magic me-2"></i>Lancer
+                                                </button>
+                                            </div>
+                                            <div class="form-text text-end text-warning small">Recommandé : 20 grilles</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div id="results-area" class="mt-4"></div>
                             <button type="submit" class="btn btn-dark shadow-sm" title="Analyser la saisie manuelle">
                                 <i class="bi bi-search"></i>
                             </button>

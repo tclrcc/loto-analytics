@@ -11,6 +11,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Sort;
@@ -44,7 +45,9 @@ public class LotoService {
     private final WheelingService wheelingService;
     private final RedisTemplate<String, Object> redisTemplate;
     private final RestTemplate restTemplate;
-    private static final String PYTHON_API_URL = "http://localhost:8000/predict";
+
+    @Value("${loto.ai.url:http://localhost:8000/predict}")
+    private String pythonApiUrl;
 
     // --- VARIABLES DU CACHE MANUEL (Architecture Stateful) ---
     private volatile List<AlgoConfig> cachedEliteConfigs = new ArrayList<>();
@@ -417,7 +420,7 @@ public class LotoService {
         Arrays.fill(weights, 0.0);
 
         try {
-            log.info("📡 [IA V4] Connexion au Neural Engine...");
+            log.info("📡 [IA V4] Connexion au Neural Engine sur : {}", pythonApiUrl);
 
             // 1. Récupérer l'historique (Les 60 derniers tirages suffisent pour le contexte)
             List<LotoTirageRepository.TirageMinimal> rawHistory = repository.findAllOptimized();
@@ -446,7 +449,7 @@ public class LotoService {
 
             // 3. Appel API (Ultra rapide)
             @SuppressWarnings("unchecked")
-            Map<String, Double> response = restTemplate.postForObject(PYTHON_API_URL, requestBody, Map.class);
+            Map<String, Double> response = restTemplate.postForObject(pythonApiUrl, requestBody, Map.class);
 
             // 4. Intégration des poids
             if (response != null && !response.isEmpty()) {
