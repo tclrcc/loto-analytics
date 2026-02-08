@@ -97,6 +97,22 @@ services:
           memory: 512M # Redis est très léger, 512Mo suffit largement
     logging: *logging_config
 
+  # NOUVEAU SERVICE IA
+  loto-ai:
+    build:
+      context: .
+      dockerfile: Dockerfile.python
+    container_name: loto-ai-engine
+    ports:
+      - "8000:8000"
+    volumes:
+      # PERSISTANCE DES MODÈLES :
+      # Ce volume permet de garder les modèles entraînés même si le conteneur redémarre
+      - ./models:/app/models
+      # On monte aussi le CSV d'historique pour l'entraînement manuel
+      - ./loto_history.csv:/app/loto_history.csv
+    restart: unless-stopped
+
   # ----------------------------------------------------
   # 2. APPLICATION SPRING BOOT (Tuning JVM & Healthcheck)
   # ----------------------------------------------------
@@ -105,11 +121,14 @@ services:
     container_name: loto_app
     depends_on:
       - loto_db
-      - redis_cache # Doit attendre que Redis soit prêt
+      - loto-ai
+      - redis_cache
     environment:
       SPRING_JPA_HIBERNATE_DDL_AUTO: update
       TZ: Europe/Paris
       SPRING_PROFILES_ACTIVE: prod
+        # L'app Java pourra contacter l'IA via ce nom d'hôte
+      LOTO_AI_URL: http://loto-ai:8000/predict
       JAVA_OPTS: "-XX:MaxRAMPercentage=60.0 -XX:InitialRAMPercentage=40.0 -XX:+UseG1GC -XX:MaxGCPauseMillis=200 -XX:ParallelGCThreads=6"
 
       # DB CONFIG

@@ -16,6 +16,7 @@ import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestTemplate;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.*;
@@ -42,6 +43,8 @@ public class LotoService {
     private final BitMaskService bitMaskService;
     private final WheelingService wheelingService;
     private final RedisTemplate<String, Object> redisTemplate;
+    private final RestTemplate restTemplate;
+    private static final String PYTHON_API_URL = "http://localhost:8000/predict";
 
     // --- VARIABLES DU CACHE MANUEL (Architecture Stateful) ---
     private volatile List<AlgoConfig> cachedEliteConfigs = new ArrayList<>();
@@ -409,99 +412,65 @@ public class LotoService {
         return true;
     }
 
-    /**
-     * Appelle le module Python (LSTM) pour obtenir des prédictions basées sur l'apprentissage profond.
-     * @return un tableau de 50 doubles (index 1 à 49 remplis) représentant les poids additionnels.
-     */
     public double[] getDeepLearningWeights() {
-        double[] weights = new double[50];
-        Arrays.fill(weights, 0.0); // Poids neutres par défaut
-
-        log.info("🧠 [DEEP LEARNING] Lancement de l'analyse neuronale...");
-        File tempFile = null;
+        double[] weights = new double[50]; // Index 0 vide, 1-49 utilisés
+        Arrays.fill(weights, 0.0);
 
         try {
-            // 1. Export des données depuis la BDD vers un CSV temporaire
-            // On a besoin de l'historique trié par date croissante pour que le LSTM comprenne la suite logique
-            List<LotoTirage> history = repository.findAll(Sort.by(Sort.Direction.ASC, "dateTirage"));
+            log.info("📡 [IA V4] Connexion au Neural Engine...");
 
-            if (history.size() < 20) {
-                log.warn("⚠️ [DEEP LEARNING] Historique insuffisant pour l'entraînement.");
-                return weights;
+            // 1. Récupérer l'historique (Les 60 derniers tirages suffisent pour le contexte)
+            List<LotoTirageRepository.TirageMinimal> rawHistory = repository.findAllOptimized();
+            int limit = Math.min(rawHistory.size(), 60);
+
+            // Convertir en format compatible Python (Liste d'objets JSON)
+            List<Map<String, Object>> historyJson = new ArrayList<>();
+
+            // Attention : findAllOptimized renvoie souvent du plus récent au plus vieux.
+            // Python a besoin de l'ordre CHRONOLOGIQUE (Vieux -> Récent) pour le LSTM.
+            for (int i = limit - 1; i >= 0; i--) {
+                LotoTirageRepository.TirageMinimal t = rawHistory.get(i);
+                Map<String, Object> draw = new HashMap<>();
+                draw.put("date", t.getDateTirage().toString());
+                draw.put("b1", t.getBoule1());
+                draw.put("b2", t.getBoule2());
+                draw.put("b3", t.getBoule3());
+                draw.put("b4", t.getBoule4());
+                draw.put("b5", t.getBoule5());
+                draw.put("chance", t.getNumeroChance());
+                historyJson.add(draw);
             }
 
-            tempFile = File.createTempFile("loto_training_data", ".csv");
-            try (PrintWriter writer = new PrintWriter(tempFile)) {
-                writer.println("boule1,boule2,boule3,boule4,boule5"); // Header CSV
-                for (LotoTirage t : history) {
-                    writer.printf("%d,%d,%d,%d,%d%n",
-                            t.getBoule1(), t.getBoule2(), t.getBoule3(), t.getBoule4(), t.getBoule5());
-                }
-            }
+            // 2. Préparer la requête
+            Map<String, Object> requestBody = Map.of("history", historyJson);
 
-            // 2. Appel du script Python via ProcessBuilder
-            // On passe le chemin du CSV en argument
-            ProcessBuilder pb = new ProcessBuilder("python3", "scripts/loto_hybrid.py", tempFile.getAbsolutePath());
-            pb.redirectErrorStream(true); // Redirige les erreurs Python vers la sortie standard pour debug
-            Process p = pb.start();
+            // 3. Appel API (Ultra rapide)
+            @SuppressWarnings("unchecked")
+            Map<String, Double> response = restTemplate.postForObject(PYTHON_API_URL, requestBody, Map.class);
 
-            // 3. Lecture de la réponse JSON
-            BufferedReader in = new BufferedReader(new InputStreamReader(p.getInputStream()));
-            String jsonOutput = "";
-            String line;
-            while ((line = in.readLine()) != null) {
-                // On filtre les logs potentiels de TensorFlow qui n'auraient pas été supprimés
-                if (line.trim().startsWith("{")) {
-                    jsonOutput = line;
-                } else {
-                    log.debug("[PYTHON LOG] {}", line);
-                }
-            }
-
-            // Timeout de sécurité (30 secondes max pour l'entraînement)
-            boolean finished = p.waitFor(30, java.util.concurrent.TimeUnit.SECONDS);
-            if (!finished) {
-                p.destroy();
-                log.error("❌ [DEEP LEARNING] Timeout du script Python.");
-                return weights;
-            }
-
-            // 4. Parsing manuel du JSON (Format attendu : {"1": 20.0, "14": 20.0, ...})
-            if (!jsonOutput.isEmpty()) {
-                if (!jsonOutput.isBlank()) {
-                    jsonOutput = jsonOutput.replace("{", "").replace("}", "").replace("\"", "");
-                    String[] parts = jsonOutput.split(",");
-                    for (String part : parts) {
-                        String[] kv = part.split(":");
-                        if (kv.length == 2) {
-                            try {
-                                int boule = Integer.parseInt(kv[0].trim());
-                                double proba = Double.parseDouble(kv[1].trim()); // ex: 0.85
-
-                                if (boule >= 1 && boule <= 49) {
-                                    // FORMULE MAGIQUE :
-                                    // On multiplie par un facteur de confiance (ex: 50.0)
-                                    // Une boule avec 90% de proba aura +45 points.
-                                    // Une boule avec 10% de proba aura +5 points.
-                                    weights[boule] = proba * 50.0;
-                                }
-                            } catch (Exception e) { /* ignore */ }
+            // 4. Intégration des poids
+            if (response != null && !response.isEmpty()) {
+                response.forEach((k, v) -> {
+                    try {
+                        if (k.equals("error")) return;
+                        int boule = Integer.parseInt(k);
+                        if (boule >= 1 && boule <= 49) {
+                            weights[boule] = v;
                         }
+                    } catch (NumberFormatException e) {
+                        // Ignorer les clés non numériques
                     }
-                    log.info("✅ [DEEP LEARNING] Poids neuronaux intégrés.");
-                }
+                });
+                log.info("✅ [IA V4] Prédictions reçues avec succès.");
             } else {
-                log.warn("⚠️ [DEEP LEARNING] Aucune prédiction retournée par Python.");
+                log.warn("⚠️ [IA V4] Réponse vide de l'API.");
             }
 
         } catch (Exception e) {
-            log.error("❌ [DEEP LEARNING] Erreur technique : {}", e.getMessage());
-        } finally {
-            // Nettoyage du fichier temporaire
-            if (tempFile != null && tempFile.exists()) {
-                tempFile.delete();
-            }
+            log.error("❌ [IA V4] Le serveur d'inférence ne répond pas : {}", e.getMessage());
+            // Fallback : On continue sans l'IA (poids à 0) pour ne pas bloquer l'app
         }
+
         return weights;
     }
 
