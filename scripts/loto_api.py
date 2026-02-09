@@ -1,102 +1,72 @@
 import os
-import sys
 import numpy as np
-import pandas as pd
 import tensorflow as tf
-import xgboost as xgb
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from typing import List
 
-# Init API
-app = FastAPI(title="Loto Analytics AI V4", version="4.0")
+app = FastAPI(title="Loto AI V7", version="7.0")
+model = None
 
-# --- Modèles Persistants (Singleton) ---
-models = {
-    "lstm": None,
-    "xgb": None
-}
-
-# --- Schémas de Données (DTO) ---
+# --- DTO ---
 class Draw(BaseModel):
     date: str
-    b1: int
-    b2: int
-    b3: int
-    b4: int
-    b5: int
-    chance: int
+    b1: int; b2: int; b3: int; b4: int; b5: int; chance: int
 
 class PredictionRequest(BaseModel):
     history: List[Draw]
 
-# --- Chargement au Démarrage ---
+# --- Feature Engineering (Copie Miroir de train_models.py) ---
+def get_features_for_inference(draw: Draw):
+    # 1. Base
+    boules = [draw.b1, draw.b2, draw.b3, draw.b4, draw.b5]
+    vector = np.zeros(49)
+    for val in boules:
+        if 1 <= val <= 49: vector[val-1] = 1.0
+
+    # 2. Meta-Features
+    s = sum(boules)
+    feat_sum = s / 255.0
+
+    pairs = len([x for x in boules if x % 2 == 0])
+    feat_parity = pairs / 5.0
+
+    finales = sum([x % 10 for x in boules])
+    feat_finales = finales / 45.0
+
+    return np.concatenate([vector, [feat_sum, feat_parity, feat_finales]])
+
 @app.on_event("startup")
-async def load_models():
-    print("🔄 [API] Chargement des modèles en mémoire...")
+async def load_model():
+    global model
     try:
-        # LSTM : Changement d'extension ici (.h5 -> .keras)
-        if os.path.exists("models/lstm_v4.keras"):
-            models["lstm"] = tf.keras.models.load_model("models/lstm_v4.keras")
-            print("✅ LSTM Engine: CHARGÉ")
+        if os.path.exists("models/lstm_v7.keras"):
+            model = tf.keras.models.load_model("models/lstm_v7.keras")
+            print("✅ V7 Engine: READY")
         else:
-            print("⚠️ LSTM Engine: Fichier 'models/lstm_v4.keras' introuvable")
-
-        # XGBoost (Inchangé)
-        if os.path.exists("models/xgb_v4.json"):
-            models["xgb"] = xgb.Booster()
-            models["xgb"].load_model("models/xgb_v4.json")
-            print("✅ XGBoost Engine: CHARGÉ")
-        else:
-            print("⚠️ XGBoost Engine: Fichier introuvable")
-
+            print("⚠️ V7 Engine: Model not found")
     except Exception as e:
-        print(f"🔥 Erreur critique chargement modèles: {str(e)}")
-
-# --- Logique de Prédiction ---
-def prepare_lstm_input(draws: List[Draw]):
-    # On prend les 12 derniers tirages pour la séquence
-    data = [[d.b1, d.b2, d.b3, d.b4, d.b5] for d in draws]
-    last_seq = data[-12:]
-
-    # Si pas assez d'historique
-    if len(last_seq) < 12: return None
-
-    # Encodage Multi-Hot (Même logique que l'entraînement)
-    sequence = []
-    for row in last_seq:
-        vec = np.zeros(49)
-        for val in row:
-            if 1 <= val <= 49: vec[val-1] = 1.0
-        sequence.append(vec)
-
-    return np.array([sequence]) # Shape (1, 12, 49)
+        print(f"🔥 Error: {e}")
 
 @app.post("/predict")
 async def predict(req: PredictionRequest):
-    if not models["lstm"]:
-        raise HTTPException(status_code=503, detail="Modèles non chargés. Train required.")
+    if not model: return {}
 
-    if len(req.history) < 15:
-        return {"error": "Historique insuffisant"}
+    # Préparation Sequence (12 derniers tirages)
+    if len(req.history) < 12: return {"error": "Need 12+ draws"}
 
-    # 1. Inférence LSTM
-    lstm_input = prepare_lstm_input(req.history)
-    if lstm_input is None: return {}
+    recent_history = req.history[-12:] # Les 12 plus récents
 
-    lstm_probs = models["lstm"].predict(lstm_input, verbose=0)[0]
+    # Construction de la matrice (1, 12, 52)
+    sequence = np.array([get_features_for_inference(d) for d in recent_history])
+    input_tensor = np.expand_dims(sequence, axis=0) # Shape (1, 12, 52)
 
-    # 2. Inférence XGBoost (Placeholder pour V4.0)
-    # Dans la V4.1, nous ferons le feature engineering ici
+    # Inférence
+    probs = model.predict(input_tensor, verbose=0)[0] # Shape (49,) car output layer est 49
 
-    # 3. Fusion et Normalisation
-    final_weights = {}
-    for i in range(49):
-        # Score brut (0.0 à 1.0)
-        prob = float(lstm_probs[i])
+    # Mapping
+    result = {}
+    for i, p in enumerate(probs):
+        result[str(i+1)] = float(p) * 100.0 # Scaling pour Java
 
-        # On booste le signal pour que Java le prenne au sérieux
-        # Un score de 0.1 (10%) devient +10.0 dans le système de vote Java
-        final_weights[str(i+1)] = prob * 100.0
-
-    return final_weights
+    return result
