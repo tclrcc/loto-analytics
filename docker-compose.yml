@@ -114,6 +114,8 @@ services:
       # On monte aussi le CSV d'historique pour l'entraînement manuel
       - ./loto_history.csv:/app/loto_history.csv
     restart: unless-stopped
+    networks:
+      - loto-network
 
   # ----------------------------------------------------
   # 2. APPLICATION SPRING BOOT (Tuning JVM & Healthcheck)
@@ -130,7 +132,7 @@ services:
       TZ: Europe/Paris
       SPRING_PROFILES_ACTIVE: prod
         # L'app Java pourra contacter l'IA via ce nom d'hôte
-      LOTO_AI_URL: http://loto-ai:8000/predict
+      LOTO_AI_URL: http://loto-ai-engine:8000/predict
       JAVA_OPTS: "-XX:MaxRAMPercentage=60.0 -XX:InitialRAMPercentage=40.0 -XX:+UseG1GC -XX:MaxGCPauseMillis=200 -XX:ParallelGCThreads=6"
 
       # DB CONFIG
