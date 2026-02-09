@@ -414,6 +414,31 @@ public class LotoService {
                 .limit(budgetMaxGrilles)
                 .collect(Collectors.toList());
 
+        // Si les filtres "Bio-Mimétiques" ont tout tué, on récupère les grilles brutes du Wheeling
+        // car la garantie mathématique est prioritaire sur l'esthétique statistique.
+        if (selectionFinale.isEmpty() && !grillesBrutes.isEmpty()) {
+            log.warn("⚠️ [V6 PRO] Filtres trop stricts ! Activation du Fallback sur les grilles brutes.");
+
+            for (int[] g : grillesBrutes) {
+                // On recalcule juste le score fitness basique
+                double fitness = 0.0;
+                for (int b : g) fitness += scoresFinaux.get(b);
+
+                // On crée le DTO sans passer par le filtre strict
+                selectionFinale.add(new PronosticResultDto(
+                        Arrays.stream(g).boxed().sorted().toList(),
+                        topChances.get(0), // On prend la meilleure chance par défaut
+                        fitness,
+                        0.0, 0.0, false,
+                        "V6_FALLBACK (Garantie Math)" // Marqueur pour l'IHM
+                ));
+            }
+            // On limite au budget
+            if (selectionFinale.size() > budgetMaxGrilles) {
+                selectionFinale = selectionFinale.subList(0, budgetMaxGrilles);
+            }
+        }
+
         // 7. BACKTEST SIMULÉ (Indicateurs visuels)
         selectionFinale.forEach(dto -> {
             SimulationResultDto simu = simulerGrilleDetaillee(dto.getBoules(), dateCible, history);

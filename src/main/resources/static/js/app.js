@@ -59,24 +59,37 @@ function initDarkMode() {
 window.currentGridsData = [];
 window.selectedGrids = new Set();
 
+/**
+ * Affiche les résultats dans la zone HTML dédiée
+ * Version Robuste (Anti-Crash)
+ */
 function displayResults(data) {
     const container = document.getElementById('pronoResult');
     if (!container) return;
 
-    // Mise à jour des données globales pour permettre la sélection
-    window.currentGridsData = data;
-    window.selectedGrids.clear();
-    updateBulkBar(); // Cache la barre si elle était affichée
-
     container.innerHTML = '';
     container.classList.remove('d-none');
 
-    if (!data || data.length === 0) {
-        container.innerHTML = `<div class="alert alert-warning">Aucun résultat.</div>`;
+    // 1. GESTION DES ERREURS API (Si data n'est pas un tableau)
+    if (!Array.isArray(data)) {
+        // Si c'est un objet message (cas de la liste vide gérée par le Controller)
+        if (data && data.message) {
+            container.innerHTML = `<div class="alert alert-warning shadow-sm"><i class="bi bi-exclamation-triangle me-2"></i>${data.message}</div>`;
+        } else {
+            // Cas d'erreur inconnue
+            container.innerHTML = `<div class="alert alert-danger shadow-sm">Réponse serveur inattendue.</div>`;
+            console.error("Format reçu invalide :", data);
+        }
         return;
     }
 
-    // Header avec bouton "Tout sélectionner"
+    // 2. CAS DU TABLEAU VIDE
+    if (data.length === 0) {
+        container.innerHTML = `<div class="alert alert-info shadow-sm">Aucune grille générée.</div>`;
+        return;
+    }
+
+    // 3. AFFICHAGE NORMAL
     let headerHtml = `
         <div class="d-flex justify-content-between align-items-center mb-3 fade-in">
             <h5 class="text-primary mb-0"><i class="bi bi-robot me-2"></i>Résultats (${data.length})</h5>
@@ -96,11 +109,15 @@ function displayResults(data) {
         const chanceVal = prono.numeroChance !== undefined ? prono.numeroChance : prono.chance;
         const chanceHtml = `<span class="badge rounded-circle bg-danger fs-6 d-inline-flex align-items-center justify-content-center shadow-sm" style="width:32px; height:32px;">${chanceVal}</span>`;
 
-        // Badge Score
-        const score = (prono.scoreFitness || 0).toFixed(1);
-        let badgeInfo = `<span class="badge bg-light text-muted border">Score: ${score}</span>`;
-        if (prono.algoSource && prono.algoSource.includes('V7')) {
-            badgeInfo = `<span class="badge bg-success bg-opacity-10 text-success border border-success">V7 PRO (${score})</span>`;
+        // Gestion des badges sources
+        let badgeInfo = `<span class="badge bg-light text-muted border">Score: ${(prono.scoreFitness || 0).toFixed(1)}</span>`;
+
+        if (prono.algoSource) {
+            if (prono.algoSource.includes('V7')) {
+                badgeInfo = `<span class="badge bg-success bg-opacity-10 text-success border border-success ms-2">V7 PRO</span>`;
+            } else if (prono.algoSource.includes('FALLBACK')) {
+                badgeInfo = `<span class="badge bg-warning bg-opacity-10 text-warning border border-warning ms-2" title="Filtres relaxés">GARANTIE MATH</span>`;
+            }
         }
 
         html += `
@@ -116,7 +133,7 @@ function displayResults(data) {
                     <div class="card-body text-center p-3">
                         <div class="mb-2 text-muted small text-uppercase fw-bold">Grille #${index + 1}</div>
                         <div class="mb-3 d-flex justify-content-center gap-1">${boulesHtml} ${chanceHtml}</div>
-                        <div class="d-flex justify-content-center">${badgeInfo}</div>
+                        <div class="d-flex justify-content-center align-items-center gap-2">${badgeInfo}</div>
                     </div>
                 </div>
             </div>
