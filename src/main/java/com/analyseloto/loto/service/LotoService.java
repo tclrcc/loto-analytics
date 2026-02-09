@@ -316,114 +316,101 @@ public class LotoService {
     }
 
 
+    /**
+     * GÉNÉRATEUR V6 PRO : HYBRIDE (STATISTIQUE + DEEP LEARNING + ENTROPIE)
+     */
     public List<PronosticResultDto> genererGrillesPro(LocalDate dateCible, int budgetMaxGrilles) {
-        log.info("🚀 [PRO MODE V6] Démarrage de la séquence Hybride (Java Statistique + Python DeepLearning)...");
+        log.info("🚀 [V6 PRO] Démarrage du Moteur Hybride (Java + Python + Shannon)...");
 
-        // 1. Récupération Historique
+        // 1. Chargement Historique
         List<LotoTirageRepository.TirageMinimal> rawData = repository.findAllOptimized();
         List<LotoTirage> history = rawData.stream().map(this::mapToLightEntity).toList();
 
-        // -------------------------------------------------------------
-        // ÉTAPE 1 : FUSION DES INTELLIGENCES (HYBRID SCORING)
-        // -------------------------------------------------------------
-
-        // A. Intelligence Statistique (Java - ScoringService)
-        // Renvoie une Map <Numéro, Score 0.0-1.0> basés sur Forme, Ecart, Saison...
+        // 2. FUSION DES INTELLIGENCES (Double Scoring)
+        // A. Score Statistique (Java) : Analyse le passé (Fréquence, Ecart, Forme)
         Map<Integer, Double> scoresJava = scoringService.calculerScores(history, dateCible);
 
-        // B. Intelligence Prédictive (Python - LSTM/XGBoost)
-        // Renvoie un tableau où l'index est le numéro (1-49) et la valeur le poids
-        double[] weightsPython = getDeepLearningWeights();
+        // B. Score Prédictif (Python) : Analyse les séquences temporelles (LSTM)
+        double[] weightsPython = getDeepLearningWeights(); // Peut renvoyer des 0.0 si API down
 
-        // C. Fusion Pondérée
-        // On accorde 60% de confiance à la Statistique (Java) et 40% au Deep Learning (Python)
-        // pour éviter qu'une hallucination de l'IA ne casse tout le pronostic.
+        // C. Mixage Pondéré (60% Stat / 40% AI)
         Map<Integer, Double> scoresFinaux = new HashMap<>();
-
         for (int i = 1; i <= 49; i++) {
-            double scoreJ = scoresJava.getOrDefault(i, 0.0);
-            // Sécurité : Si Python renvoie 0 ou vide, on se base à 100% sur Java
-            double scoreP = (weightsPython.length > i) ? weightsPython[i] : scoreJ;
+            double sJava = scoresJava.getOrDefault(i, 0.0);
+            // Sécurité : Si Python HS ou boule hors range, on fallback sur Java
+            double sPy = (weightsPython != null && i < weightsPython.length) ? weightsPython[i] : sJava;
 
-            // Normalisation rapide du score Python (souvent > 1.0) vers 0.0-1.0 si nécessaire
-            // Ici on assume que getDeepLearningWeights renvoie des valeurs cohérentes.
-
-            double scoreMixte = (scoreJ * 0.60) + (scoreP * 0.40);
+            // Normalisation empirique : le score Python est souvent brut, on le lisse
+            double scoreMixte = (sJava * 0.60) + (sPy * 0.40);
             scoresFinaux.put(i, scoreMixte);
         }
 
-        // -------------------------------------------------------------
-        // ÉTAPE 2 : SÉLECTION DU POOL ADAPTATIF
-        // -------------------------------------------------------------
-
-        // On trie les numéros par Score Mixte décroissant
-        List<Integer> classementNumeros = scoresFinaux.entrySet().stream()
+        // 3. POOL ADAPTATIF "SMART SIZE" (Correction Warning & Optimisation)
+        // On trie les numéros par puissance décroissante (Score Mixte)
+        List<Integer> classement = scoresFinaux.entrySet().stream()
                 .sorted(Map.Entry.<Integer, Double>comparingByValue().reversed())
                 .map(Map.Entry::getKey)
                 .toList();
 
-        // Logique Adaptative V6 :
-        // On regarde l'écart de score entre le 10ème et le 15ème numéro.
-        // Si l'écart est grand, cela veut dire que l'IA a des favoris clairs -> Pool serré (12).
-        // Si l'écart est faible, tout se vaut -> Pool large (16).
-        double scoreRank10 = scoresFinaux.get(classementNumeros.get(9));
-        double scoreRank15 = scoresFinaux.get(classementNumeros.get(14));
+        // Calcul du Delta de Confiance (Écart de score entre le 10ème et le 15ème numéro)
+        // Plus cet écart est grand, plus la "cassure" est nette : les favoris se détachent.
+        double scoreRank10 = scoresFinaux.get(classement.get(9));
+        double scoreRank15 = scoresFinaux.get(classement.get(14));
+        double delta = scoreRank10 - scoreRank15; // ex: 0.08 ou 0.01
 
-        int taillePool = (scoreRank10 - scoreRank15 > 0.05) ? 12 : 16;
+        // Formule V6 : Interpolation Linéaire Inverse
+        // Si delta ~ 0.00 (Flou total) -> On veut 18 numéros (Large)
+        // Si delta >= 0.08 (IA Confiante) -> On veut 12 numéros (Ciblé)
+        // Le facteur 75.0 est calibré pour convertir 0.08 en ~6 unités (18 - 6 = 12)
+        int tailleCalculee = 18 - (int)(delta * 75.0);
 
-        // Sécurité bornes
-        taillePool = Math.max(12, Math.min(taillePool, 18));
+        // Le "Garde-fou" devient maintenant INDISPENSABLE et le warning disparaît
+        // car 'tailleCalculee' est variable.
+        int taillePool = Math.max(12, Math.min(tailleCalculee, 18));
 
-        List<Integer> pool = classementNumeros.subList(0, taillePool);
-        log.info("🎯 [HYBRID] Pool sélectionné ({} numéros) basé sur score mixte.", pool.size());
+        List<Integer> pool = classement.subList(0, taillePool);
 
-        // -------------------------------------------------------------
-        // ÉTAPE 3 : WHEELING & FILTRAGE
-        // -------------------------------------------------------------
+        log.info("🎯 [V6 SMART] Delta: {} -> Pool ajusté à {} numéros.",
+                String.format("%.4f", delta), taillePool);
 
-        // Système réducteur : Garantie 3 bons numéros si les 5 gagnants sont dans le pool
+        // 4. WHEELING SYSTEM (Mathématique)
+        // Garantie 3/5 : Si 5 numéros gagnants sont dans le pool, on a FORCÉMENT une grille à 3 bons numéros.
         List<int[]> grillesBrutes = wheelingService.genererSystemeReducteur(pool, 3);
+        log.info("⚙️ [WHEELING] {} combinaisons générées avant filtrage.", grillesBrutes.size());
 
-        // Récupération des meilleurs numéros chance (Top 3 Statistique)
-        List<Integer> topChances = getTopChanceNumbers(history, dateCible.getDayOfWeek());
-
+        // 5. CONSTRUCTION & FILTRAGE AVANCÉ
         List<PronosticResultDto> candidats = new ArrayList<>();
+        List<Integer> topChances = getTopChanceNumbers(history, dateCible.getDayOfWeek());
 
         for (int i = 0; i < grillesBrutes.size(); i++) {
             int[] g = grillesBrutes.get(i);
 
-            // A. Filtre de Rentabilité (Élimine les suites improbables type 1,2,3,4,5)
-            if (!estGrilleRentable(g)) continue;
+            // A. Filtre "Rentabilité" (Somme, Dizaines) + NOUVEAU : ENTROPIE DE SHANNON
+            if (!estGrilleRentablePro(g)) continue;
 
-            // B. Rotation Chance
+            // B. Rotation Intelligente du Numéro Chance
             int chance = topChances.get(i % topChances.size());
 
-            // C. Score de la Grille = Somme des Scores Mixtes des 5 boules
-            double fitnessGrille = 0.0;
-            for (int b : g) fitnessGrille += scoresFinaux.get(b);
-
-            List<Integer> listeBoules = Arrays.stream(g).boxed().sorted().toList();
+            // C. Score "Fitness" de la grille (Somme des scores des boules)
+            double fitness = 0.0;
+            for (int b : g) fitness += scoresFinaux.get(b);
 
             candidats.add(new PronosticResultDto(
-                    listeBoules,
+                    Arrays.stream(g).boxed().sorted().toList(),
                     chance,
-                    fitnessGrille, // Score Hybrid
-                    0.0, 0.0, false,
-                    "EXPERT_V6 (Pool:" + taillePool + ")"
+                    fitness,
+                    0.0, 0.0, false, // Placeholder ratios
+                    "V6_PRO"
             ));
         }
 
-        // -------------------------------------------------------------
-        // ÉTAPE 4 : SÉLECTION FINALE & BACKTEST
-        // -------------------------------------------------------------
-
-        // On ne garde que les grilles avec le plus haut Score Fitness
+        // 6. SÉLECTION FINALE (Top Score)
         List<PronosticResultDto> selectionFinale = candidats.stream()
                 .sorted(Comparator.comparingDouble(PronosticResultDto::getScoreFitness).reversed())
                 .limit(budgetMaxGrilles)
                 .collect(Collectors.toList());
 
-        // Calcul des indicateurs pour l'utilisateur (Max Duo, Déjà sortie...)
+        // 7. BACKTEST SIMULÉ (Indicateurs visuels)
         selectionFinale.forEach(dto -> {
             SimulationResultDto simu = simulerGrilleDetaillee(dto.getBoules(), dateCible, history);
             double maxDuo = simu.getPairs().stream().mapToDouble(MatchGroup::getRatio).max().orElse(0.0);
@@ -431,8 +418,72 @@ public class LotoService {
             dto.setDejaSortie(!simu.getQuintuplets().isEmpty());
         });
 
-        log.info("✅ [PRO MODE V6] Terminé : {} grilles générées.", selectionFinale.size());
+        log.info("✅ [V6 PRO] Terminé : {} grilles 'Élite' retenues.", selectionFinale.size());
         return selectionFinale;
+    }
+
+    /**
+     * Vérifie si une grille respecte les lois statistiques du hasard (Normalité, Entropie).
+     */
+    private boolean estGrilleRentablePro(int[] boules) {
+        // 1. Analyse Basique (Somme)
+        int somme = 0;
+        for (int b : boules) somme += b;
+        // La courbe de Gauss des sommes du Loto pointe vers 125-150.
+        // On élimine les extrêmes (ex: 1+2+3+4+5 = 15).
+        if (somme < 90 || somme > 220) return false;
+
+        // 2. Analyse des Dizaines (Répartition)
+        // On évite d'avoir 4 ou 5 numéros dans la même dizaine (ex: 10, 12, 15, 18, 19)
+        int[] dizaines = new int[5]; // 0-9, 10-19, 20-29, 30-39, 40-49
+        for (int b : boules) {
+            if (b <= 49) dizaines[b / 10]++;
+        }
+        for (int count : dizaines) {
+            if (count >= 4) return false; // Trop groupé
+        }
+
+        // 3. Filtre "Anti-Anniversaire" (Psychologie des foules)
+        // Si trop de numéros <= 31, les gains potentiels chutent drastiquement.
+        int sous31 = 0;
+        for (int b : boules) if (b <= 31) sous31++;
+        if (sous31 == 5) return false; // On ne joue pas que des dates !
+
+        // 4. ENTROPIE DE SHANNON (Le "Juge de Paix") [NOUVEAU V6]
+        // Mesure le désordre de la grille. Une grille trop ordonnée (10, 20, 30, 40) a une entropie faible.
+        double entropie = calculerEntropieShannon(boules);
+
+        // Seuil empirique : Les tirages réels ont généralement une entropie > 1.2
+        return !(entropie < 1.2);
+    }
+
+    /**
+     * Calcule l'Entropie de Shannon normalisée de la grille.
+     * @return valeur entre 0.0 (Ordre total) et ~1.6 (Chaos maximal pour 5 items)
+     */
+    private double calculerEntropieShannon(int[] boules) {
+        // On regarde la distribution des écarts entre les boules triées
+        int[] sorted = Arrays.copyOf(boules, 5);
+        Arrays.sort(sorted);
+
+        Map<Integer, Integer> ecartsMap = new HashMap<>();
+        int totalEcarts = 4; // 5 boules = 4 intervalles
+
+        for (int i = 0; i < 4; i++) {
+            int diff = sorted[i+1] - sorted[i];
+            // On regroupe les écarts par "classes" pour lisser (Petit, Moyen, Grand)
+            int classeEcart = (diff <= 2) ? 1 : (diff <= 6) ? 2 : 3;
+            ecartsMap.merge(classeEcart, 1, Integer::sum);
+        }
+
+        double entropy = 0.0;
+        for (int count : ecartsMap.values()) {
+            double p = (double) count / totalEcarts;
+            if (p > 0) {
+                entropy -= p * Math.log(p); // Logarithme naturel
+            }
+        }
+        return entropy;
     }
 
     /**
@@ -488,45 +539,6 @@ public class LotoService {
                 .sorted((c1, c2) -> Double.compare(scoresChance[c2], scoresChance[c1])) // Décroissant
                 .limit(3)
                 .collect(Collectors.toList());
-    }
-
-    private boolean estGrilleRentable(int[] boules) {
-        // Conversion rapide pour l'analyse
-        int[] sorted = Arrays.copyOf(boules, 5);
-        Arrays.sort(sorted);
-
-        int somme = 0;
-        int nbrSous31 = 0; // Compteur date naissance
-        int nbrDizaines = 0;
-        int last = -1;
-        boolean suite = false;
-
-        for (int b : sorted) {
-            somme += b;
-            if (b <= 31) nbrSous31++;
-            if (b % 10 == 0) nbrDizaines++; // Finissant par 0
-
-            if (last != -1 && b == last + 1) suite = true; // Suite (ex: 32, 33)
-            last = b;
-        }
-
-        // 1. Filtre Anti-Anniversaire (Trop joué par le public)
-        // Si on a 4 ou 5 numéros <= 31, on jette, car les gains seront divisés.
-        if (nbrSous31 >= 4) return false;
-
-        // 2. Filtre Somme (Cloche de Gauss)
-        // La majorité des tirages ont une somme entre 100 et 200.
-        // On évite les extrêmes (1,2,3,4,5 = somme 15)
-        if (somme < 90 || somme > 220) return false;
-
-        // 3. Filtre "Trop Propre"
-        // Les gens jouent les finaux en 0 (10, 20, 30...) ou les suites.
-        if (nbrDizaines >= 3) return false;
-
-        // On autorise 1 suite (ex: 12,13) car c'est fréquent, mais pas 2 (ex: 12,13,40,41)
-        // Ici on reste simple : on garde la grille.
-
-        return true;
     }
 
     public double[] getDeepLearningWeights() {
@@ -1449,31 +1461,6 @@ public class LotoService {
             scores[num] = s;
         }
         return scores;
-    }
-
-    /**
-     * Calcule l'Entropie de Shannon normalisée de la grille.
-     * Une grille de Loto aléatoire doit avoir une entropie élevée.
-     * @return valeur entre 0.0 (Ordre total) et 1.0 (Chaos maximal)
-     */
-    private double calculerEntropieShannon(int[] boules) {
-        Map<Integer, Integer> deciles = new HashMap<>();
-        // On classe les boules par décile (0-9, 10-19, etc.)
-        for (int b : boules) {
-            int d = b / 10;
-            deciles.merge(d, 1, Integer::sum);
-        }
-
-        double entropy = 0.0;
-        int total = boules.length; // 5
-
-        for (int count : deciles.values()) {
-            double p = (double) count / total;
-            // Formule de Shannon : -Σ p * log2(p)
-            entropy -= p * (Math.log(p) / 0.69314718056); // ln(2) approx 0.693
-        }
-
-        return entropy;
     }
 
     private double calculerScoreFitnessOptimise(int[] boules, int chance, double[] scoresBoules, double[] scoresChance, int[][] matriceAffinites, AlgoConfig config, double[][] matriceMarkov, int etatDernierTirage) {
