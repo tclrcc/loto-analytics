@@ -122,9 +122,11 @@
         <div class="card-header bg-white py-3 border-bottom-0 d-flex align-items-center justify-content-between">
             <div>
                 <div class="d-flex align-items-center">
-                    <lottie-player id="ai-robot-lottie" src="https://assets2.lottiefiles.com/packages/lf20_t2xgmchu.json"
-                                   background="transparent" speed="1" style="width: 40px; height: 40px; margin-right: 10px;" loop autoplay>
-                    </lottie-player>
+                    <div id="loader" class="d-flex justify-content-center align-items-center" style="height: 200px;">
+                        <div class="spinner-grow text-primary" style="width: 3rem; height: 3rem;" role="status">
+                            <span class="visually-hidden">Chargement...</span>
+                        </div>
+                    </div>
                     <h5 class="mb-0 fw-bold text-primary">Pronostics de l'IA</h5>
                 </div>
                 <small class="text-muted fw-normal" style="font-size: 0.75rem;">

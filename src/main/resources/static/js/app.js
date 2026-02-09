@@ -733,63 +733,36 @@ document.addEventListener('DOMContentLoaded', () => {
         }, 250);
     }
 });
+
 async function lancerModePro() {
-    const dateInput = document.getElementById('dateTirage');
-    const budgetInput = document.getElementById('budgetPro');
-    const resultContainer = document.getElementById('results-area');
-    const btn = document.getElementById('btnPro');
+    const outputDiv = document.getElementById('pronoResult');
+    const budgetEl = document.getElementById('budgetPro'); // Nouvel ID V5
 
-    // Validation
-    const date = dateInput.value;
-    const budget = parseInt(budgetInput.value) || 20;
-
-    if (!date) {
-        alert("⚠️ Veuillez sélectionner une date de tirage.");
+    if (!budgetEl) {
+        console.error("❌ Erreur Dev : L'input #budgetPro est introuvable.");
         return;
     }
-    if (budget < 10) {
-        if(!confirm("⚠️ Le système réducteur est optimal avec au moins 10 grilles. Continuer avec " + budget + " ?")) return;
-    }
 
-    // UI Loading (Effet Gold)
-    const originalText = btn.innerHTML;
-    btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> IA V4...';
-    btn.disabled = true;
+    const budget = parseInt(budgetEl.value) || 20;
 
-    resultContainer.innerHTML = `
-        <div class="text-center py-5 fade-in">
-            <div class="spinner-border text-warning" role="status" style="width: 3rem; height: 3rem;"></div>
-            <h5 class="mt-3 text-warning fw-bold">Le Neural Engine V4 calcule les probabilités...</h5>
-            <p class="text-muted">Analyse des cycles • Pattern Recognition (LSTM) • Wheeling System</p>
+    outputDiv.innerHTML = `
+        <div class="text-center py-5">
+            <div class="spinner-border text-warning" role="status"></div>
+            <p class="mt-2 text-dark fw-bold">Analyse Hybride (Statistique + Deep Learning V7)...</p>
         </div>
     `;
+    outputDiv.classList.remove('d-none');
 
-    try {
-        // Appel API Pro
-        const response = await fetch(`/api/loto/pro-generate?date=${date}&budget=${budget}`);
-
-        if (response.status === 429) {
-            throw new Error("⏳ Le processeur IA surchauffe ! Attendez une minute.");
-        }
-        if (!response.ok) {
-            throw new Error("Erreur lors du calcul expert.");
-        }
-
-        const data = await response.json();
-
-        // Stockage global
-        window.currentGridsData = data;
-
-        // Affichage
-        renderResults(data, resultContainer, 'EXPERT');
-
-    } catch (error) {
-        console.error(error);
-        resultContainer.innerHTML = `<div class="alert alert-danger"><i class="fas fa-exclamation-triangle me-2"></i>${error.message}</div>`;
-    } finally {
-        btn.innerHTML = originalText;
-        btn.disabled = false;
-    }
+    // Appel API Expert
+    fetch(`/api/loto/predict-pro?budget=${budget}`)
+        .then(res => res.json())
+        .then(data => {
+            displayResults(data);
+        })
+        .catch(err => {
+            console.error("Erreur Pro:", err);
+            outputDiv.innerHTML = `<div class="alert alert-danger">Le moteur IA est indisponible.</div>`;
+        });
 }
 
 /**
@@ -981,52 +954,41 @@ function afficherResultatsPro(grilles, container) {
     container.innerHTML = html;
 }
 
-async function generateGrid() {
-    const countInput = document.getElementById('gridCount');
-    const dateInput = document.getElementById('dateTirage');
-    const resultContainer = document.getElementById('results-area');
+function generateGrid() {
+    const outputDiv = document.getElementById('pronoResult');
+    const inputEl = document.getElementById('gridCount'); // Nouvel ID V5
 
-    // Validation
-    const count = parseInt(countInput.value) || 1;
-    const date = dateInput.value;
-
-    if (!date) {
-        alert("⚠️ Veuillez sélectionner une date de tirage.");
+    // Sécurité : Vérification que l'élément existe
+    if (!inputEl) {
+        console.error("❌ Erreur Dev : L'input #gridCount est introuvable dans le DOM.");
+        alert("Erreur interne : Champ de quantité introuvable.");
         return;
     }
 
-    // UI Loading
-    resultContainer.innerHTML = `
-        <div class="text-center py-5 fade-in">
+    const count = parseInt(inputEl.value) || 1; // Fallback à 1 si vide
+
+    // Feedback UI (Spinner de chargement)
+    outputDiv.innerHTML = `
+        <div class="text-center py-5">
             <div class="spinner-border text-primary" role="status"></div>
-            <h5 class="mt-3 text-muted">Consultation du Conseil des Sages...</h5>
-            <p class="small text-muted">Analyse de 20 experts IA en parallèle</p>
+            <p class="mt-2 text-muted">L'IA analyse les fréquences...</p>
         </div>
     `;
+    outputDiv.classList.remove('d-none');
 
-    try {
-        // Appel API Standard
-        const response = await fetch(`/api/loto/generate?date=${date}&count=${count}`);
-
-        if (response.status === 429) {
-            throw new Error("⏳ Trop de demandes ! Veuillez patienter.");
-        }
-        if (!response.ok) {
-            throw new Error("Erreur serveur lors de la génération.");
-        }
-
-        const data = await response.json();
-
-        // Stockage global pour le panier
-        window.currentGridsData = data;
-
-        // Affichage
-        renderResults(data, resultContainer, 'STANDARD');
-
-    } catch (error) {
-        console.error(error);
-        resultContainer.innerHTML = `<div class="alert alert-danger"><i class="fas fa-exclamation-triangle me-2"></i>${error.message}</div>`;
-    }
+    // Appel API (AJAX)
+    fetch(`/api/loto/generate?count=${count}`)
+        .then(response => {
+            if (!response.ok) throw new Error("Erreur réseau");
+            return response.json();
+        })
+        .then(data => {
+            displayResults(data); // Ta fonction d'affichage existante
+        })
+        .catch(error => {
+            console.error('Erreur:', error);
+            outputDiv.innerHTML = `<div class="alert alert-danger">Erreur lors de la génération.</div>`;
+        });
 }
 
 // Enregistrement du Service Worker pour la PWA

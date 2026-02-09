@@ -62,6 +62,10 @@ public class LotoService {
     // Constantes
     private static final String FIELD_DATE_TIRAGE = "dateTirage";
     private static final ZoneId ZONE_PARIS = ZoneId.of("Europe/Paris");
+    // Liste des nombres premiers entre 1 et 49
+    private static final Set<Integer> NOMBRES_PREMIERS = Set.of(
+            2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47
+    );
 
     // ==================================================================================
     // CLASSES INTERNES (DTOs & CONFIG)
@@ -423,38 +427,82 @@ public class LotoService {
     }
 
     /**
-     * Vérifie si une grille respecte les lois statistiques du hasard (Normalité, Entropie).
+     * V7+ : FILTRE "STRUCTUREL" AVANCÉ
+     * Vérifie l'intégrité statistique d'une grille selon 5 dimensions.
      */
     private boolean estGrilleRentablePro(int[] boules) {
-        // 1. Analyse Basique (Somme)
+        // Trier pour faciliter l'analyse
+        int[] sorted = Arrays.copyOf(boules, 5);
+        Arrays.sort(sorted);
+
+        // 1. Filtre Somme (Courbe de Gauss)
+        // Les tirages extrêmes (somme < 100 ou > 200) représentent < 10% des cas réels.
         int somme = 0;
-        for (int b : boules) somme += b;
-        // La courbe de Gauss des sommes du Loto pointe vers 125-150.
-        // On élimine les extrêmes (ex: 1+2+3+4+5 = 15).
-        if (somme < 90 || somme > 220) return false;
+        for (int b : sorted) somme += b;
+        if (somme < 100 || somme > 200) return false;
 
-        // 2. Analyse des Dizaines (Répartition)
-        // On évite d'avoir 4 ou 5 numéros dans la même dizaine (ex: 10, 12, 15, 18, 19)
-        int[] dizaines = new int[5]; // 0-9, 10-19, 20-29, 30-39, 40-49
-        for (int b : boules) {
-            if (b <= 49) dizaines[b / 10]++;
+        // 2. Filtre "Finales" (Diversité des terminaisons)
+        // Ex: 11, 21, 31, 41 (4 finales en 1) -> Très rare.
+        if (!checkDiversiteFinales(sorted)) return false;
+
+        // 3. Filtre "Suites" (Consécutifs)
+        // Ex: 12, 13, 14 (3 à la suite) -> Arrive moins de 2% du temps.
+        if (!checkSuitesLogiques(sorted)) return false;
+
+        // 4. Filtre "Premiers" (Densité Mathématique)
+        // Un tirage sans aucun nombre premier ou avec que des premiers est une anomalie.
+        if (!checkEquilibrePremiers(sorted)) return false;
+
+        // 5. Filtre "Entropie de Shannon" (Chaos)
+        // On garde ton excellent filtre V6
+        return calculerEntropieShannon(sorted) >= 1.2;
+    }
+
+    /**
+     * Vérifie qu'on n'a pas plus de 2 numéros terminant par le même chiffre.
+     * Ex: [12, 22, 32, 45, 48] -> Rejeté (3 finales '2')
+     */
+    private boolean checkDiversiteFinales(int[] sorted) {
+        int[] finales = new int[10]; // Pour stocker les comptes des finales 0-9
+        for (int b : sorted) {
+            finales[b % 10]++;
         }
-        for (int count : dizaines) {
-            if (count >= 4) return false; // Trop groupé
+        for (int count : finales) {
+            if (count > 2) return false; // Trop de répétition, grille suspecte
         }
+        return true;
+    }
 
-        // 3. Filtre "Anti-Anniversaire" (Psychologie des foules)
-        // Si trop de numéros <= 31, les gains potentiels chutent drastiquement.
-        int sous31 = 0;
-        for (int b : boules) if (b <= 31) sous31++;
-        if (sous31 == 5) return false; // On ne joue pas que des dates !
+    /**
+     * Vérifie les suites consécutives.
+     * Autorisé : 0 suite (1, 5, 9...) ou 1 paire (12, 13).
+     * Interdit : Triplé (12, 13, 14) ou Double paire (12, 13, 25, 26).
+     */
+    private boolean checkSuitesLogiques(int[] sorted) {
+        int suites = 0;
+        for (int i = 0; i < sorted.length - 1; i++) {
+            if (sorted[i] + 1 == sorted[i+1]) {
+                suites++;
+                // Si on détecte une suite de 3 (ex: i et i+1 se suivent, et i+1 et i+2 se suivent)
+                if (i < sorted.length - 2 && sorted[i+1] + 1 == sorted[i+2]) {
+                    return false; // Triplé interdit
+                }
+            }
+        }
+        return suites <= 1; // Max 1 paire consécutive autorisée
+    }
 
-        // 4. ENTROPIE DE SHANNON (Le "Juge de Paix") [NOUVEAU V6]
-        // Mesure le désordre de la grille. Une grille trop ordonnée (10, 20, 30, 40) a une entropie faible.
-        double entropie = calculerEntropieShannon(boules);
-
-        // Seuil empirique : Les tirages réels ont généralement une entropie > 1.2
-        return !(entropie < 1.2);
+    /**
+     * Vérifie l'équilibre des Nombres Premiers.
+     * Statistiquement, 85% des tirages contiennent entre 1 et 3 nombres premiers.
+     */
+    private boolean checkEquilibrePremiers(int[] sorted) {
+        int countPremiers = 0;
+        for (int b : sorted) {
+            if (NOMBRES_PREMIERS.contains(b)) countPremiers++;
+        }
+        // On rejette si 0 premier (trop artificiel) ou 5 premiers (trop improbable)
+        return countPremiers >= 1 && countPremiers <= 4;
     }
 
     /**

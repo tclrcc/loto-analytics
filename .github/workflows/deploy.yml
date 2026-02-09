@@ -74,6 +74,9 @@ jobs:
             git fetch origin main
             git reset --hard origin/main
             
+            echo "🔧 Correction des permissions..."
+            chmod +x refresh_ai_data.sh
+            
             echo "🐳 2. Pull de la nouvelle image..."
             docker compose pull loto_app
             
