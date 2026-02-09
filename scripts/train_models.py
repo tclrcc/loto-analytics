@@ -3,11 +3,11 @@ import numpy as np
 import os
 import tensorflow as tf
 from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import LSTM, Dense, BatchNormalization, Dropout, Input
-import xgboost as xgb
+from tensorflow.keras.layers import LSTM, Dense, BatchNormalization, Dropout, Input, Bidirectional
+from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau
 
-# Configuration
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+# Configuration V6
+SEQ_LENGTH = 12  # On regarde 12 tirages en arrière
 MODEL_DIR = "models"
 os.makedirs(MODEL_DIR, exist_ok=True)
 
@@ -17,54 +17,66 @@ def get_multi_hot_encoded(row):
         if 1 <= val <= 49: vector[val-1] = 1.0
     return vector
 
-def train_lstm(df):
-    print("🧠 Entraînement LSTM (Syntaxe V2)...")
-    data = df[['boule1', 'boule2', 'boule3', 'boule4', 'boule5']].values
+def train_lstm_advanced(df):
+    print("🧠 Entraînement LSTM Bidirectionnel V6...")
 
-    sequence_length = 12
+    # 1. Préparation des données
+    data = df[['boule1', 'boule2', 'boule3', 'boule4', 'boule5']].values
+    # Inversion : TensorFlow aime chronologique (Vieux -> Récent), CSV est souvent inverse
+    # Assure-toi que ton CSV est trié par date croissante avant !
+
     vectors = np.array([get_multi_hot_encoded(row) for row in data])
 
     X, y = [], []
-    for i in range(len(vectors) - sequence_length):
-        X.append(vectors[i:i+sequence_length])
-        y.append(vectors[i+sequence_length])
+    for i in range(len(vectors) - SEQ_LENGTH):
+        X.append(vectors[i:i+SEQ_LENGTH])
+        y.append(vectors[i+SEQ_LENGTH])
 
     X = np.array(X)
     y = np.array(y)
 
-    # CORRECTION CLEAN CODE : Utilisation de Input() et format .keras
+    # 2. Architecture V6 "Deep Trend"
     model = Sequential([
-        Input(shape=(sequence_length, 49)), # Nouvelle syntaxe explicite
-        LSTM(128, return_sequences=True),   # Plus besoin de input_shape ici
+        Input(shape=(SEQ_LENGTH, 49)),
+
+        # Bidirectionnel : Comprend le contexte passé ET futur (sur séquence d'entraînement)
+        Bidirectional(LSTM(128, return_sequences=True)),
         BatchNormalization(),
-        Dropout(0.3),
+        Dropout(0.4), # Forte régularisation
+
         LSTM(64),
         Dropout(0.3),
+
+        Dense(64, activation='relu'),
+
+        # Sortie : Probabilité pour chaque boule (Sigmoid car multi-label indépendant)
         Dense(49, activation='sigmoid')
     ])
 
-    model.compile(optimizer='adam', loss='binary_crossentropy')
-    model.fit(X, y, epochs=50, batch_size=32, verbose=1)
+    model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=0.001),
+                 loss='binary_crossentropy',
+                 metrics=['accuracy'])
 
-    # Sauvegarde au nouveau format natif Keras (plus rapide et sécurisé)
-    model.save(f"{MODEL_DIR}/lstm_v4.keras")
-    print("✅ Modèle LSTM sauvegardé (models/lstm_v4.keras)")
+    # 3. Callbacks intelligents
+    callbacks = [
+        EarlyStopping(patience=10, restore_best_weights=True, monitor='loss'),
+        ReduceLROnPlateau(factor=0.5, patience=5)
+    ]
 
-def train_xgboost(df):
-    print("🌲 Initialisation XGBoost...")
-    model = xgb.XGBClassifier()
-    # Dummy train pour initialiser la structure
-    X = np.random.rand(10, 5)
-    y = np.random.randint(0, 2, 10)
-    model.fit(X, y)
-    model.save_model(f"{MODEL_DIR}/xgb_v4.json")
-    print("✅ Modèle XGBoost initialisé.")
+    model.fit(X, y, epochs=100, batch_size=32, verbose=1, callbacks=callbacks)
+
+    model.save(f"{MODEL_DIR}/lstm_v6.keras")
+    print("✅ Modèle V6 sauvegardé.")
 
 if __name__ == "__main__":
-    csv_path = "loto_history.csv"
-    if os.path.exists(csv_path):
-        df = pd.read_csv(csv_path)
-        train_lstm(df)
-        train_xgboost(df)
+    # Assurez-vous que loto_history.csv existe et est à jour
+    if os.path.exists("loto_history.csv"):
+        df = pd.read_csv("loto_history.csv")
+        # Tri par date indispensable pour LSTM
+        if 'date_tirage' in df.columns:
+            df['date_tirage'] = pd.to_datetime(df['date_tirage'])
+            df = df.sort_values('date_tirage')
+
+        train_lstm_advanced(df)
     else:
-        print(f"❌ Erreur: Fichier {csv_path} manquant.")
+        print("❌ CSV manquant.")

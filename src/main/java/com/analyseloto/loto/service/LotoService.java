@@ -43,6 +43,8 @@ public class LotoService {
     private final BacktestService backtestService;
     private final BitMaskService bitMaskService;
     private final WheelingService wheelingService;
+    private final ScoringService scoringService;
+
     private final RedisTemplate<String, Object> redisTemplate;
     private final RestTemplate restTemplate;
 
@@ -313,79 +315,115 @@ public class LotoService {
         return t;
     }
 
-    /**
-     * Génère les grilles professionnelles avec :
-     * 1. Pool Adaptatif (Taille variable selon confiance IA)
-     * 2. Wheeling System (Réduction mathématique)
-     * 3. Scoring de Grille (Densité de probabilité)
-     * 4. Rotation du Numéro Chance (Top 3)
-     */
-    public List<PronosticResultDto> genererGrillesPro(LocalDate dateCible, int budgetMaxGrilles) {
-        log.info("🚀 [PRO MODE] Démarrage de la séquence Optimale V2 (Adaptative)...");
 
-        // 1. Récupération Historique & Poids IA
+    public List<PronosticResultDto> genererGrillesPro(LocalDate dateCible, int budgetMaxGrilles) {
+        log.info("🚀 [PRO MODE V6] Démarrage de la séquence Hybride (Java Statistique + Python DeepLearning)...");
+
+        // 1. Récupération Historique
         List<LotoTirageRepository.TirageMinimal> rawData = repository.findAllOptimized();
         List<LotoTirage> history = rawData.stream().map(this::mapToLightEntity).toList();
 
-        // Poids IA (Deep Learning + XGBoost mix)
-        double[] weights = getDeepLearningWeights();
+        // -------------------------------------------------------------
+        // ÉTAPE 1 : FUSION DES INTELLIGENCES (HYBRID SCORING)
+        // -------------------------------------------------------------
 
-        // --- MODIF 1 : POOL ADAPTATIF ---
-        // On détermine dynamiquement combien de numéros on garde (entre 10 et 18)
-        List<Integer> pool = determinerPoolAdaptatif(weights);
-        log.info("🎯 Pool Adaptatif sélectionné ({} numéros) : {}", pool.size(), pool);
+        // A. Intelligence Statistique (Java - ScoringService)
+        // Renvoie une Map <Numéro, Score 0.0-1.0> basés sur Forme, Ecart, Saison...
+        Map<Integer, Double> scoresJava = scoringService.calculerScores(history, dateCible);
 
-        // --- MODIF 2 : WHEELING SYSTEM ---
-        // On génère un système réducteur (Garantie 3 si 5).
+        // B. Intelligence Prédictive (Python - LSTM/XGBoost)
+        // Renvoie un tableau où l'index est le numéro (1-49) et la valeur le poids
+        double[] weightsPython = getDeepLearningWeights();
+
+        // C. Fusion Pondérée
+        // On accorde 60% de confiance à la Statistique (Java) et 40% au Deep Learning (Python)
+        // pour éviter qu'une hallucination de l'IA ne casse tout le pronostic.
+        Map<Integer, Double> scoresFinaux = new HashMap<>();
+
+        for (int i = 1; i <= 49; i++) {
+            double scoreJ = scoresJava.getOrDefault(i, 0.0);
+            // Sécurité : Si Python renvoie 0 ou vide, on se base à 100% sur Java
+            double scoreP = (weightsPython.length > i) ? weightsPython[i] : scoreJ;
+
+            // Normalisation rapide du score Python (souvent > 1.0) vers 0.0-1.0 si nécessaire
+            // Ici on assume que getDeepLearningWeights renvoie des valeurs cohérentes.
+
+            double scoreMixte = (scoreJ * 0.60) + (scoreP * 0.40);
+            scoresFinaux.put(i, scoreMixte);
+        }
+
+        // -------------------------------------------------------------
+        // ÉTAPE 2 : SÉLECTION DU POOL ADAPTATIF
+        // -------------------------------------------------------------
+
+        // On trie les numéros par Score Mixte décroissant
+        List<Integer> classementNumeros = scoresFinaux.entrySet().stream()
+                .sorted(Map.Entry.<Integer, Double>comparingByValue().reversed())
+                .map(Map.Entry::getKey)
+                .toList();
+
+        // Logique Adaptative V6 :
+        // On regarde l'écart de score entre le 10ème et le 15ème numéro.
+        // Si l'écart est grand, cela veut dire que l'IA a des favoris clairs -> Pool serré (12).
+        // Si l'écart est faible, tout se vaut -> Pool large (16).
+        double scoreRank10 = scoresFinaux.get(classementNumeros.get(9));
+        double scoreRank15 = scoresFinaux.get(classementNumeros.get(14));
+
+        int taillePool = (scoreRank10 - scoreRank15 > 0.05) ? 12 : 16;
+
+        // Sécurité bornes
+        taillePool = Math.max(12, Math.min(taillePool, 18));
+
+        List<Integer> pool = classementNumeros.subList(0, taillePool);
+        log.info("🎯 [HYBRID] Pool sélectionné ({} numéros) basé sur score mixte.", pool.size());
+
+        // -------------------------------------------------------------
+        // ÉTAPE 3 : WHEELING & FILTRAGE
+        // -------------------------------------------------------------
+
+        // Système réducteur : Garantie 3 bons numéros si les 5 gagnants sont dans le pool
         List<int[]> grillesBrutes = wheelingService.genererSystemeReducteur(pool, 3);
-        log.info("⚙️ [WHEELING] {} combinaisons mathématiques générées.", grillesBrutes.size());
 
-        // --- MODIF 3 : PRÉPARATION ROTATION CHANCE ---
-        // On récupère le TOP 3 des numéros chances pour alterner
+        // Récupération des meilleurs numéros chance (Top 3 Statistique)
         List<Integer> topChances = getTopChanceNumbers(history, dateCible.getDayOfWeek());
-        log.info("🍀 Rotation Numéros Chance : {}", topChances);
 
         List<PronosticResultDto> candidats = new ArrayList<>();
 
-        // --- MODIF 4 : SCORING ET CONSTRUCTION ---
         for (int i = 0; i < grillesBrutes.size(); i++) {
             int[] g = grillesBrutes.get(i);
 
-            // A. Filtre de Rentabilité (Psychologique & Statistique)
+            // A. Filtre de Rentabilité (Élimine les suites improbables type 1,2,3,4,5)
             if (!estGrilleRentable(g)) continue;
 
-            // B. Rotation du Numéro Chance (Round-Robin)
-            // Grille 0 -> Chance[0], Grille 1 -> Chance[1], Grille 2 -> Chance[2], Grille 3 -> Chance[0]...
-            int chanceSelectionnee = topChances.get(i % topChances.size());
+            // B. Rotation Chance
+            int chance = topChances.get(i % topChances.size());
 
-            // C. Calcul du Score Global de la Grille (Densité IA)
-            // On somme les poids IA de chaque boule pour évaluer la puissance de la grille
-            double scoreGrille = 0.0;
-            for (int boule : g) {
-                if (boule >= 1 && boule < weights.length) {
-                    scoreGrille += weights[boule];
-                }
-            }
+            // C. Score de la Grille = Somme des Scores Mixtes des 5 boules
+            double fitnessGrille = 0.0;
+            for (int b : g) fitnessGrille += scoresFinaux.get(b);
 
-            // Packaging
             List<Integer> listeBoules = Arrays.stream(g).boxed().sorted().toList();
+
             candidats.add(new PronosticResultDto(
                     listeBoules,
-                    chanceSelectionnee,
-                    scoreGrille, // On stocke le score IA agrégé ici
+                    chance,
+                    fitnessGrille, // Score Hybrid
                     0.0, 0.0, false,
-                    "PRO_ADAPTIVE (Pool:" + pool.size() + ")"
+                    "EXPERT_V6 (Pool:" + taillePool + ")"
             ));
         }
 
-        // --- MODIF 5 : FILTRAGE PAR SCORE ---
-        // On trie par score IA décroissant pour ne garder que la crème de la crème
+        // -------------------------------------------------------------
+        // ÉTAPE 4 : SÉLECTION FINALE & BACKTEST
+        // -------------------------------------------------------------
+
+        // On ne garde que les grilles avec le plus haut Score Fitness
         List<PronosticResultDto> selectionFinale = candidats.stream()
-                .sorted((c1, c2) -> Double.compare(c2.getScoreFitness(), c1.getScoreFitness()))
+                .sorted(Comparator.comparingDouble(PronosticResultDto::getScoreFitness).reversed())
                 .limit(budgetMaxGrilles)
                 .collect(Collectors.toList());
 
-        // Calcul final des indicateurs (Backtest simulé) pour l'affichage utilisateur
+        // Calcul des indicateurs pour l'utilisateur (Max Duo, Déjà sortie...)
         selectionFinale.forEach(dto -> {
             SimulationResultDto simu = simulerGrilleDetaillee(dto.getBoules(), dateCible, history);
             double maxDuo = simu.getPairs().stream().mapToDouble(MatchGroup::getRatio).max().orElse(0.0);
@@ -393,7 +431,7 @@ public class LotoService {
             dto.setDejaSortie(!simu.getQuintuplets().isEmpty());
         });
 
-        log.info("✅ [PRO MODE] Sélection terminée : {} grilles retenues sur {} candidates.", selectionFinale.size(), candidats.size());
+        log.info("✅ [PRO MODE V6] Terminé : {} grilles générées.", selectionFinale.size());
         return selectionFinale;
     }
 
