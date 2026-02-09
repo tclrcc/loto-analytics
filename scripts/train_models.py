@@ -3,7 +3,7 @@ import numpy as np
 import os
 import tensorflow as tf
 from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import LSTM, Dense, BatchNormalization, Dropout, Input, Bidirectional, Concatenate
+from tensorflow.keras.layers import LSTM, Dense, BatchNormalization, Dropout, Input, Bidirectional
 from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau
 
 # Configuration V7 "Deep Feature"
@@ -64,12 +64,12 @@ def train_lstm_advanced(df):
         LSTM(72), # 64 -> 72
         Dropout(0.3),
 
-        Dense(64, activation='swish'), # Relu -> Swish (souvent mieux pour les séries temporelles)
+        Dense(64, activation='swish'), # Swish est excellent pour le Deep Learning moderne
 
         Dense(49, activation='sigmoid')
     ])
 
-    model.compile(optimizer=tf.keras.optimizers.Nadam(learning_rate=0.001), # Adam -> Nadam
+    model.compile(optimizer='adam',
                  loss='binary_crossentropy',
                  metrics=['accuracy'])
 

@@ -40,11 +40,12 @@ def get_features_for_inference(draw: Draw):
 async def load_model():
     global model
     try:
+        # On charge le V7
         if os.path.exists("models/lstm_v7.keras"):
             model = tf.keras.models.load_model("models/lstm_v7.keras")
             print("✅ V7 Engine: READY")
         else:
-            print("⚠️ V7 Engine: Model not found")
+            print("⚠️ V7 Engine: Model not found (Did you train?)")
     except Exception as e:
         print(f"🔥 Error: {e}")
 
