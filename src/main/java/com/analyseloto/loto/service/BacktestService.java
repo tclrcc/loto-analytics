@@ -28,11 +28,11 @@ public class BacktestService {
     private final LotoService lotoService;
 
     // --- CONSTANTES ---
-    private static final int NB_GRILLES_PAR_TEST = 200;
-    private static final int DEPTH_BACKTEST = 450;
-    private static final int POPULATION_SIZE = 1000;
-    private static final int MAX_GENERATIONS = 100;
-    private static final int TRAINING_BATCH_SIZE = 400;
+    private static final int NB_GRILLES_PAR_TEST = 100;
+    private static final int DEPTH_BACKTEST = 300;
+    private static final int POPULATION_SIZE = 400;
+    private static final int MAX_GENERATIONS = 50;
+    private static final int TRAINING_BATCH_SIZE = 150;
 
     public BacktestService(@Lazy LotoService lotoService) {
         this.lotoService = lotoService;
