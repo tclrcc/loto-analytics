@@ -131,8 +131,6 @@ public class BacktestService {
     private double evaluerFitness(Genotype<DoubleGene> gt, List<LotoService.ScenarioSimulation> scenarios, ExpertProfile profil, AtomicInteger zeroGridMonitor) {
         LotoService.AlgoConfig config = decoderGenotype(gt, "TEST");
 
-        // Note: Pas de correction "swap" ici car ce sont des poids indépendants, pas des bornes min/max.
-
         double bilan = 0;
         double depense = 0;
         int totalGagnant = 0;
@@ -140,7 +138,8 @@ public class BacktestService {
 
         List<LotoService.ScenarioSimulation> batch = scenarios.subList(0, Math.min(scenarios.size(), TRAINING_BATCH_SIZE));
 
-        for (LotoService.ScenarioSimulation sc : batch) {
+        for (int i = 0; i < batch.size(); i++) {
+            LotoService.ScenarioSimulation sc = batch.get(i);
             List<int[]> grilles = lotoService.genererGrillesDepuisScenarioOptimise(sc, config, NB_GRILLES_PAR_TEST);
 
             if (grilles.isEmpty()) continue;
@@ -154,20 +153,31 @@ public class BacktestService {
 
             for (int[] g : grilles) {
                 int matches = compteMatches(g, tirageReel);
-                // Le numéro chance est stocké à l'index 5 dans genererGrillesDepuisScenarioOptimise
                 boolean chanceMatch = (g[5] == chanceReel);
 
                 double gain = calculerGainRapide(matches, chanceMatch);
                 bilan += gain;
                 if (gain > 0) totalGagnant++;
             }
+
+            // --- LE MOUCHARD (DEBUG) ---
+            // Affiche 1 seule fois par génération pour voir si on joue des fantômes
+            if (profil != null && zeroGridMonitor.get() == 0 && i == 0 && !grilles.isEmpty()) {
+                log.info("🕵️ [DEBUG DATA] Target: {} | Joué: {} | Chance: {} vs {} | Matchs: {}",
+                        java.util.Arrays.toString(tirageReel),
+                        java.util.Arrays.toString(java.util.Arrays.copyOf(grilles.get(0), 5)), // On affiche les 5 boules
+                        chanceReel, grilles.get(0)[5],
+                        compteMatches(grilles.get(0), tirageReel));
+
+                // Force le compteur à 1 pour ne pas spammer les logs
+                zeroGridMonitor.incrementAndGet();
+            }
         }
 
         // --- CORRECTION DU "CLIFF" DE FITNESS ---
         if (depense == 0) {
-            zeroGridMonitor.incrementAndGet();
-            // Pénalité basée sur les poids pour guider l'algo vers des zones moins "vides"
-            // On utilise les vrais getters de AlgoConfig
+            // Pas d'incrément ici si déjà fait par le mouchard, mais c'est pas grave pour le debug
+            if (zeroGridMonitor.get() == 0) zeroGridMonitor.incrementAndGet();
             return -100.0 - (config.getPoidsFreqJour() + config.getPoidsEcart());
         }
 
