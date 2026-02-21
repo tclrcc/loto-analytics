@@ -451,36 +451,20 @@ public class LotoService {
         return selectionFinale;
     }
 
-    /**
-     * V7+ : FILTRE "STRUCTUREL" AVANCÉ
-     * Vérifie l'intégrité statistique d'une grille selon 5 dimensions.
-     */
     private boolean estGrilleRentablePro(int[] boules) {
-        // Trier pour faciliter l'analyse
         int[] sorted = Arrays.copyOf(boules, 5);
         Arrays.sort(sorted);
 
-        // 1. Filtre Somme (Courbe de Gauss)
-        // Les tirages extrêmes (somme < 100 ou > 200) représentent < 10% des cas réels.
         int somme = 0;
         for (int b : sorted) somme += b;
         if (somme < 100 || somme > 200) return false;
 
-        // 2. Filtre "Finales" (Diversité des terminaisons)
-        // Ex: 11, 21, 31, 41 (4 finales en 1) -> Très rare.
         if (!checkDiversiteFinales(sorted)) return false;
-
-        // 3. Filtre "Suites" (Consécutifs)
-        // Ex: 12, 13, 14 (3 à la suite) -> Arrive moins de 2% du temps.
         if (!checkSuitesLogiques(sorted)) return false;
-
-        // 4. Filtre "Premiers" (Densité Mathématique)
-        // Un tirage sans aucun nombre premier ou avec que des premiers est une anomalie.
         if (!checkEquilibrePremiers(sorted)) return false;
 
-        // 5. Filtre "Entropie de Shannon" (Chaos)
-        // On garde ton excellent filtre V6
-        return calculerEntropieShannon(sorted) >= 1.2;
+        // CORRECTION MAJEURE : Abaissé de 1.2 à 0.5 pour rendre la validation possible
+        return calculerEntropieShannon(sorted) >= 0.5;
     }
 
     /**
@@ -1679,24 +1663,19 @@ public class LotoService {
      * @return true si cohérente, false sinon
      */
     public boolean estGrilleCoherenteOptimisee(int[] boules, List<Integer> dernierTirage, DynamicConstraints rules) {
-        // 1. EXTRACTION DIRECTE
         int b0 = boules[0], b1 = boules[1], b2 = boules[2], b3 = boules[3], b4 = boules[4];
 
-        // AJOUT ANALYST : Filtre d'Entropie
-        // Une entropie < 1.5 signifie que les nombres sont très groupés (ex: 12, 13, 14, 15, 18)
-        // Statistiquement, le Loto favorise la dispersion (Entropie élevée).
-        if (calculerEntropieShannon(boules) < 1.5) {
+        // CORRECTION MAJEURE : L'entropie max est de ~1.039. Un seuil de 0.5 élimine les grilles trop ordonnées.
+        if (calculerEntropieShannon(boules) < 0.5) {
             return false;
         }
 
-        // Calcul des Deltas (Astuce de l'analyse précédente intégrée)
         int d1 = b1 - b0, d2 = b2 - b1, d3 = b3 - b2, d4 = b4 - b3;
         if (d1 > 30 || d2 > 30 || d3 > 30 || d4 > 30) return false;
 
         int somme = b0 + b1 + b2 + b3 + b4;
         if (somme < 85 || somme > 210) return false;
 
-        // Bitwise pour parité et dizaines
         int pairs = 0, dizainesMask = 0;
         for (int b : boules) {
             if ((b & 1) == 0) pairs++;
@@ -1706,11 +1685,11 @@ public class LotoService {
         if (pairs < rules.getMinPairs() || pairs > rules.getMaxPairs()) return false;
         if (Integer.bitCount(dizainesMask) < 3) return false;
 
-        // Comparaison dernier tirage (Boxing minimal ici)
         if (dernierTirage != null) {
             int communs = 0;
             for (int b : boules) if (dernierTirage.contains(b)) communs++;
-            return communs < 4;
+            // On autorise jusqu'à 2 numéros en commun avec le tirage précédent maximum (pour la rentabilité)
+            return communs <= 2;
         }
         return true;
     }

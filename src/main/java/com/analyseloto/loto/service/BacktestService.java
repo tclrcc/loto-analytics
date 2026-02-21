@@ -203,14 +203,22 @@ public class BacktestService {
     }
 
     private double calculerGainRapide(int m, boolean c) {
-        if (m == 5 && c) return 2_000_000.0;
-        if (m == 5) return 100_000.0;
-        if (m == 4 && c) return 1000.0;
-        if (m == 4) return 400.0;
-        if (m == 3 && c) return 50.0;
-        if (m == 3) return 20.0;
-        if (m == 2 && c) return 10.0;
-        if (m == 2) return 5.0;
+        // --- NOUVEAU BAREME D'ENTRAINEMENT (BOOST DE REGULARITÉ) ---
+        // On réduit drastiquement les récompenses irréalistes et on survalorise les petits rangs
+        // pour forcer l'algorithme génétique à trouver des "patterns" récurrents.
+
+        if (m == 5 && c) return 100_000.0; // Réduit pour éviter le sur-apprentissage
+        if (m == 5) return 20_000.0;       // Réduit
+
+        if (m == 4 && c) return 2000.0;    // Boosté
+        if (m == 4) return 1000.0;         // Boosté
+
+        if (m == 3 && c) return 150.0;     // Fortement boosté (Cible de l'IA)
+        if (m == 3) return 50.0;           // Fortement boosté
+
+        if (m == 2 && c) return 25.0;      // Boosté
+        if (m == 2) return 10.0;           // Boosté (Force l'IA à assurer des remboursements constants)
+
         if (c) return 2.20;
         return 0.0;
     }
