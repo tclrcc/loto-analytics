@@ -26,7 +26,6 @@ import java.time.format.DateTimeFormatter;
 import java.time.format.TextStyle;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
@@ -121,15 +120,6 @@ public class LotoService {
         private int maxPairs;
         private boolean allowSuites;
         private Set<Integer> forbiddenNumbers;
-    }
-
-    @AllArgsConstructor
-    @Data
-    private static class GrilleCandidate implements Serializable {
-        @Serial private static final long serialVersionUID = 1L;
-        int[] boules;
-        int chance;
-        double fitness;
     }
 
     @Data
@@ -390,7 +380,7 @@ public class LotoService {
             int[] g = grillesBrutes.get(i);
 
             // A. Filtre "Rentabilité" (Somme, Dizaines) + NOUVEAU : ENTROPIE DE SHANNON
-            if (!estGrilleRentablePro(g)) continue;
+            if (estGrilleRentablePro(g)) continue;
 
             // B. Rotation Intelligente du Numéro Chance
             int chance = topChances.get(i % topChances.size());
@@ -449,22 +439,6 @@ public class LotoService {
 
         log.info("✅ [V6 PRO] Terminé : {} grilles 'Élite' retenues.", selectionFinale.size());
         return selectionFinale;
-    }
-
-    private boolean estGrilleRentablePro(int[] boules) {
-        int[] sorted = Arrays.copyOf(boules, 5);
-        Arrays.sort(sorted);
-
-        int somme = 0;
-        for (int b : sorted) somme += b;
-        if (somme < 100 || somme > 200) return false;
-
-        if (!checkDiversiteFinales(sorted)) return false;
-        if (!checkSuitesLogiques(sorted)) return false;
-        if (!checkEquilibrePremiers(sorted)) return false;
-
-        // CORRECTION MAJEURE : Abaissé de 1.2 à 0.5 pour rendre la validation possible
-        return calculerEntropieShannon(sorted) >= 0.5;
     }
 
     /**
@@ -570,9 +544,6 @@ public class LotoService {
         } else {
             taillePool = 16; // Prudence (On couvre plus large)
         }
-
-        // Sécurité : Bornes min/max pour le Wheeling
-        taillePool = Math.max(10, Math.min(taillePool, 18));
 
         return sortedIndices.subList(0, taillePool);
     }
@@ -681,208 +652,131 @@ public class LotoService {
     public List<PronosticResultDto> genererMultiplesPronostics(LocalDate dateCible, int nombreGrilles) {
         long startTotal = System.currentTimeMillis();
 
-        // 1. GESTION DU CACHE
         List<PronosticResultDto> cached = cachedDailyPronosRef.get();
         if (cached != null && dateCible.equals(dateCachedPronos) && cached.size() >= nombreGrilles) {
             log.info("⚡ [CACHE] Pronostics (Consensus) récupérés instantanément en {} ms.", (System.currentTimeMillis() - startTotal));
             return cached.subList(0, nombreGrilles);
         }
 
-        log.info("⚙️ [CONSENSUS IA] Démarrage du Conseil des Sages pour le {}...", dateCible);
+        log.info("⚙️ [NOUVEAU PIPELINE VALUE] Démarrage du Conseil des Sages (Wheeling) pour le {}...", dateCible);
 
-        // 2. PRÉPARATION DES DONNÉES COMMUNES (Une seule fois pour tout le monde !)
-        // On charge l'historique une fois
         List<LotoTirageRepository.TirageMinimal> rawData = repository.findAllOptimized();
         List<LotoTirage> history = rawData.stream().map(this::mapToLightEntity).toList();
         if (history.isEmpty()) return new ArrayList<>();
 
         List<Integer> dernierTirage = history.get(0).getBoules();
-        int etatDernierTirage = calculerEtatAbstrait(dernierTirage);
-
-        // On récupère les poids neuronaux AVANT de lancer les experts
         double[] deepWeights = getDeepLearningWeights();
+        Set<Integer> hotFinales = detecterFinalesChaudes(history);
 
-        // CALCULS PARALLÈLES DES MATRICES INVARIANTES (Lourds mais faits 1 seule fois)
-        // Ces données ne dépendent pas de la config, donc on les partage entre tous les experts.
-        CompletableFuture<Set<Integer>> hotFinalesFuture = CompletableFuture.supplyAsync(() -> detecterFinalesChaudes(history));
-        CompletableFuture<List<List<Integer>>> triosFuture = CompletableFuture.supplyAsync(() -> getTopTriosRecents(history));
-        CompletableFuture<int[][]> affFuture = CompletableFuture.supplyAsync(() -> construireMatriceAffinitesDirecte(history, dateCible.getDayOfWeek()));
-        CompletableFuture<int[][]> chanceFuture = CompletableFuture.supplyAsync(() -> construireMatriceChanceDirecte(history, dateCible.getDayOfWeek()));
-        CompletableFuture<double[][]> markovFuture = CompletableFuture.supplyAsync(() -> precalculerMatriceMarkovParJour(history, dateCible.getDayOfWeek()));
-        CompletableFuture<DynamicConstraints> contraintesFuture = CompletableFuture.supplyAsync(() -> analyserContraintesDynamiques(history));
-
-        // On attend que tout soit prêt
-        CompletableFuture.allOf(hotFinalesFuture, triosFuture, affFuture, chanceFuture, markovFuture, contraintesFuture).join();
-
-        // Récupération des résultats invariants
-        Set<Integer> hotFinales = hotFinalesFuture.join();
-        List<List<Integer>> topTriosDuJour = triosFuture.join();
-        int[][] matriceAffinitesArr = affFuture.join();
-        int[][] matriceChanceArr = chanceFuture.join();
-        double[][] matriceMarkov = markovFuture.join();
-        DynamicConstraints contraintesDuJour = contraintesFuture.join();
-        Set<Long> historiqueBitMasks = new HashSet<>(history.size());
-
-        for(int i=0; i<Math.min(history.size(), 300); i++) {
-            historiqueBitMasks.add(bitMaskService.calculerBitMask(history.get(i).getBoules()));
-        }
-
-        List<AlgoConfig> eliteConfigs;
-        // Si on a déjà calculé les configs aujourd'hui, on utilise la RAM (Instant)
-        if (this.cachedEliteConfigs != null && !this.cachedEliteConfigs.isEmpty() && LocalDate.now(ZONE_PARIS).equals(this.lastBacktestDate)) {
-            eliteConfigs = this.cachedEliteConfigs;
-            log.info("⚡ [CACHE] Utilisation des {} experts en mémoire RAM.", eliteConfigs.size());
-        } else {
-            // Sinon (premier lancement ou reboot), on calcule (Lourd)
-            log.info("⚠️ [CACHE MISS] Calcul des stratégies nécessaire...");
+        List<AlgoConfig> eliteConfigs = this.cachedEliteConfigs;
+        if (eliteConfigs == null || eliteConfigs.isEmpty()) {
             eliteConfigs = backtestService.trouverMeilleuresConfigs(history);
-            this.cachedEliteConfigs = eliteConfigs; // On met à jour le cache
-            this.lastBacktestDate = LocalDate.now(ZONE_PARIS);
+            this.cachedEliteConfigs = eliteConfigs;
         }
 
-        // Structures pour le vote (Thread-Safe, car remplies en parallèle)
-        Map<Set<Integer>, Double> votesPonderes = new java.util.concurrent.ConcurrentHashMap<>();
-        Map<Set<Integer>, Double> scoresCumules = new java.util.concurrent.ConcurrentHashMap<>();
+        // 1. SCORING GLOBAL (Consensus de tous les experts)
+        double[] scoreGlobalConsensus = new double[50];
+        double poidsTotalExperts = 0.0;
 
-        log.info("🗳️ [VOTE BMA] Lancement de la génération avec pondération Bayésienne...");
-
-        // 4. GÉNÉRATION PARALLÈLE (Chaque expert propose ses grilles)
-        eliteConfigs.parallelStream().forEach(config -> {
-            // a. Calcul des scores spécifiques à CETTE config (Chaque expert a sa vision des poids)
-            // Note: boostNumbers est vide ici car c'est de l'IA pure, pas de l'Astro
-            // Pour les boules (1-49), on passe les poids de l'IA
-            double[] scoresBoules = calculerScoresOptimise(history, 49, dateCible.getDayOfWeek(), false, Collections.emptyList(), hotFinales, config, dernierTirage, deepWeights);
-
-            // Pour le numéro chance (1-10), on passe null (l'IA ne prédit pas la chance ici)
-            double[] scoresChance = calculerScoresOptimise(history, 10, dateCible.getDayOfWeek(), true, Collections.emptyList(), Collections.emptySet(), config, null, null);
-
-            // b. Buckets & Primitives
-            Map<String, List<Integer>> buckets = creerBucketsOptimises(scoresBoules);
-            int[] hots = buckets.getOrDefault(Constantes.BUCKET_HOT, Collections.emptyList()).stream().mapToInt(i->i).toArray();
-            int[] neutrals = buckets.getOrDefault(Constantes.BUCKET_NEUTRAL, Collections.emptyList()).stream().mapToInt(i->i).toArray();
-            int[] colds = buckets.getOrDefault(Constantes.BUCKET_COLD, Collections.emptyList()).stream().mapToInt(i->i).toArray();
-            boolean[] isHot = new boolean[51]; boolean[] isCold = new boolean[51];
-            for(int n : buckets.get(Constantes.BUCKET_HOT)) isHot[n] = true;
-            for(int n : buckets.get(Constantes.BUCKET_COLD)) isCold[n] = true;
-
-            // 2. CALCUL DU POIDS DE L'EXPERT (NOUVEAU)
+        for (AlgoConfig config : eliteConfigs) {
             double expertWeight = calculerPoidsBayesien(config.getRoiEstime(), config.getNbTiragesTestes());
+            poidsTotalExperts += expertWeight;
 
-            // c. L'expert génère ses grilles (On génère ~30 grilles par expert)
-            List<GrilleCandidate> proposals = executerAlgorithmeGenetique(
-                    hots, neutrals, colds, isHot, isCold,
-                    matriceAffinitesArr, dernierTirage, topTriosDuJour, scoresBoules, scoresChance,
-                    matriceChanceArr, contraintesDuJour, config, historiqueBitMasks, matriceMarkov, etatDernierTirage
-            );
-
-            // 4. Vote Pondéré
-            int limitVote = Math.min(proposals.size(), 30);
-            for(int i=0; i<limitVote; i++) {
-                GrilleCandidate cand = proposals.get(i);
-                List<Integer> boulesList = Arrays.stream(cand.getBoules()).boxed().toList();
-                Set<Integer> key = new HashSet<>(boulesList);
-
-                // Au lieu de +1, on ajoute le POIDS de l'expert
-                votesPonderes.merge(key, expertWeight, Double::sum);
-                // Le fitness est aussi pondéré par la crédibilité de l'expert
-                scoresCumules.merge(key, cand.getFitness() * expertWeight, Double::sum);
+            double[] scoresBoules = calculerScoresOptimise(history, 49, dateCible.getDayOfWeek(), false, Collections.emptyList(), hotFinales, config, dernierTirage, deepWeights);
+            for (int i = 1; i <= 49; i++) {
+                scoreGlobalConsensus[i] += (scoresBoules[i] * expertWeight);
             }
-        });
+        }
 
-        // 5. DÉPOUILLEMENT DU SCRUTIN (Consensus)
+        // Normalisation
+        for (int i = 1; i <= 49; i++) {
+            scoreGlobalConsensus[i] /= poidsTotalExperts;
+        }
+
+        // 2. EXTRACTION DE LA PISCINE (Top Numéros + Value)
+        List<Integer> pool = determinerPoolAdaptatif(scoreGlobalConsensus);
+        log.info("🎯 [POOL VALUE] {} numéros sélectionnés par le consensus : {}", pool.size(), pool);
+
+        // 3. SYSTÈME RÉDUCTEUR (Wheeling) : Garantie Mathématique (ex: 3/4 ou 3/5)
+        List<int[]> grillesBrutes = wheelingService.genererSystemeReducteur(pool, 3);
+        log.info("⚙️ [WHEELING] {} combinaisons structurelles générées.", grillesBrutes.size());
+
+        // 4. FILTRAGE IMPOPULARITÉ & ENTROPIE
+        List<Integer> topChances = getTopChanceNumbers(history, dateCible.getDayOfWeek());
         List<PronosticResultDto> resultatsConsensus = new ArrayList<>();
 
-        // Seuil dynamique : Il faut accumuler assez de "poids" pour être élu.
-        // On peut dire arbitrairement qu'il faut l'équivalent de "2 experts moyens"
-        double poidsMoyen = eliteConfigs.stream()
-                .mapToDouble(c -> calculerPoidsBayesien(c.getRoiEstime(), c.getNbTiragesTestes()))
-                .average().orElse(1.0);
-        double seuilVote = poidsMoyen * 2.5;
+        for (int i = 0; i < grillesBrutes.size(); i++) {
+            int[] g = grillesBrutes.get(i);
 
-        for (Map.Entry<Set<Integer>, Double> entry : votesPonderes.entrySet()) {
-            double poidsTotal = entry.getValue();
-            if (poidsTotal >= seuilVote) {
-                Set<Integer> boulesSet = entry.getKey();
-                List<Integer> boulesList = new ArrayList<>(boulesSet);
-                Collections.sort(boulesList);
+            // Filtre de Value (Impopularité, Entropie, Finales)
+            if (estGrilleRentablePro(g)) continue;
 
-                double scorePondereTotal = scoresCumules.get(boulesSet);
-                // Score final normalisé
-                double finalScore = scorePondereTotal / poidsTotal;
-                // Bonus de consensus (plus le poids total est grand, plus on booste)
-                finalScore *= (1.0 + Math.log10(poidsTotal));
+            int chance = topChances.get(i % topChances.size());
+            double fitness = 0.0;
+            for (int b : g) fitness += scoreGlobalConsensus[b];
 
-                int chanceConsensus = selectionnerChancePourConsensus(boulesList, matriceChanceArr);
-                SimulationResultDto simu = simulerGrilleDetaillee(boulesList, dateCible, history);
-                double maxDuo = simu.getPairs().stream().mapToDouble(MatchGroup::getRatio).max().orElse(0.0);
+            SimulationResultDto simu = simulerGrilleDetaillee(Arrays.stream(g).boxed().toList(), dateCible, history);
+            double maxDuo = simu.getPairs().stream().mapToDouble(MatchGroup::getRatio).max().orElse(0.0);
 
-                resultatsConsensus.add(new PronosticResultDto(
-                        boulesList, chanceConsensus,
-                        Math.round(finalScore * 100.0) / 100.0,
-                        maxDuo, 0.0,
-                        !simu.getQuintuplets().isEmpty(),
-                        "CONSENSUS BMA (Poids: " + String.format("%.1f", poidsTotal) + ")"
-                ));
-            }
+            resultatsConsensus.add(new PronosticResultDto(
+                    Arrays.stream(g).boxed().sorted().toList(),
+                    chance,
+                    Math.round(fitness * 100.0) / 100.0,
+                    maxDuo, 0.0,
+                    !simu.getQuintuplets().isEmpty(),
+                    "WHEELING VALUE (Garanti 3)"
+            ));
         }
 
-        // 6. TRI ET SÉLECTION FINALE
-        // On trie par score consensus décroissant
+        // Tri par score de consensus décroissant
         resultatsConsensus.sort((p1, p2) -> Double.compare(p2.getScoreFitness(), p1.getScoreFitness()));
 
-        // 6. GESTION DU FALLBACK (Plan de Secours)
+        // Smart Covering (Optionnel : élimine les grilles trop redondantes)
+        resultatsConsensus = appliquerSmartCovering(resultatsConsensus, nombreGrilles);
+
         if (resultatsConsensus.isEmpty()) {
-            log.warn("⚠️ [FALLBACK] Aucun consensus strict (Seuil: {}). Bascule sur les meilleurs scores individuels.", seuilVote);
-
-            // CORRECTION ICI : On boucle sur votesPonderes (Double) et non votesGrilles (qui n'existe plus)
-            for (Map.Entry<Set<Integer>, Double> entry : votesPonderes.entrySet()) {
-                Set<Integer> boulesSet = entry.getKey();
-
-                // On récupère le score brut cumulé (fitness * poids expert)
-                double rawScore = scoresCumules.get(boulesSet);
-
-                List<Integer> boulesList = new ArrayList<>(boulesSet);
-                Collections.sort(boulesList);
-
-                // On recalcule le numéro chance
-                int chanceConsensus = selectionnerChancePourConsensus(boulesList, matriceChanceArr);
-
-                // Simulation rapide
-                SimulationResultDto simu = simulerGrilleDetaillee(boulesList, dateCible, history);
-                double maxDuo = simu.getPairs().stream().mapToDouble(MatchGroup::getRatio).max().orElse(0.0);
-
+            log.warn("⚠️ Filtres de value trop restrictifs, retour au top brut.");
+            // Code de secours si tout est filtré
+            for (int i = 0; i < Math.min(nombreGrilles, grillesBrutes.size()); i++) {
+                int[] g = grillesBrutes.get(i);
                 resultatsConsensus.add(new PronosticResultDto(
-                        boulesList, chanceConsensus,
-                        Math.round(rawScore * 100.0) / 100.0,
-                        maxDuo, 0.0,
-                        !simu.getQuintuplets().isEmpty(),
-                        "TOP_INDIVIDUEL (Score: " + String.format("%.1f", rawScore) + ")"
+                        Arrays.stream(g).boxed().sorted().toList(),
+                        topChances.get(0), 100.0, 0.0, 0.0, false, "WHEELING FALLBACK"
                 ));
             }
-        }
-
-        // 7. TRI ET SÉLECTION FINALE (Commun aux deux modes)
-        // On trie par score décroissant pour garder la crème de la crème
-        // Si on est en mode Consensus : les bonus de confiance feront remonter les grilles votées.
-        // Si on est en mode Fallback : le score brut fera remonter les meilleures grilles individuelles.
-        resultatsConsensus.sort((p1, p2) -> Double.compare(p2.getScoreFitness(), p1.getScoreFitness()));
-
-        // Sécurité ultime : Si vraiment vide (0 expert n'a généré 0 grille ??? Impossible mais bon)
-        if (resultatsConsensus.isEmpty()) {
-            log.error("🚨 [CRITIQUE] Panne sèche des experts. Génération d'urgence.");
-            // Appel d'urgence à la méthode simple non-optimisée ou retour vide
-            return new ArrayList<>();
         }
 
         cachedDailyPronosRef.set(resultatsConsensus);
         this.dateCachedPronos = dateCible;
 
         long duration = System.currentTimeMillis() - startTotal;
-        log.info("🏁 [CONSENSUS IA] Terminé en {} ms. {} grilles 'Solidaires' retenues.", duration, resultatsConsensus.size());
-
-
+        log.info("🏁 [NOUVEAU PIPELINE] Terminé en {} ms. {} grilles 'Value' prêtes à être jouées.", duration, resultatsConsensus.size());
 
         return resultatsConsensus.subList(0, Math.min(resultatsConsensus.size(), nombreGrilles));
+    }
+
+    // Assure-toi que cette méthode a bien le filtre des >31
+    private boolean estGrilleRentablePro(int[] boules) {
+        int[] sorted = Arrays.copyOf(boules, 5);
+        Arrays.sort(sorted);
+
+        int somme = 0;
+        int countSup31 = 0;
+        for (int b : sorted) {
+            somme += b;
+            if (b > 31) countSup31++;
+        }
+
+        if (somme < 100 || somme > 200) return true;
+
+        // NOUVEAU: On impose au moins 2 numéros supérieurs à 31 (Condition Value stricte)
+        if (countSup31 < 2) return true;
+
+        if (!checkDiversiteFinales(sorted)) return true;
+        if (!checkSuitesLogiques(sorted)) return true;
+        if (!checkEquilibrePremiers(sorted)) return true;
+
+        return !(calculerEntropieShannon(sorted) >= 0.5);
     }
 
     /**
@@ -931,63 +825,6 @@ public class LotoService {
 
         return selectionFinale;
     }
-
-    // Helper pour le numéro chance en mode consensus
-    private int selectionnerChancePourConsensus(List<Integer> boules, int[][] matriceChance) {
-        int bestC = 1;
-        int maxScore = -1;
-        for(int c=1; c<=10; c++) {
-            int score = 0;
-            for(int b : boules) score += matriceChance[b][c];
-            if(score > maxScore) { maxScore = score; bestC = c; }
-        }
-        return bestC;
-    }
-
-    /**
-     * CŒUR DU RÉACTEUR - CORRECTION DEADLOCK
-     * On retire le .parallel() ici car la méthode est DÉJÀ appelée en parallèle par les 20 experts.
-     */
-    private List<GrilleCandidate> executerAlgorithmeGenetique(
-            int[] hots, int[] neutrals, int[] colds, boolean[] isHot, boolean[] isCold,
-            int[][] matriceAffinites, List<Integer> dernierTirage, List<List<Integer>> topTrios,
-            double[] scoresBoules, double[] scoresChance, int[][] matriceChance,
-            DynamicConstraints contraintes, AlgoConfig config, Set<Long> historiqueBitMasks,
-            double[][] matriceMarkov, int etatDernierTirage) {
-
-        long tStart = System.currentTimeMillis();
-        int taillePopulationCible = 50_000;
-
-        List<GrilleCandidate> population = IntStream.range(0, taillePopulationCible * 2)
-                .mapToObj(i -> genererGrilleOptimiseePrimitive(hots, neutrals, colds, isHot, isCold, matriceAffinites, dernierTirage, topTrios))
-                .filter(boules -> estGrilleCoherenteOptimisee(boules, dernierTirage, contraintes))
-                .filter(boules -> !historiqueBitMasks.contains(bitMaskService.calculerBitMask(boules)))
-                .limit(taillePopulationCible)
-                .map(boules -> {
-                    int chance = selectionnerChanceRapidePrimitive(boules, scoresChance, matriceChance);
-                    double fitness = calculerScoreFitnessOptimise(boules, chance, scoresBoules, scoresChance, matriceAffinites, config, matriceMarkov, etatDernierTirage);
-                    return new GrilleCandidate(boules, chance, fitness);
-                })
-                .sorted((g1, g2) -> Double.compare(g2.fitness, g1.fitness))
-                .collect(Collectors.toList());
-
-        // Log uniquement si ça prend du temps (> 1s), sinon c'est du spam
-        long duration = System.currentTimeMillis() - tStart;
-        if (duration > 1000) {
-            log.info("✅ [EXPERT] Terminé en {} ms. {} grilles analysées.", duration, population.size());
-        }
-
-        // Fallback
-        if (population.isEmpty()) {
-            int[] secours = genererGrilleOptimisee(hots, neutrals, colds, isHot, isCold, matriceAffinites, dernierTirage, topTrios);
-            Arrays.sort(secours);
-            population.add(new GrilleCandidate(secours, 1, 50.0));
-        }
-
-        return population;
-    }
-
-    // Ajouter cette méthode dans LotoService.java
 
     /**
      * Version ultra-performante pour le Backtesting (Zéro Allocation / Primitives)
@@ -1151,66 +988,6 @@ public class LotoService {
             startIdx++; count++;
         }
         return scenarios;
-    }
-
-    // ------------------------------------------------------------------------
-    // OPTIMISATION "ZERO ALLOCATION" : Utilisation de tableaux primitifs int[]
-    // ------------------------------------------------------------------------
-
-    private int[] genererGrilleOptimisee(int[] hots, int[] neutrals, int[] colds, boolean[] isHot,
-            boolean[] isCold, int[][] matrice, List<Integer> dernierTirage, List<List<Integer>> trios) {
-        // 1. Buffer Primitif (évite de créer une ArrayList et des objets Integer inutilement)
-        int[] buffer = new int[5];
-        int size = 0;
-        ThreadLocalRandom rng = ThreadLocalRandom.current();
-
-        // 1. Trio
-        if (trios != null && !trios.isEmpty() && rng.nextBoolean()) {
-            for (int tryTrio = 0; tryTrio < 3; tryTrio++) {
-                List<Integer> trioChoisi = trios.get(rng.nextInt(trios.size()));
-                int communs = 0;
-                if (dernierTirage != null) for (Integer n : trioChoisi) if (dernierTirage.contains(n)) communs++;
-                if (communs < 2) {
-                    for (Integer n : trioChoisi) buffer[size++] = n;
-                    break;
-                }
-            }
-        }
-
-        // 2. Base
-        if (size == 0) {
-            if (hots.length > 0) {
-                int h = hots[rng.nextInt(hots.length)];
-                if (dernierTirage == null || !dernierTirage.contains(h)) buffer[size++] = h;
-                else buffer[size++] = 1 + rng.nextInt(49);
-            } else {
-                buffer[size++] = 1 + rng.nextInt(49);
-            }
-        }
-
-        // 3. Remplissage avec tableaux primitifs
-        while (size < 5) {
-            int nbHot = 0; int nbCold = 0;
-            for (int i = 0; i < size; i++) {
-                int n = buffer[i];
-                if (isHot[n]) nbHot++; else if (isCold[n]) nbCold++;
-            }
-
-            int[] targetPool = (nbHot < 2) ? hots : (nbCold < 1 ? colds : neutrals);
-            if (targetPool.length == 0) targetPool = hots;
-
-            int elu = selectionnerParAffiniteFastPrimitive(targetPool, buffer, size, matrice);
-
-            if (elu == -1) {
-                int n; do { n = 1 + rng.nextInt(49); } while (containsPrimitive(buffer, size, n));
-                buffer[size++] = n;
-            } else {
-                buffer[size++] = elu;
-            }
-        }
-
-        Arrays.sort(buffer);
-        return buffer;
     }
 
     /**
@@ -1518,62 +1295,6 @@ public class LotoService {
             scores[num] = s;
         }
         return scores;
-    }
-
-    private double calculerScoreFitnessOptimise(int[] boules, int chance, double[] scoresBoules, double[] scoresChance, int[][] matriceAffinites, AlgoConfig config, double[][] matriceMarkov, int etatDernierTirage) {
-        double score = 0.0;
-
-        // 1. Scores individuels (Fréquence, Forme, Ecart, etc.)
-        for (int b : boules) score += scoresBoules[b];
-        score += scoresChance[chance];
-
-        // 2. Score Affinité (Boucles sur tableaux primitifs)
-        double scoreAffinite = 0;
-        for (int i = 0; i < 5; i++) {
-            for (int j = i + 1; j < 5; j++) {
-                scoreAffinite += matriceAffinites[boules[i]][boules[j]];
-            }
-        }
-        score += (scoreAffinite * config.getPoidsAffinite());
-
-        // 3. NOUVEAU : Score Markov (Transitions d'états)
-        // On calcule l'état de la grille candidate (en utilisant la logique de calculerEtatAbstrait)
-        int sommeCandidate = 0;
-        for (int b : boules) sommeCandidate += b;
-
-        int etatCandidat;
-        if (sommeCandidate < 100) etatCandidat = 1;
-        else if (sommeCandidate <= 125) etatCandidat = 2;
-        else if (sommeCandidate <= 150) etatCandidat = 3;
-        else if (sommeCandidate <= 175) etatCandidat = 4;
-        else etatCandidat = 5;
-
-        // On récupère la probabilité de transition depuis le dernier tirage
-        // etatDernierTirage est l'index de ligne, etatCandidat l'index de colonne
-        if (etatDernierTirage > 0 && etatDernierTirage <= 5) {
-            double probabiliteTransition = matriceMarkov[etatDernierTirage][etatCandidat];
-            // On multiplie par un facteur de 100 pour mettre la probabilité à l'échelle des autres scores
-            score += (probabiliteTransition * 100.0 * config.getPoidsMarkov());
-        }
-
-        // 4. Somme et Parité (Optimisation visuelle)
-        int pairs = 0;
-        for (int b : boules) {
-            if ((b & 1) == 0) pairs++;
-        }
-
-        // Bonus pour l'équilibre statistique (2 ou 3 paires sont les cas les plus fréquents)
-        if (pairs == 2 || pairs == 3) score += 15.0;
-
-        // Bonus pour la zone de somme "centrale" statistiquement la plus probable
-        if (sommeCandidate >= 120 && sommeCandidate <= 170) score += 10.0;
-
-        // NOUVEAU : Bonus d'Entropie
-        // On favorise les grilles qui ne sont pas des suites simples ou des patterns trop réguliers
-        double entropie = calculerEntropieShannon(boules);
-        score += (entropie * 12.0);
-
-        return score;
     }
 
     private RawStatData[] extraireStatsBrutesArray(List<LotoTirage> history, DayOfWeek jour, Set<Integer> hotFinales) {

@@ -155,34 +155,28 @@ public class BacktestService {
                 int matches = compteMatches(g, tirageReel);
                 boolean chanceMatch = (g[5] == chanceReel);
 
-                double gain = calculerGainRapide(matches, chanceMatch);
+                // NOUVEAU : On passe la grille pour évaluer son impopularité
+                double gain = calculerGainRapide(matches, chanceMatch, g);
                 bilan += gain;
                 if (gain > 0) totalGagnant++;
             }
 
-            // --- LE MOUCHARD (DEBUG) ---
-            // Affiche 1 seule fois par génération pour voir si on joue des fantômes
-            if (profil != null && zeroGridMonitor.get() == 0 && i == 0 && !grilles.isEmpty()) {
+            if (profil != null && zeroGridMonitor.get() == 0 && i == 0) {
                 log.info("🕵️ [DEBUG DATA] Target: {} | Joué: {} | Chance: {} vs {} | Matchs: {}",
                         java.util.Arrays.toString(tirageReel),
-                        java.util.Arrays.toString(java.util.Arrays.copyOf(grilles.get(0), 5)), // On affiche les 5 boules
+                        java.util.Arrays.toString(java.util.Arrays.copyOf(grilles.get(0), 5)),
                         chanceReel, grilles.get(0)[5],
                         compteMatches(grilles.get(0), tirageReel));
-
-                // Force le compteur à 1 pour ne pas spammer les logs
                 zeroGridMonitor.incrementAndGet();
             }
         }
 
-        // --- CORRECTION DU "CLIFF" DE FITNESS ---
         if (depense == 0) {
-            // Pas d'incrément ici si déjà fait par le mouchard, mais c'est pas grave pour le debug
             if (zeroGridMonitor.get() == 0) zeroGridMonitor.incrementAndGet();
             return -100.0 - (config.getPoidsFreqJour() + config.getPoidsEcart());
         }
 
         double roiPercent = ((bilan - depense) / depense) * 100.0;
-
         if (profil == null) return roiPercent;
 
         double couverture = (double) totalGagnant / totalGrilles;
@@ -202,24 +196,29 @@ public class BacktestService {
         return m;
     }
 
-    private double calculerGainRapide(int m, boolean c) {
-        // --- NOUVEAU BAREME D'ENTRAINEMENT (BOOST DE REGULARITÉ) ---
-        // On réduit drastiquement les récompenses irréalistes et on survalorise les petits rangs
-        // pour forcer l'algorithme génétique à trouver des "patterns" récurrents.
+    private double calculerGainRapide(int m, boolean c, int[] grille) {
+        // Calcul du coefficient d'impopularité (Numéros > 31 correspondant aux dates de naissance)
+        double multImpopularite = 1.0;
+        int countSup31 = 0;
+        for (int i = 0; i < 5; i++) {
+            if (grille[i] > 31) countSup31++;
+        }
 
-        if (m == 5 && c) return 100_000.0; // Réduit pour éviter le sur-apprentissage
-        if (m == 5) return 20_000.0;       // Réduit
+        // Si la grille sort des sentiers battus, on simule un gain beaucoup plus élevé (moins de gagnants)
+        if (countSup31 >= 3) multImpopularite = 1.5;
+        if (countSup31 == 4) multImpopularite = 2.0;
+        if (countSup31 == 5) multImpopularite = 3.5;
 
-        if (m == 4 && c) return 2000.0;    // Boosté
-        if (m == 4) return 1000.0;         // Boosté
-
-        if (m == 3 && c) return 150.0;     // Fortement boosté (Cible de l'IA)
-        if (m == 3) return 50.0;           // Fortement boosté
-
-        if (m == 2 && c) return 25.0;      // Boosté
-        if (m == 2) return 10.0;           // Boosté (Force l'IA à assurer des remboursements constants)
-
+        if (m == 5 && c) return 100_000.0; // Le jackpot n'est pas multiplié (déjà énorme)
+        if (m == 5) return 20_000.0 * multImpopularite;
+        if (m == 4 && c) return 2000.0 * multImpopularite;
+        if (m == 4) return 1000.0 * multImpopularite;
+        if (m == 3 && c) return 150.0 * multImpopularite;
+        if (m == 3) return 50.0 * multImpopularite;
+        if (m == 2 && c) return 25.0; // Les petits rangs sont fixes FDJ
+        if (m == 2) return 10.0;
         if (c) return 2.20;
+
         return 0.0;
     }
 
