@@ -3,71 +3,60 @@ import numpy as np
 import tensorflow as tf
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from typing import List
+from typing import List, Optional
 
-app = FastAPI(title="Loto AI V7", version="7.0")
+app = FastAPI(title="Loto AI V8 - Value Engine", version="8.0")
 model = None
 
-# --- DTO ---
+# --- DTO (Maintenu pour la rétrocompatibilité avec LotoService.java) ---
 class Draw(BaseModel):
-    date: str
-    b1: int; b2: int; b3: int; b4: int; b5: int; chance: int
+    date: Optional[str] = None
+    b1: int = 0; b2: int = 0; b3: int = 0; b4: int = 0; b5: int = 0; chance: int = 0
 
 class PredictionRequest(BaseModel):
-    history: List[Draw]
-
-# --- Feature Engineering (Copie Miroir de train_models.py) ---
-def get_features_for_inference(draw: Draw):
-    # 1. Base
-    boules = [draw.b1, draw.b2, draw.b3, draw.b4, draw.b5]
-    vector = np.zeros(49)
-    for val in boules:
-        if 1 <= val <= 49: vector[val-1] = 1.0
-
-    # 2. Meta-Features
-    s = sum(boules)
-    feat_sum = s / 255.0
-
-    pairs = len([x for x in boules if x % 2 == 0])
-    feat_parity = pairs / 5.0
-
-    finales = sum([x % 10 for x in boules])
-    feat_finales = finales / 45.0
-
-    return np.concatenate([vector, [feat_sum, feat_parity, feat_finales]])
+    history: Optional[List[Draw]] = None
 
 @app.on_event("startup")
 async def load_model():
     global model
     try:
-        # On charge le V7
-        if os.path.exists("models/lstm_v7.keras"):
-            model = tf.keras.models.load_model("models/lstm_v7.keras")
-            print("✅ V7 Engine: READY")
+        model_path = "models/value_model_v8.keras"
+        if os.path.exists(model_path):
+            model = tf.keras.models.load_model(model_path)
+            print("✅ V8 Value Engine: READY")
         else:
-            print("⚠️ V7 Engine: Model not found (Did you train?)")
+            print(f"⚠️ V8 Value Engine: Modèle introuvable ({model_path}). N'oublie pas d'exécuter train_models.py !")
     except Exception as e:
-        print(f"🔥 Error: {e}")
+        print(f"🔥 Error loading model: {e}")
 
 @app.post("/predict")
-async def predict(req: PredictionRequest):
-    if not model: return {}
+async def predict(req: PredictionRequest = None):
+    if not model:
+        raise HTTPException(status_code=500, detail="Modèle non chargé")
 
-    # Préparation Sequence (12 derniers tirages)
-    if len(req.history) < 12: return {"error": "Need 12+ draws"}
+    try:
+        # 1. Création de la matrice identité (49x49)
+        # Chaque ligne = 1 grille fictive contenant uniquement 1 numéro.
+        # Objectif : Demander au modèle la valeur isolée de chaque numéro.
+        X_pred = np.eye(49)
 
-    recent_history = req.history[-12:] # Les 12 plus récents
+        # 2. Inférence de Masse (Ultra rapide)
+        # Le modèle renvoie un tableau de 49 scores de rentabilité/impopularité
+        predictions = model.predict(X_pred, verbose=0)
 
-    # Construction de la matrice (1, 12, 52)
-    sequence = np.array([get_features_for_inference(d) for d in recent_history])
-    input_tensor = np.expand_dims(sequence, axis=0) # Shape (1, 12, 52)
+        # 3. Formatage de la réponse pour le Java
+        result = {}
+        for i, pred in enumerate(predictions):
+            # pred[0] car l'output du modèle est (49, 1)
+            # On stocke le score (Value) de la boule (i + 1)
+            result[str(i + 1)] = float(pred[0])
 
-    # Inférence
-    probs = model.predict(input_tensor, verbose=0)[0] # Shape (49,) car output layer est 49
+        return result
 
-    # Mapping
-    result = {}
-    for i, p in enumerate(probs):
-        result[str(i+1)] = float(p) * 100.0 # Scaling pour Java
+    except Exception as e:
+        print(f"Erreur Inférence: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
-    return result
+if __name__ == '__main__':
+    import uvicorn
+    uvicorn.run(app, host='0.0.0.0', port=8000)
