@@ -522,30 +522,28 @@ public class LotoService {
      * Si les poids sont très concentrés (IA sûre), on prend moins de numéros.
      * Si les poids sont diffus (IA incertaine), on élargit le filet.
      */
-    private List<Integer> determinerPoolAdaptatif(double[] weights) {
+    private List<Integer> determinerPoolAdaptatif(double[] weights, int requestedPoolSize) {
         // 1. Convertir en liste d'indices triés par score décroissant
-        List<Integer> sortedIndices = IntStream.range(1, 50)
+        List<Integer> sortedIndices = IntStream.rangeClosed(1, 49)
                 .boxed()
                 .sorted((a, b) -> Double.compare(weights[b], weights[a]))
                 .collect(Collectors.toList());
 
-        // 2. Calculer moyenne et écart-type (rapide) du Top 20
+        // 2. Calculer moyenne du Top 20 pour évaluer la "Confiance" (Purement pour le monitoring)
         double sum = 0;
         for(int i=0; i<20; i++) sum += weights[sortedIndices.get(i)];
         double avg = sum / 20.0;
 
-        // 3. Logique de seuil dynamique
-        // Si le 10ème meilleur est bien au-dessus de la moyenne, l'IA est confiante.
         boolean iaConfiante = weights[sortedIndices.get(9)] > (avg * 1.1);
 
-        int taillePool;
         if (iaConfiante) {
-            taillePool = 12; // Focus agressif (Coût réduit, ROI potentiel max)
+            log.info("📊 [IA VALUE] L'IA est très confiante sur ses prédictions d'impopularité ce soir.");
         } else {
-            taillePool = 16; // Prudence (On couvre plus large)
+            log.info("📊 [IA VALUE] La variance est faible, l'IA détecte un comportement de foule dispersé.");
         }
 
-        return sortedIndices.subList(0, taillePool);
+        // 3. On retourne STRICTEMENT la taille requise par la Matrice de Steiner choisie (10 ou 12)
+        return sortedIndices.subList(0, requestedPoolSize);
     }
 
     /**
@@ -693,13 +691,16 @@ public class LotoService {
             scoreGlobalConsensus[i] /= poidsTotalExperts;
         }
 
-        // 2. EXTRACTION DE LA PISCINE (Top Numéros + Value)
-        List<Integer> pool = determinerPoolAdaptatif(scoreGlobalConsensus);
-        log.info("🎯 [POOL VALUE] {} numéros sélectionnés par le consensus : {}", pool.size(), pool);
+        // 2. LIAISON IHM -> MATHÉMATIQUES
+        // Si l'IHM demande 15 grilles, c'est le Plan Syndicat V12 (pool de 12). Sinon, Plan Standard V10 (pool de 10).
+        int poolSize = (nombreGrilles == 15) ? 12 : 10;
+        List<Integer> pool = determinerPoolAdaptatif(scoreGlobalConsensus, poolSize);
 
-        // 3. SYSTÈME RÉDUCTEUR (Wheeling) : Garantie Mathématique (ex: 3/4 ou 3/5)
+        log.info("🎯 [POOL VALUE] {} numéros sélectionnés par le consensus V8 : {}", pool.size(), pool);
+
+        // 3. SYSTÈME RÉDUCTEUR (Wheeling de Steiner)
         List<int[]> grillesBrutes = wheelingService.genererSystemeReducteur(pool, 3);
-        log.info("⚙️ [WHEELING] {} combinaisons structurelles générées.", grillesBrutes.size());
+        log.info("⚙️ [WHEELING] {} combinaisons structurelles générées via Matrice V{}.", grillesBrutes.size(), poolSize);
 
         // 4. FILTRAGE IMPOPULARITÉ & ENTROPIE
         List<Integer> topChances = getTopChanceNumbers(history, dateCible.getDayOfWeek());

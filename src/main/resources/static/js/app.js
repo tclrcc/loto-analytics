@@ -211,59 +211,48 @@ function updateBulkBar() {
 }
 
 // ==========================================
-// 4. ACTIONS API (Génération)
+// 4. ACTIONS API (Génération IA + Wheeling)
 // ==========================================
 
-function generateGrid() {
+function lancerModeInvestisseur() {
     const outputDiv = document.getElementById('pronoResult');
-    const inputEl = document.getElementById('gridCount');
-    if (!inputEl) return;
 
-    const count = inputEl.value || 5;
+    // Récupérer le plan sélectionné (value = 8 ou 15 grilles)
+    const selectedPlan = document.querySelector('input[name="strategyPlan"]:checked');
+    if (!selectedPlan) return;
+
+    const count = parseInt(selectedPlan.value);
     const dateCible = getNextLotoDate();
 
+    // Affichage du loader stylisé
     outputDiv.innerHTML = `
         <div class="text-center py-5 fade-in">
-            <div class="spinner-border text-primary" role="status"></div>
-            <p class="mt-3 text-muted">IA Standard en cours...</p>
+            <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;"></div>
+            <h5 class="mt-3 text-dark fw-bold">Moteur V8 Value & Wheeling...</h5>
+            <p class="text-muted small">Recherche des numéros impopulaires et construction de la matrice mathématique.</p>
         </div>
     `;
     outputDiv.classList.remove('d-none');
     SoundManager.play('magic');
 
+    // On utilise l'endpoint standard qui pointe désormais vers ton nouveau LotoService
     fetch(`/api/loto/generate?count=${count}&date=${dateCible}`)
-        .then(res => res.ok ? res.json() : Promise.reject(res))
-        .then(data => displayResults(data))
+        .then(res => {
+            if (res.status === 429) {
+                throw new Error("Veuillez patienter entre deux générations complexes.");
+            }
+            return res.ok ? res.json() : Promise.reject(res);
+        })
+        .then(data => {
+            // Sauvegarde pour le bulk add ("Tout jouer")
+            window.currentGridsData = data;
+            window.selectedGrids.clear();
+            displayResults(data);
+        })
         .catch(err => {
             console.error(err);
-            outputDiv.innerHTML = `<div class="alert alert-danger">Erreur de génération.</div>`;
-        });
-}
-
-function lancerModePro() {
-    const outputDiv = document.getElementById('pronoResult');
-    const budgetEl = document.getElementById('budgetPro');
-    if (!budgetEl) return;
-
-    const budget = budgetEl.value || 20;
-    const dateCible = getNextLotoDate();
-
-    outputDiv.innerHTML = `
-        <div class="text-center py-5 fade-in">
-            <div class="spinner-border text-warning" role="status" style="width: 3rem; height: 3rem;"></div>
-            <h5 class="mt-3 text-dark fw-bold">Moteur V7 Hybride...</h5>
-            <p class="text-muted small">Optimisation Mathématique & Deep Learning</p>
-        </div>
-    `;
-    outputDiv.classList.remove('d-none');
-    SoundManager.play('magic');
-
-    fetch(`/api/loto/pro-generate?budget=${budget}&date=${dateCible}`)
-        .then(res => res.ok ? res.json() : Promise.reject(res))
-        .then(data => displayResults(data))
-        .catch(err => {
-            console.error(err);
-            outputDiv.innerHTML = `<div class="alert alert-danger">Service indisponible (Vérifiez les logs).</div>`;
+            const msg = err.message || "Erreur lors de la génération. Le backend IA est-il en ligne ?";
+            outputDiv.innerHTML = `<div class="alert alert-danger shadow-sm"><i class="bi bi-exclamation-triangle-fill me-2"></i>${msg}</div>`;
         });
 }
 

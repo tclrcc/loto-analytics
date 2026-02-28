@@ -236,18 +236,13 @@
         <div class="card-header bg-white p-0 border-bottom-0">
             <ul class="nav nav-tabs nav-fill card-header-tabs m-0" id="generatorTabs" role="tablist">
                 <li class="nav-item" role="presentation">
-                    <button class="nav-link active fw-bold py-3" id="tab-simu" data-bs-toggle="tab" data-bs-target="#content-simu" type="button">
-                        <i class="bi bi-search me-2"></i>Simulateur
+                    <button class="nav-link active fw-bold py-3 text-primary" id="tab-invest" data-bs-toggle="tab" data-bs-target="#content-invest" type="button">
+                        <i class="bi bi-cpu-fill me-2"></i>Mode Investisseur (IA + Math)
                     </button>
                 </li>
                 <li class="nav-item" role="presentation">
-                    <button class="nav-link fw-bold py-3 text-primary" id="tab-auto" data-bs-toggle="tab" data-bs-target="#content-auto" type="button">
-                        <i class="bi bi-magic me-2"></i>Génération IA
-                    </button>
-                </li>
-                <li class="nav-item" role="presentation">
-                    <button class="nav-link fw-bold py-3 text-warning" id="tab-expert" data-bs-toggle="tab" data-bs-target="#content-expert" type="button">
-                        <i class="bi bi-gear-wide-connected me-2"></i>Système Expert
+                    <button class="nav-link fw-bold py-3 text-secondary" id="tab-simu" data-bs-toggle="tab" data-bs-target="#content-simu" type="button">
+                        <i class="bi bi-search me-2"></i>Simulateur Historique
                     </button>
                 </li>
             </ul>
@@ -256,7 +251,60 @@
         <div class="card-body bg-light rounded-bottom-4 p-4">
             <div class="tab-content" id="generatorTabContent">
 
-                <div class="tab-pane fade show active" id="content-simu" role="tabpanel">
+                <div class="tab-pane fade show active" id="content-invest" role="tabpanel">
+                    <div class="d-flex gap-3 align-items-start mb-4">
+                        <div class="bg-primary bg-opacity-10 p-3 rounded-3 text-primary">
+                            <i class="bi bi-diagram-3-fill fs-3"></i>
+                        </div>
+                        <div class="flex-grow-1">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <h6 class="text-dark fw-bold mb-0">Moteur Value & Systèmes de Steiner</h6>
+                                <span class="badge bg-warning text-dark"><i class="bi bi-shield-check me-1"></i>Garantie Mathématique</span>
+                            </div>
+                            <p class="small text-muted mt-2 mb-0">
+                                L'IA <strong>Deep Learning V8</strong> cible les numéros à forte valeur financière (impopulaires). Le moteur mathématique construit ensuite une matrice parfaite pour garantir les gains si la zone est touchée.
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="bg-white p-4 rounded-3 border shadow-sm">
+                        <label class="small fw-bold text-muted text-uppercase mb-3 d-block border-bottom pb-2">Choisissez votre stratégie d'investissement</label>
+
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <div class="form-check custom-radio-card p-3 border rounded-3 h-100 position-relative">
+                                    <input class="form-check-input position-absolute top-0 end-0 m-3" type="radio" name="strategyPlan" id="planV10" value="8" checked>
+                                    <label class="form-check-label w-100 cursor-pointer" for="planV10">
+                                        <span class="d-block fw-bold text-dark fs-6 mb-1">Plan Standard (V10)</span>
+                                        <span class="d-block small text-muted mb-2">L'IA isole 10 numéros.</span>
+                                        <span class="badge bg-primary bg-opacity-10 text-primary">8 Grilles (17.60 €)</span>
+                                        <span class="d-block small text-success mt-2 fw-bold"><i class="bi bi-check-circle me-1"></i>Garantie 3/3</span>
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-check custom-radio-card p-3 border rounded-3 h-100 position-relative">
+                                    <input class="form-check-input position-absolute top-0 end-0 m-3" type="radio" name="strategyPlan" id="planV12" value="15">
+                                    <label class="form-check-label w-100 cursor-pointer" for="planV12">
+                                        <span class="d-block fw-bold text-dark fs-6 mb-1">Plan Syndicat (V12)</span>
+                                        <span class="d-block small text-muted mb-2">L'IA isole 12 numéros (Couverture + large).</span>
+                                        <span class="badge bg-primary bg-opacity-10 text-primary">15 Grilles (33.00 €)</span>
+                                        <span class="d-block small text-success mt-2 fw-bold"><i class="bi bi-check-circle me-1"></i>Garantie 3/3</span>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="text-end mt-4 pt-3 border-top">
+                            <small class="text-muted me-3">Date cible : <span class="fw-bold text-dark" id="expertDateTarget">Prochain Tirage</span></small>
+                            <button class="btn btn-primary fw-bold px-4 shadow-sm" onclick="lancerModeInvestisseur()">
+                                <i class="bi bi-lightning-fill me-2"></i>Générer le Plan
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="tab-pane fade" id="content-simu" role="tabpanel">
                     <form id="formSimulateur">
                         <label class="small text-muted fw-bold mb-3 d-block">Testez une combinaison passée :</label>
                         <div class="row g-2 align-items-center justify-content-center">
@@ -279,63 +327,9 @@
                     </form>
                 </div>
 
-                <div class="tab-pane fade" id="content-auto" role="tabpanel">
-                    <div class="row align-items-center">
-                        <div class="col-md-7">
-                            <h6 class="text-primary fw-bold">Génération Standard</h6>
-                            <p class="small text-muted mb-0">L'IA sélectionne les numéros basés sur la fréquence et l'écart actuel, mixés avec une part d'aléatoire pour éviter le sur-apprentissage.</p>
-                        </div>
-                        <div class="col-md-5">
-                            <div class="input-group shadow-sm">
-                                <span class="input-group-text bg-white">Quantité</span>
-                                <input type="number" id="gridCount" class="form-control text-center fw-bold" value="5" min="1" max="10">
-                                <button class="btn btn-primary fw-bold" onclick="generateGrid()">
-                                    <i class="bi bi-lightning-fill me-1"></i> Générer
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="tab-pane fade" id="content-expert" role="tabpanel">
-                    <div class="d-flex gap-3 align-items-start">
-                        <div class="bg-warning bg-opacity-10 p-3 rounded-3 text-warning">
-                            <i class="bi bi-diagram-3-fill fs-3"></i>
-                        </div>
-                        <div class="flex-grow-1">
-                            <div class="d-flex justify-content-between">
-                                <h6 class="text-dark fw-bold">Système Réducteur V5</h6>
-                                <span class="badge bg-warning text-dark">Garantie 3/5</span>
-                            </div>
-                            <p class="small text-muted mt-2">
-                                L'IA sélectionne un <strong>Pool de 12 à 20 numéros</strong> à fort potentiel, puis génère le minimum de grilles mathématiquement nécessaires pour garantir un gain si les bons numéros sont dans le pool.
-                            </p>
-
-                            <div class="bg-white p-3 rounded border mt-3">
-                                <div class="d-flex align-items-center justify-content-between">
-                                    <div>
-                                        <label class="small fw-bold text-muted text-uppercase">Budget Max</label>
-                                        <div class="input-group input-group-sm mt-1" style="width: 150px;">
-                                            <input type="number" id="budgetPro" class="form-control fw-bold" value="20">
-                                            <span class="input-group-text">€</span>
-                                        </div>
-                                    </div>
-                                    <div class="text-end">
-                                        <small class="d-block text-muted mb-1">Date cible : <span class="fw-bold text-dark" id="expertDateTarget">Prochain Tirage</span></small>
-                                        <button class="btn btn-warning text-dark fw-bold w-100 shadow-sm" id="btnPro" onclick="lancerModePro()">
-                                            <i class="fas fa-cogs me-2"></i>Calculer les grilles
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
             </div>
 
-            <div id="pronoResult" class="mt-4 d-none fade-in">
-            </div>
+            <div id="pronoResult" class="mt-4 d-none fade-in"></div>
             <div id="simResult" class="mt-4 d-none fade-in"></div>
         </div>
     </div>
