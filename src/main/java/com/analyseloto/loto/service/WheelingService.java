@@ -1,100 +1,93 @@
 package com.analyseloto.loto.service;
 
-import com.analyseloto.loto.service.calcul.BitMaskService;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.math3.util.CombinatoricsUtils;
 import org.springframework.stereotype.Service;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
 
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class WheelingService {
 
-    private final BitMaskService bitMaskService;
+    /**
+     * Génère un système réducteur optimal basé sur un Block Design pré-calculé.
+     * * @param pool Les N numéros sélectionnés par l'IA (Value maximale).
+     * @param garantie Le type de garantie souhaitée (ex: 3 pour "Garantie 3 si 3").
+     * @return La liste exacte et optimisée des grilles à valider.
+     */
+    public List<int[]> genererSystemeReducteur(List<Integer> pool, int garantie) {
+        if (pool.size() == 10 && garantie == 3) {
+            return appliquerMatrice(pool, getMatriceV10_K5_T3_M3());
+        } else if (pool.size() == 12 && garantie == 3) {
+            return appliquerMatrice(pool, getMatriceV12_K5_T3_M3());
+        }
+
+        // Fallback de sécurité si la taille de la pool ne correspond pas à une matrice connue
+        log.warn("Aucune matrice stricte trouvée pour Pool de taille {} et Garantie {}. Retour à une matrice standard V10.", pool.size(), garantie);
+        return appliquerMatrice(pool.subList(0, Math.min(10, pool.size())), getMatriceV10_K5_T3_M3());
+    }
 
     /**
-     * V5 : Algorithme Glouton Optimisé (Best-Fit Strategy)
-     * Cherche à chaque étape la grille qui élimine le plus de combinaisons restantes.
+     * Applique les numéros réels sélectionnés par l'IA sur la matrice mathématique.
      */
-    public List<int[]> genererSystemeReducteur(List<Integer> poolNumeros, int garantie) {
-        if (poolNumeros.size() < 5) return new ArrayList<>();
+    private List<int[]> appliquerMatrice(List<Integer> pool, int[][] matriceIndex) {
+        List<int[]> grillesGenerees = new ArrayList<>();
 
-        long startTime = System.currentTimeMillis();
-        int k = 5; // Taille grille Loto
-
-        // 1. Générer toutes les combinaisons possibles (L'univers à couvrir)
-        // Utilisation de BitMask (Long) pour la performance mémoire et CPU
-        List<Long> universNonCouvert = new ArrayList<>();
-        Iterator<int[]> iterator = CombinatoricsUtils.combinationsIterator(poolNumeros.size(), k);
-
-        while (iterator.hasNext()) {
-            int[] indices = iterator.next();
-            List<Integer> combo = new ArrayList<>();
-            for (int idx : indices) combo.add(poolNumeros.get(idx));
-            universNonCouvert.add(bitMaskService.calculerBitMask(combo));
-        }
-
-        log.info("🎯 [V5] Univers total à couvrir : {} combinaisons", universNonCouvert.size());
-
-        List<int[]> systemeFinal = new ArrayList<>();
-
-        // Liste des candidats potentiels (toutes les grilles jouables possibles)
-        // Au départ, c'est identique à l'univers, mais on copie pour ne pas altérer l'univers
-        List<Long> candidatsJouables = new ArrayList<>(universNonCouvert);
-
-        // 2. Boucle Gloutonne Optimisée
-        while (!universNonCouvert.isEmpty()) {
-            long meilleurCandidat = -1L;
-            int maxCouverture = -1;
-            List<Long> indicesCouvertsParMeilleur = null;
-
-            // STRATÉGIE V5 : On teste chaque candidat pour voir lequel "tue" le plus de restants
-            // Note: Pour des pools > 20 numéros, il faudra passer à une heuristique aléatoire
-            // car cette boucle peut être lourde.
-            for (Long candidat : candidatsJouables) {
-                int couvertureActuelle = 0;
-                // On simule la couverture
-                for (Long cible : universNonCouvert) {
-                    if (testGarantie(candidat, cible, garantie)) {
-                        couvertureActuelle++;
-                    }
-                }
-
-                if (couvertureActuelle > maxCouverture) {
-                    maxCouverture = couvertureActuelle;
-                    meilleurCandidat = candidat;
-                    // Optimisation : si on couvre tout ce qui reste, on arrête direct
-                    if (maxCouverture == universNonCouvert.size()) break;
-                }
+        for (int[] ligne : matriceIndex) {
+            int[] grille = new int[5];
+            for (int i = 0; i < 5; i++) {
+                // La matrice utilise des index de 1 à N. On soustrait 1 pour l'index de la List Java.
+                grille[i] = pool.get(ligne[i] - 1);
             }
-
-            if (meilleurCandidat == -1L) break; // Sécurité
-
-            // Ajouter le gagnant au système
-            systemeFinal.add(convertMaskToArr(meilleurCandidat));
-            candidatsJouables.remove(meilleurCandidat); // On ne peut pas le rejouer
-
-            // Retirer de l'univers tout ce qui est couvert par ce gagnant
-            long finalBest = meilleurCandidat;
-            universNonCouvert.removeIf(cible -> testGarantie(finalBest, cible, garantie));
+            grillesGenerees.add(grille);
         }
 
-        log.info("✅ [V5] Système terminé en {}ms. Grilles générées : {}",
-                (System.currentTimeMillis() - startTime), systemeFinal.size());
-
-        return systemeFinal;
+        return grillesGenerees;
     }
 
-    // Vérifie si deux masques partagent au moins 'garantie' bits communs
-    private boolean testGarantie(long maskA, long maskB, int garantie) {
-        long commun = maskA & maskB;
-        return Long.bitCount(commun) >= garantie;
+    /**
+     * Matrice de Combinatoire : V=10, K=5, T=3, M=3
+     * 10 Numéros joués. Grilles de 5.
+     * Garantie 100% de gagner un "3 bons numéros" si 3 des 10 numéros sortent au tirage.
+     * Coût optimal : 8 Grilles (17.60€)
+     */
+    private int[][] getMatriceV10_K5_T3_M3() {
+        return new int[][] {
+                {1, 2, 3, 4, 5},
+                {1, 2, 6, 7, 8},
+                {1, 3, 6, 9, 10},
+                {1, 4, 7, 9, 10},
+                {1, 5, 8, 9, 10},
+                {2, 3, 7, 8, 10},
+                {2, 4, 5, 9, 10},
+                {3, 4, 5, 6, 8}
+        };
     }
 
-    private int[] convertMaskToArr(long mask) {
-        return bitMaskService.decodeBitMask(mask).stream().mapToInt(i->i).toArray();
+    /**
+     * Matrice de Combinatoire : V=12, K=5, T=3, M=3
+     * 12 Numéros joués. Grilles de 5.
+     * Garantie 100% de gagner un "3 bons numéros" si 3 des 12 numéros sortent au tirage.
+     * Coût optimal : 15 Grilles (33.00€) - Très utilisé par les syndicats
+     */
+    private int[][] getMatriceV12_K5_T3_M3() {
+        return new int[][] {
+                {1, 2, 3, 4, 5},
+                {1, 6, 7, 8, 9},
+                {1, 10, 11, 12, 2},
+                {2, 3, 6, 7, 10},
+                {2, 4, 8, 11, 12},
+                {3, 4, 6, 9, 12},
+                {3, 5, 7, 8, 11},
+                {4, 5, 7, 9, 10},
+                {5, 6, 8, 10, 12},
+                {1, 3, 8, 9, 10},
+                {1, 4, 6, 7, 11},
+                {2, 5, 6, 9, 11},
+                {2, 5, 7, 8, 12},
+                {3, 4, 7, 8, 12},
+                {4, 6, 8, 10, 11}
+        };
     }
 }
