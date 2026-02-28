@@ -1,12 +1,15 @@
 package com.analyseloto.loto.controller;
 
 import com.analyseloto.loto.dto.*;
+import com.analyseloto.loto.entity.LotoTirage;
+import com.analyseloto.loto.repository.LotoTirageRepository;
 import com.analyseloto.loto.service.AstroService;
 import com.analyseloto.loto.service.LotoService;
 import com.analyseloto.loto.service.RateLimiterService;
 import io.github.bucket4j.Bucket;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -26,6 +29,9 @@ public class LotoController {
     private final LotoService service;
     private final AstroService astroService;
     private final RateLimiterService rateLimiterService;
+
+    // Repository (Ajouté pour fournir l'historique au simulateur)
+    private final LotoTirageRepository repository;
 
     @PostMapping("/import")
     public ResponseEntity<String> uploadFile(@RequestParam("file") MultipartFile file) {
@@ -86,64 +92,38 @@ public class LotoController {
 
     @PostMapping("/simuler")
     public ResponseEntity<SimulationResultDto> simuler(@RequestBody SimuRequest req) {
-        // On accepte maintenant entre 2 et 5 numéros
         if (req.getBoules() == null || req.getBoules().size() < 2 || req.getBoules().size() > 5 || req.getDate() == null) {
             return ResponseEntity.badRequest().build();
         }
-        return ResponseEntity.ok(service.simulerGrilleDetaillee(req.getBoules(), req.getDate()));
+
+        // CORRECTION : On passe l'historique des tirages à la nouvelle méthode optimisée
+        List<LotoTirage> history = repository.findAll(Sort.by(Sort.Direction.DESC, "dateTirage"));
+        return ResponseEntity.ok(service.simulerGrilleDetaillee(req.getBoules(), req.getDate(), history));
     }
 
     @GetMapping("/generate")
     public ResponseEntity<?> generateGrid(
             @RequestParam("date") String dateStr,
-            @RequestParam(value = "count", defaultValue = "1") int count,
+            @RequestParam(value = "count", defaultValue = "8") int count, // 8 par défaut (Matrice V10)
             HttpServletRequest request) {
-        // 3. LE BOUCLIER
+
+        // 1. LE BOUCLIER (Rate Limiter)
         Bucket bucket = rateLimiterService.resolveBucket(request);
         if (!bucket.tryConsume(1)) {
             // Si le seau est vide, on renvoie une erreur 429 (Too Many Requests)
             return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
-                    .body("Veuillez ralentir ! Limite de 10 générations par minute atteinte.");
-        }
-
-        // Date du tirage
-        LocalDate date = LocalDate.parse(dateStr);
-
-        // Réponse pronostics JSON
-        return ResponseEntity.ok(service.genererMultiplesPronostics(date, count));
-    }
-
-    @GetMapping("/pro-generate")
-    public ResponseEntity<?> generateProGrid(
-            @RequestParam("date") String dateStr,
-            @RequestParam(value = "budget", defaultValue = "20") int budget,
-            HttpServletRequest request) {
-
-        // 1. Sécurité : Rate Limiting (Même protection que l'autre endpoint)
-        io.github.bucket4j.Bucket bucket = rateLimiterService.resolveBucket(request);
-        if (!bucket.tryConsume(1)) {
-            return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
-                    .body("⏳ Mode Pro : Veuillez patienter entre deux calculs lourds.");
+                    .body("Veuillez ralentir ! Limite de générations par minute atteinte.");
         }
 
         try {
-            // 2. Parsing de la date
             LocalDate date = LocalDate.parse(dateStr);
-
-            // 3. Appel de la méthode PRO
-            // Le budget correspond au nombre max de grilles (ex: 20 grilles = 44€)
-            List<PronosticResultDto> resultats = service.genererGrillesPro(date, budget);
-
-            if (resultats.isEmpty()) {
-                return ResponseEntity.ok(Map.of("message", "Aucune grille n'a passé les filtres stricts du Mode Pro."));
-            }
-
-            return ResponseEntity.ok(resultats);
+            // L'appel unique qui gère tout (IA + Steiner)
+            return ResponseEntity.ok(service.genererMultiplesPronostics(date, count));
 
         } catch (DateTimeParseException e) {
             return ResponseEntity.badRequest().body("Format de date invalide. Utilisez YYYY-MM-DD.");
         } catch (Exception e) {
-            return ResponseEntity.internalServerError().body("Erreur critique du système expert : " + e.getMessage());
+            return ResponseEntity.internalServerError().body("Erreur critique du Moteur V8 : " + e.getMessage());
         }
     }
 
