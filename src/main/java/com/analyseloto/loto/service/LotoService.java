@@ -164,24 +164,41 @@ public class LotoService {
     }
 
     private List<Integer> determinerPoolAdaptatif(double[] weights, int requestedPoolSize) {
-        List<Integer> sortedIndices = IntStream.rangeClosed(1, 49)
-                .boxed()
-                .sorted((a, b) -> Double.compare(weights[b], weights[a]))
-                .collect(Collectors.toList());
+        List<Integer> pool = new ArrayList<>();
 
-        // Calcul de confiance pour le log
-        double sum = 0;
-        for(int i=0; i<20; i++) sum += weights[sortedIndices.get(i)];
-        double avg = sum / 20.0;
-        boolean iaConfiante = weights[sortedIndices.get(9)] > (avg * 1.1);
+        // 1. Séparation des numéros en 3 strates pour forcer un équilibre naturel
+        // (On trie chaque groupe par son score d'impopularité IA)
+        List<Integer> bas = IntStream.rangeClosed(1, 15).boxed()
+                .sorted((a, b) -> Double.compare(weights[b], weights[a])).toList();
 
-        if (iaConfiante) {
-            log.info("📊 [IA VALUE] Forte disparité détectée : l'IA est confiante sur les numéros à cibler.");
+        List<Integer> moyen = IntStream.rangeClosed(16, 31).boxed()
+                .sorted((a, b) -> Double.compare(weights[b], weights[a])).toList();
+
+        List<Integer> haut = IntStream.rangeClosed(32, 49).boxed()
+                .sorted((a, b) -> Double.compare(weights[b], weights[a])).toList();
+
+        // 2. Échantillonnage Stratifié en fonction du Plan demandé
+        if (requestedPoolSize >= 15) {
+            // Plan Syndicat (Pool de 12) : 50% Hauts, 25% Moyens, 25% Bas
+            pool.addAll(haut.subList(0, 6));
+            pool.addAll(moyen.subList(0, 3));
+            pool.addAll(bas.subList(0, 3));
         } else {
-            log.info("📊 [IA VALUE] La variance est faible, l'IA détecte un comportement de foule dispersé.");
+            // Plan Standard (Pool de 10) : 5 Hauts, 3 Moyens, 2 Bas
+            pool.addAll(haut.subList(0, 5));
+            pool.addAll(moyen.subList(0, 3));
+            pool.addAll(bas.subList(0, 2));
         }
 
-        return sortedIndices.subList(0, requestedPoolSize);
+        // 3. On mélange le pool pour que la Matrice de Steiner ne crée pas
+        // des grilles avec uniquement les "bas" d'un côté et les "hauts" de l'autre.
+        Collections.shuffle(pool, new Random());
+
+        // Calcul de confiance pour les logs (basé sur le Top 5 de chaque strate)
+        double avgTopHaut = haut.subList(0, 5).stream().mapToDouble(i -> weights[i]).average().orElse(0);
+        log.info("📊 [IA VALUE] Score moyen de rentabilité sur la strate Haute : {}", String.format("%.2f", avgTopHaut));
+
+        return pool;
     }
 
     private List<Integer> getChanceNumbersImpopulaires(List<LotoTirage> history) {
