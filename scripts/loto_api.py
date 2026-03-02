@@ -3,60 +3,64 @@ import numpy as np
 import tensorflow as tf
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from typing import List, Optional
 
-app = FastAPI(title="Loto AI V8 - Value Engine", version="8.0")
+app = FastAPI(title="Loto AI V8 - Value Engine", version="8.1")
 model = None
-
-# --- DTO (Maintenu pour la rétrocompatibilité avec LotoService.java) ---
-class Draw(BaseModel):
-    date: Optional[str] = None
-    b1: int = 0; b2: int = 0; b3: int = 0; b4: int = 0; b5: int = 0; chance: int = 0
+y_scaler = None
 
 class PredictionRequest(BaseModel):
-    history: Optional[List[Draw]] = None
+    current_jackpot: float # On demande au Java de fournir le pactole en cours
+    ticket_cost: float = 2.20
 
 @app.on_event("startup")
 async def load_model():
-    global model
+    global model, y_scaler
     try:
         model_path = "models/value_model_v8.keras"
-        if os.path.exists(model_path):
+        scaler_path = "models/y_scaler.npy"
+        if os.path.exists(model_path) and os.path.exists(scaler_path):
             model = tf.keras.models.load_model(model_path)
-            print("✅ V8 Value Engine: READY")
-        else:
-            print(f"⚠️ V8 Value Engine: Modèle introuvable ({model_path}). N'oublie pas d'exécuter train_models.py !")
+            y_scaler = np.load(scaler_path)
+            print("✅ V8 Value Engine & Scaler: READY")
     except Exception as e:
         print(f"🔥 Error loading model: {e}")
 
 @app.post("/predict")
-async def predict(req: PredictionRequest = None):
+async def predict(req: PredictionRequest):
     if not model:
         raise HTTPException(status_code=500, detail="Modèle non chargé")
 
     try:
-        # 1. Création de la matrice identité (49x49)
-        # Chaque ligne = 1 grille fictive contenant uniquement 1 numéro.
-        # Objectif : Demander au modèle la valeur isolée de chaque numéro.
+        # 1. Calcul de l'Espérance Mathématique (EV) simplifiée
+        # Probabilité théorique de toucher le gros lot
+        prob_jackpot = 1 / 19068840
+
+        # EV = (Probabilité * Gain potentiel) / Mise
+        # Note : Dans la réalité, il faut ajouter l'EV des rangs inférieurs
+        ev_score = (req.current_jackpot * prob_jackpot) / req.ticket_cost
+
+        # Le SNIPER MODE : On ne joue que si les mathématiques sont avec nous (ou presque)
+        # On fixe un seuil acceptable, par exemple 0.8 pour autoriser le jeu
+        play_authorized = bool(ev_score > 0.8)
+
+        # 2. Inférence des numéros Value
         X_pred = np.eye(49)
+        predictions_scaled = model.predict(X_pred, verbose=0)
 
-        # 2. Inférence de Masse (Ultra rapide)
-        # Le modèle renvoie un tableau de 49 scores de rentabilité/impopularité
-        predictions = model.predict(X_pred, verbose=0)
+        # Dé-standardisation pour récupérer une valeur compréhensible (ex: euros potentiels au rang 4)
+        y_mean, y_std = y_scaler[0], y_scaler[1]
+        predictions = (predictions_scaled * y_std) + y_mean
 
-        # 3. Formatage de la réponse pour le Java
-        result = {}
+        # 3. Formatage
+        scores = {}
         for i, pred in enumerate(predictions):
-            # pred[0] car l'output du modèle est (49, 1)
-            # On stocke le score (Value) de la boule (i + 1)
-            result[str(i + 1)] = float(pred[0])
+            scores[str(i + 1)] = float(pred[0])
 
-        return result
+        return {
+            "ev_score": round(ev_score, 2),
+            "play_authorized": play_authorized,
+            "number_scores": scores
+        }
 
     except Exception as e:
-        print(f"Erreur Inférence: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
-if __name__ == '__main__':
-    import uvicorn
-    uvicorn.run(app, host='0.0.0.0', port=8000)

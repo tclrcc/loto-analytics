@@ -143,17 +143,36 @@ public class LotoService {
         try {
             log.info("📡 [IA V8] Interrogation du Neural Engine Value sur : {}", pythonApiUrl);
 
-            // Requête vide, le modèle V8 va utiliser sa matrice identité 49x49 en interne
-            Map<String, Object> requestBody = Map.of("history", Collections.emptyList());
+            // Pour l'instant, on simule un jackpot à 2 millions.
+            // Idéalement, tu récupéreras cette valeur dynamiquement via FdjService.
+            Map<String, Object> requestBody = Map.of(
+                    "history", Collections.emptyList(),
+                    "current_jackpot", 2000000.0,
+                    "ticket_cost", 2.20
+            );
 
             @SuppressWarnings("unchecked")
-            Map<String, Double> response = restTemplate.postForObject(pythonApiUrl, requestBody, Map.class);
+            Map<String, Object> response = restTemplate.postForObject(pythonApiUrl, requestBody, Map.class);
 
-            if (response != null && !response.isEmpty()) {
-                response.forEach((k, v) -> {
+            if (response != null && response.containsKey("number_scores")) {
+                // --- SNIPER MODE LOGIC ---
+                Boolean playAuthorized = (Boolean) response.get("play_authorized");
+                Double evScore = ((Number) response.get("ev_score")).doubleValue();
+
+                log.info("🎯 [SNIPER MODE] EV (Rentabilité) : {}", evScore);
+                if (Boolean.FALSE.equals(playAuthorized)) {
+                    log.warn("🛑 [SNIPER MODE] Espérance mathématique faible (EV < 1). Stratégiquement, il ne faut pas jouer ce tirage.");
+                    // Note : Tu peux ajouter un return immédiat ici si tu veux bloquer
+                    // purement et simplement la génération des grilles en Java.
+                }
+
+                // --- LECTURE DES POIDS ---
+                @SuppressWarnings("unchecked")
+                Map<String, Number> numberScores = (Map<String, Number>) response.get("number_scores");
+                numberScores.forEach((k, v) -> {
                     try {
                         int boule = Integer.parseInt(k);
-                        if (boule >= 1 && boule <= 49) weights[boule] = v;
+                        if (boule >= 1 && boule <= 49) weights[boule] = v.doubleValue();
                     } catch (NumberFormatException ignored) {}
                 });
             }
